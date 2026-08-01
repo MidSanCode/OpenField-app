@@ -358,4 +358,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get oauthBindFailed => 'OAuth 账号绑定失败';
+
+  @override
+  String get serverHost => '服务器地址';
+
+  @override
+  String get serverHostHint => 'API 服务器地址，例如 http://localhost:8080';
+
+  @override
+  String get backgroundImage => '背景图片';
+
+  @override
+  String get backgroundImageHint => '使用自定义图片作为应用背景';
+
+  @override
+  String get clear => '清除';
+
+  @override
+  String get noBackgroundImage => '默认背景';
 }

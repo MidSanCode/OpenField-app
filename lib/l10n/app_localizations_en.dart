@@ -361,4 +361,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get oauthBindFailed => 'Failed to bind OAuth account';
+
+  @override
+  String get serverHost => 'Server Host';
+
+  @override
+  String get serverHostHint => 'API server address, e.g. http://localhost:8080';
+
+  @override
+  String get backgroundImage => 'Background Image';
+
+  @override
+  String get backgroundImageHint =>
+      'Use a custom image as the app background';
+
+  @override
+  String get clear => 'Clear';
+
+  @override
+  String get noBackgroundImage => 'Default background';
 }

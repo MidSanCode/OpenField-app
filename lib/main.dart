@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/log/log_recorder.dart';
 import 'package:openfield/core/router/app_router.dart';
+import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
@@ -47,8 +49,21 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   void initState() {
     super.initState();
     LogService.instance.setEnabled(_settingsService.developerMode);
+    ApiService.setServerHost(_settingsService.serverHost);
+    _settingsService.addListener(_syncServerHost);
     _router = createRouter(_authService, appNavigatorKey);
     _setupDeepLinks();
+  }
+
+  void _syncServerHost() {
+    ApiService.setServerHost(_settingsService.serverHost);
+  }
+
+  @override
+  void dispose() {
+    _settingsService.removeListener(_syncServerHost);
+    _linkSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _setupDeepLinks() async {
@@ -74,12 +89,6 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     );
   }
   @override
-  void dispose() {
-    _linkSubscription?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
@@ -104,6 +113,22 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
             routerDelegate: _router.routerDelegate,
             routeInformationParser: _router.routeInformationParser,
             routeInformationProvider: _router.routeInformationProvider,
+            builder: (context, child) {
+              final bgPath = settings.backgroundImagePath;
+              if (bgPath == null) return child!;
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: Image.file(
+                      File(bgPath),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                  child!,
+                ],
+              );
+            },
           );
         },
       ),

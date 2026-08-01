@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/data/services/settings_service.dart';
@@ -24,6 +25,10 @@ class SettingsPage extends StatelessWidget {
                 const _ThemeTile(),
                 const Divider(height: 1),
                 const _LanguageTile(),
+                const Divider(height: 1),
+                const _ServerHostTile(),
+                const Divider(height: 1),
+                const _BackgroundImageTile(),
                 const Divider(height: 1),
                 _DeveloperModeTile(),
               ],
@@ -160,6 +165,80 @@ class _DeveloperModeTile extends StatelessWidget {
             onTap: () => toggleLogOverlay(),
           ),
       ],
+    );
+  }
+}
+
+class _ServerHostTile extends StatelessWidget {
+  const _ServerHostTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final settings = Provider.of<SettingsService>(context);
+    return ListTile(
+      leading: const Icon(Icons.dns_outlined),
+      title: Text(l10n.serverHost),
+      subtitle: Text(l10n.serverHostHint),
+      onTap: () async {
+        final controller = TextEditingController(text: settings.serverHost);
+        final result = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(l10n.serverHost),
+            content: TextField(
+              controller: controller,
+              keyboardType: TextInputType.url,
+              decoration: InputDecoration(hintText: l10n.serverHostHint),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.cancel),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(controller.text),
+                child: Text(l10n.save),
+              ),
+            ],
+          ),
+        );
+        if (result != null) {
+          await settings.setServerHost(result);
+        }
+      },
+      trailing: Text(
+        settings.serverHost,
+        style: Theme.of(context).textTheme.bodySmall,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+class _BackgroundImageTile extends StatelessWidget {
+  const _BackgroundImageTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final settings = Provider.of<SettingsService>(context);
+    return ListTile(
+      leading: const Icon(Icons.image_outlined),
+      title: Text(l10n.backgroundImage),
+      subtitle: Text(l10n.backgroundImageHint),
+      trailing: settings.backgroundImagePath == null
+          ? const Icon(Icons.chevron_right)
+          : TextButton(
+              onPressed: () => settings.setBackgroundImagePath(null),
+              child: Text(l10n.clear),
+            ),
+      onTap: () async {
+        final picker = ImagePicker();
+        final result = await picker.pickImage(source: ImageSource.gallery);
+        if (result == null) return;
+        await settings.setBackgroundImagePath(result.path);
+      },
     );
   }
 }

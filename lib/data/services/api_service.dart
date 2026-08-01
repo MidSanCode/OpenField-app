@@ -69,11 +69,25 @@ Map<String, dynamic>? _decodeMap(http.Response response) {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:8080/api/v1';
+  static const String defaultBaseUrl = 'http://localhost:8080/api/v1';
+  static String _baseUrl = defaultBaseUrl;
   final http.Client _client;
+
+  /// The active API base URL. Updated when the user changes the server host in
+  /// settings. Read dynamically per request so changes apply immediately.
+  static String get baseUrl => _baseUrl;
 
   ApiService({http.Client? client})
       : _client = client ?? LoggingClient(http.Client());
+
+  /// Applies a new server host (e.g. `http://localhost:8080`). Setting a null
+  /// or empty value resets to the default.
+  static void setServerHost(String? host) {
+    final value = host?.trim().replaceAll(RegExp(r'/+$'), '');
+    _baseUrl = (value == null || value.isEmpty)
+        ? defaultBaseUrl
+        : '$value/api/v1';
+  }
 
   Map<String, String> _headers({String? token, bool json = true}) {
     final headers = <String, String>{};

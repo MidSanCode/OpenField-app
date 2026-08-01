@@ -799,6 +799,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to bind OAuth account'**
   String get oauthBindFailed;
+
+  /// No description provided for @serverHost.
+  ///
+  /// In en, this message translates to:
+  /// **'Server Host'**
+  String get serverHost;
+
+  /// No description provided for @serverHostHint.
+  ///
+  /// In en, this message translates to:
+  /// **'API server address, e.g. http://localhost:8080'**
+  String get serverHostHint;
+
+  /// No description provided for @backgroundImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Background Image'**
+  String get backgroundImage;
+
+  /// No description provided for @backgroundImageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a custom image as the app background'**
+  String get backgroundImageHint;
+
+  /// No description provided for @clear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clear;
+
+  /// No description provided for @noBackgroundImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Default background'**
+  String get noBackgroundImage;
 }
 
 class _AppLocalizationsDelegate
