@@ -380,4 +380,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noBackgroundImage => 'Default background';
+
+  @override
+  String get myPosts => 'My Posts';
+
+  @override
+  String get myPostsHint => 'View your published posts';
+
+  @override
+  String get bio => 'Bio';
+
+  @override
+  String get bioHint =>
+      'A short description about yourself. Markdown is supported.';
+
+  @override
+  String get verifiedAccount => 'Verified account';
+
+  @override
+  String get postsCount => 'posts';
 }

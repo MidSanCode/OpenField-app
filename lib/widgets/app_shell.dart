@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 
 class AppShell extends StatelessWidget {
@@ -69,11 +71,38 @@ class _Sidebar extends StatelessWidget {
           label: Text(l10n.chat),
         ),
         NavigationRailDestination(
-          icon: const Icon(Icons.person_outlined),
-          selectedIcon: const Icon(Icons.person),
+          icon: _AccountAvatarIcon(size: 24),
+          selectedIcon: _AccountAvatarIcon(size: 24, selected: true),
           label: Text(l10n.account),
         ),
       ],
+    );
+  }
+}
+
+class _AccountAvatarIcon extends StatelessWidget {
+  final double size;
+  final bool selected;
+
+  const _AccountAvatarIcon({required this.size, this.selected = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+    final avatarUrl = authService.avatarUrl != null && authService.avatarUrl!.isNotEmpty
+        ? authService.avatarUrl!
+        : (authService.user?.avatarUrl.isNotEmpty == true
+            ? authService.user!.avatarUrl
+            : null);
+    if (avatarUrl == null) {
+      return Icon(
+        selected ? Icons.person : Icons.person_outline,
+        size: size,
+      );
+    }
+    return CircleAvatar(
+      radius: size / 2,
+      backgroundImage: NetworkImage(avatarUrl),
     );
   }
 }
@@ -102,8 +131,8 @@ class _BottomBar extends StatelessWidget {
           label: l10n.chat,
         ),
         NavigationDestination(
-          icon: const Icon(Icons.person_outlined),
-          selectedIcon: const Icon(Icons.person),
+          icon: const _AccountAvatarIcon(size: 24),
+          selectedIcon: const _AccountAvatarIcon(size: 24, selected: true),
           label: l10n.account,
         ),
       ],

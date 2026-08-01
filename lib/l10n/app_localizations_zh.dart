@@ -376,4 +376,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noBackgroundImage => '默认背景';
+
+  @override
+  String get myPosts => '我的帖子';
+
+  @override
+  String get myPostsHint => '查看你发布的帖子';
+
+  @override
+  String get bio => '个人简介';
+
+  @override
+  String get bioHint => '关于你的简短介绍，支持 Markdown';
+
+  @override
+  String get verifiedAccount => '已认证账号';
+
+  @override
+  String get postsCount => '帖子';
 }

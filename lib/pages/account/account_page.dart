@@ -9,8 +9,10 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
+import 'package:openfield/pages/account/my_posts_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
 import 'package:openfield/pages/settings/settings_page.dart';
+import 'package:openfield/widgets/verified_badge.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -319,7 +321,11 @@ class _AccountPageState extends State<AccountPage> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(displayName, style: theme.textTheme.titleLarge),
+                  VerifiedName(
+                    name: displayName,
+                    verified: user?.isVerified ?? false,
+                    style: theme.textTheme.titleLarge,
+                  ),
                   if (authService.email != null && authService.email!.isNotEmpty)
                     Text(
                       authService.email!,
@@ -346,126 +352,152 @@ class _AccountPageState extends State<AccountPage> {
         ),
         const SizedBox(height: 62),
 
+        // ---- Bio ----
+        if (user != null && user.bio.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+            child: Text(
+              user.bio,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        ],
+
         // ---- Sections ----
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            spacing: 16,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SettingsSection(
-                title: l10n.oauthBinding,
-                children: [
-                  ListTile(
-                    minLeadingWidth: 48,
-                    leading: const Icon(Icons.link),
-                    title: Text(l10n.oauthBinding),
-                    subtitle: Text(
-                      hasOAuth
-                          ? 'OIDC'
-                          : l10n.oauthNotBound,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                    trailing: hasOAuth
-                        ? Text(l10n.oauthBound,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: theme.colorScheme.primary,
-                            ))
-                        : TextButton(
-                            onPressed: _isBindingOAuth ? null : _bindOAuth,
-                            child: Text(l10n.bindOAuth),
-                          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SettingsSection(
+              title: l10n.oauthBinding,
+              children: [
+                ListTile(
+                  minLeadingWidth: 48,
+                  leading: const Icon(Icons.link),
+                  title: Text(l10n.oauthBinding),
+                  subtitle: Text(
+                    hasOAuth
+                        ? 'OIDC'
+                        : l10n.oauthNotBound,
+                    style: const TextStyle(fontSize: 12),
                   ),
-                  if (!hasOAuth) ...[
-                    const Divider(height: 1),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
-                      child: Text(
-                        l10n.oauthUnbindAdminOnly,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                  trailing: hasOAuth
+                      ? Text(l10n.oauthBound,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.primary,
+                          ))
+                      : TextButton(
+                          onPressed: _isBindingOAuth ? null : _bindOAuth,
+                          child: Text(l10n.bindOAuth),
                         ),
+                ),
+                if (!hasOAuth) ...[
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                    child: Text(
+                      l10n.oauthUnbindAdminOnly,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  ],
+                  ),
                 ],
-              ),
+              ],
+            ),
 
-              _SettingsSection(
-                title: l10n.myAttachments,
-                children: [
-                  ListTile(
-                    minLeadingWidth: 48,
-                    leading: const Icon(Icons.attach_file),
-                    title: Text(l10n.myAttachments),
-                    subtitle: Text(
-                      l10n.manageAttachmentsHint,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const AttachmentsPage()),
-                      );
-                    },
+            _SettingsSection(
+              title: l10n.accountSettings,
+              children: [
+                ListTile(
+                  minLeadingWidth: 48,
+                  leading: const Icon(Icons.article_outlined),
+                  title: Text(l10n.myPosts),
+                  subtitle: Text(
+                    l10n.myPostsHint,
+                    style: const TextStyle(fontSize: 12),
                   ),
-                ],
-              ),
+                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => MyPostsPage(userId: user!.id),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  minLeadingWidth: 48,
+                  leading: const Icon(Icons.attach_file),
+                  title: Text(l10n.myAttachments),
+                  subtitle: Text(
+                    l10n.manageAttachmentsHint,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AttachmentsPage()),
+                    );
+                  },
+                ),
+              ],
+            ),
 
-              _SettingsSection(
-                title: l10n.settings,
-                children: [
-                  ListTile(
-                    minLeadingWidth: 48,
-                    leading: const Icon(Icons.settings_outlined),
-                    title: Text(l10n.settings),
-                    subtitle: Text(
-                      l10n.accountSettings,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const SettingsPage()),
-                      );
-                      if (mounted) setState(() {});
-                    },
+            _SettingsSection(
+              title: l10n.settings,
+              children: [
+                ListTile(
+                  minLeadingWidth: 48,
+                  leading: const Icon(Icons.settings_outlined),
+                  title: Text(l10n.settings),
+                  subtitle: Text(
+                    l10n.accountSettings,
+                    style: const TextStyle(fontSize: 12),
                   ),
-                ],
-              ),
+                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    );
+                    if (mounted) setState(() {});
+                  },
+                ),
+              ],
+            ),
 
-              _SettingsSection(
-                title: l10n.accountSettings,
-                children: [
-                  ListTile(
-                    minLeadingWidth: 48,
-                    leading: const Icon(Icons.badge_outlined),
-                    title: Text(l10n.editProfile),
-                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const EditProfilePage()),
-                      );
-                      if (mounted) setState(() {});
-                    },
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    minLeadingWidth: 48,
-                    leading: const Icon(Icons.logout),
-                    title: Text(l10n.logout),
-                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                    onTap: _logout,
-                  ),
-                ],
-              ),
-            ],
-          ),
+            _SettingsSection(
+              title: l10n.accountSettings,
+              children: [
+                ListTile(
+                  minLeadingWidth: 48,
+                  leading: const Icon(Icons.badge_outlined),
+                  title: Text(l10n.editProfile),
+                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const EditProfilePage()),
+                    );
+                    if (mounted) setState(() {});
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  minLeadingWidth: 48,
+                  leading: const Icon(Icons.logout),
+                  title: Text(l10n.logout),
+                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                  onTap: _logout,
+                ),
+              ],
+            ),
+          ],
         ),
         const SizedBox(height: 24),
       ],
@@ -515,25 +547,22 @@ class _SettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-            child: Text(
-              title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 24, thickness: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+          child: Text(
+            title,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          ...children,
-          const SizedBox(height: 16),
-        ],
-      ),
+        ),
+        ...children,
+      ],
     );
   }
 }
@@ -548,18 +577,25 @@ class EditProfilePage extends StatefulWidget {
 class _EditProfilePageState extends State<EditProfilePage> {
   final ApiService _apiService = ApiService();
   late final TextEditingController _nicknameController;
+  late final TextEditingController _usernameController;
+  late final TextEditingController _bioController;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     final auth = Provider.of<AuthService>(context, listen: false);
-    _nicknameController = TextEditingController(text: auth.username ?? '');
+    final user = auth.user;
+    _nicknameController = TextEditingController(text: user?.nickname ?? '');
+    _usernameController = TextEditingController(text: user?.username ?? '');
+    _bioController = TextEditingController(text: user?.bio ?? '');
   }
 
   @override
   void dispose() {
     _nicknameController.dispose();
+    _usernameController.dispose();
+    _bioController.dispose();
     super.dispose();
   }
 
@@ -567,7 +603,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final auth = Provider.of<AuthService>(context, listen: false);
     setState(() => _isSaving = true);
     try {
-      await _apiService.updateProfile(auth.accessToken!, nickname: _nicknameController.text.trim());
+      await _apiService.updateProfile(
+        auth.accessToken!,
+        nickname: _nicknameController.text.trim(),
+        username: _usernameController.text.trim(),
+        bio: _bioController.text.trim(),
+      );
       await auth.fetchCurrentUser();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -588,9 +629,27 @@ class _EditProfilePageState extends State<EditProfilePage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
+              controller: _usernameController,
+              decoration: InputDecoration(
+                labelText: l10n.username,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
               controller: _nicknameController,
               decoration: InputDecoration(
                 labelText: l10n.nickname,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _bioController,
+              maxLines: 4,
+              decoration: InputDecoration(
+                labelText: l10n.bio,
+                hintText: l10n.bioHint,
                 border: const OutlineInputBorder(),
               ),
             ),

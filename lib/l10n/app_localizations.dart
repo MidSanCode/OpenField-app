@@ -835,6 +835,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Default background'**
   String get noBackgroundImage;
+
+  /// No description provided for @myPosts.
+  ///
+  /// In en, this message translates to:
+  /// **'My Posts'**
+  String get myPosts;
+
+  /// No description provided for @myPostsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'View your published posts'**
+  String get myPostsHint;
+
+  /// No description provided for @bio.
+  ///
+  /// In en, this message translates to:
+  /// **'Bio'**
+  String get bio;
+
+  /// No description provided for @bioHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A short description about yourself. Markdown is supported.'**
+  String get bioHint;
+
+  /// No description provided for @verifiedAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified account'**
+  String get verifiedAccount;
+
+  /// No description provided for @postsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'posts'**
+  String get postsCount;
 }
 
 class _AppLocalizationsDelegate
