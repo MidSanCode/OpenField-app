@@ -10,6 +10,7 @@ class PostReply {
   final String? username;
   final String? nickname;
   final String? avatarUrl;
+  final bool isVerified;
 
   const PostReply({
     required this.id,
@@ -23,6 +24,7 @@ class PostReply {
     this.username,
     this.nickname,
     this.avatarUrl,
+    this.isVerified = false,
   });
 
   bool get isDeleted => deletedAt != null;
@@ -42,6 +44,7 @@ class PostReply {
       username: json['username'] as String?,
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
+      isVerified: json['is_verified'] as bool? ?? false,
     );
   }
 }

@@ -10,6 +10,8 @@ class User {
   final int storageQuota;
   final int storageUsed;
   final String oauth2Provider;
+  final String bio;
+  final bool isVerified;
 
   User({
     required this.id,
@@ -23,6 +25,8 @@ class User {
     this.storageQuota = 0,
     this.storageUsed = 0,
     this.oauth2Provider = '',
+    this.bio = '',
+    this.isVerified = false,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -38,6 +42,8 @@ class User {
       storageQuota: (json['storage_quota'] as num?)?.toInt() ?? 0,
       storageUsed: (json['storage_used'] as num?)?.toInt() ?? 0,
       oauth2Provider: json['oauth2_provider'] as String? ?? '',
+      bio: json['bio'] as String? ?? '',
+      isVerified: json['is_verified'] as bool? ?? false,
     );
   }
 

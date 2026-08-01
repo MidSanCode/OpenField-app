@@ -1,3 +1,5 @@
+import 'attachment.dart';
+
 class ChatMessage {
   final int id;
   final int conversationId;
@@ -9,6 +11,8 @@ class ChatMessage {
   final DateTime createdAt;
   final String? senderName;
   final String? senderAvatar;
+  final bool senderVerified;
+  final List<Attachment> attachments;
 
   const ChatMessage({
     required this.id,
@@ -21,6 +25,8 @@ class ChatMessage {
     this.deletedAt,
     this.senderName,
     this.senderAvatar,
+    this.senderVerified = false,
+    this.attachments = const [],
   });
 
   bool get isDeleted => deletedAt != null;
@@ -29,6 +35,14 @@ class ChatMessage {
   String get displayName => senderName ?? 'Unknown';
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    final rawAttachments = json['attachments'];
+    List<Attachment> attachments = const [];
+    if (rawAttachments is List) {
+      attachments = rawAttachments
+          .whereType<Map<String, dynamic>>()
+          .map((a) => Attachment.fromJson(a))
+          .toList();
+    }
     return ChatMessage(
       id: json['id'] as int,
       conversationId: json['conversation_id'] as int,
@@ -40,6 +54,8 @@ class ChatMessage {
       createdAt: DateTime.parse(json['created_at'] as String),
       senderName: json['sender_name'] as String?,
       senderAvatar: json['sender_avatar'] as String?,
+      senderVerified: json['sender_verified'] as bool? ?? false,
+      attachments: attachments,
     );
   }
 }

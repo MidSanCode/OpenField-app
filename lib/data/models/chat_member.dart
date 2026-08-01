@@ -10,6 +10,7 @@ class ChatMember {
   final String? username;
   final String? nickname;
   final String? avatarUrl;
+  final bool isVerified;
 
   const ChatMember({
     required this.conversationId,
@@ -23,6 +24,7 @@ class ChatMember {
     this.username,
     this.nickname,
     this.avatarUrl,
+    this.isVerified = false,
   });
 
   String get displayName =>
@@ -41,6 +43,7 @@ class ChatMember {
       username: json['username'] as String?,
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
+      isVerified: json['is_verified'] as bool? ?? false,
     );
   }
 }

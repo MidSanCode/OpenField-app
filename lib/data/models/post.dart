@@ -9,6 +9,7 @@ class Post {
   final String? username;
   final String? nickname;
   final String? avatarUrl;
+  final bool? isVerified;
   final List<Attachment> attachments;
   final int replyCount;
 
@@ -21,11 +22,14 @@ class Post {
     this.username,
     this.nickname,
     this.avatarUrl,
+    this.isVerified,
     this.attachments = const [],
     this.replyCount = 0,
   });
 
   String get authorName => (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
+
+  bool get authorVerified => isVerified ?? false;
 
   factory Post.fromJson(Map<String, dynamic> json) {
     final rawAttachments = json['attachments'];
@@ -45,6 +49,7 @@ class Post {
       username: json['username'] as String?,
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
+      isVerified: json['is_verified'] as bool?,
       attachments: attachments,
       replyCount: json['reply_count'] as int? ?? 0,
     );

@@ -242,10 +242,11 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to get permissions'));
   }
 
-  Future<User> updateProfile(String accessToken, {String? username, String? nickname}) async {
+  Future<User> updateProfile(String accessToken, {String? username, String? nickname, String? bio}) async {
     final body = <String, dynamic>{};
     if (username != null) body['username'] = username;
     if (nickname != null) body['nickname'] = nickname;
+    if (bio != null) body['bio'] = bio;
     final response = await _client.put(
       Uri.parse('$baseUrl/users/me'),
       headers: _headers(token: accessToken),
@@ -349,6 +350,23 @@ class ApiService {
     }
     throw ApiException(
         response.statusCode, _decodeError(response, 'Failed to load post'));
+  }
+
+  Future<List<Post>> getPostsByUser(int userId, String token, {int page = 1, int limit = 20}) async {
+    final response = await _client.get(
+      Uri.parse('$baseUrl/users/$userId/posts?page=$page&limit=$limit'),
+      headers: _headers(token: token, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final postsList = data?['posts'];
+      if (postsList is List) {
+        return postsList.whereType<Map<String, dynamic>>().map((p) => Post.fromJson(p)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load user posts'));
   }
 
   Future<Post> createPost(String content, String accessToken, {List<int> attachmentIds = const []}) async {
@@ -650,11 +668,12 @@ class ApiService {
     int conversationId,
     String content, {
     int? replyToId,
+    List<int> attachmentIds = const [],
   }) async {
     final response = await _client.post(
       Uri.parse('$baseUrl/conversations/$conversationId/messages'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'content': content, 'reply_to_id': replyToId}),
+      body: jsonEncode({'content': content, 'reply_to_id': replyToId, 'attachment_ids': attachmentIds}),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 201 && data != null) {
