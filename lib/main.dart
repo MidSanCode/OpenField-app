@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/log/log_recorder.dart';
 import 'package:openfield/core/router/app_router.dart';
+import 'package:openfield/core/windows/protocol_registration.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
@@ -20,6 +21,9 @@ import 'package:openfield/core/theme/app_theme.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  if (Platform.isWindows) {
+    ensureOpenFieldProtocol();
+  }
   _initConsoleLogging();
   runApp(const OpenFieldApp());
 }
