@@ -12,6 +12,7 @@ import 'package:openfield/pages/account/attachments_page.dart';
 import 'package:openfield/pages/account/my_posts_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
 import 'package:openfield/pages/settings/settings_page.dart';
+import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
 class AccountPage extends StatefulWidget {
@@ -356,10 +357,7 @@ class _AccountPageState extends State<AccountPage> {
         if (user != null && user.bio.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-            child: Text(
-              user.bio,
-              style: theme.textTheme.bodyMedium,
-            ),
+            child: MarkdownContent(data: user.bio),
           ),
         ],
 

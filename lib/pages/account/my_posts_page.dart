@@ -4,6 +4,7 @@ import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
+import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
 
@@ -127,13 +128,17 @@ class _MyPostsPageState extends State<MyPostsPage> {
             post: post,
             isMine: true,
             onDelete: () => _deletePost(post),
+            onTapAuthor: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => ProfilePage(userId: post.userId)),
+              );
+            },
             onTapReply: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
               );
             },
-          );
-        },
+          );        },
       );
     }
 

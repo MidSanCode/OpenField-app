@@ -7,6 +7,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/draft_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
+import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
 
@@ -70,6 +71,12 @@ class _PostsPageState extends State<PostsPage> {
         _isLoading = false;
       });
     }
+  }
+
+  void _openAuthorProfile(int userId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ProfilePage(userId: userId)),
+    );
   }
 
   void _openComposer() {
@@ -231,6 +238,7 @@ class _PostsPageState extends State<PostsPage> {
             isMine: post.userId == currentUserId,
             onEdit: () => _openEdit(post),
             onDelete: () => _deletePost(post),
+            onTapAuthor: () => _openAuthorProfile(post.userId),
             onTapReply: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),

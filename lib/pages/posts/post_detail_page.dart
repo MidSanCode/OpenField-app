@@ -5,7 +5,10 @@ import 'package:openfield/data/models/post_reply.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
+import 'package:openfield/pages/account/profile_page.dart';
+import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/post_card.dart';
+import 'package:openfield/widgets/verified_badge.dart';
 
 class PostDetailPage extends StatefulWidget {
   final Post post;
@@ -63,6 +66,12 @@ class _PostDetailPageState extends State<PostDetailPage> {
         _isLoading = false;
       });
     }
+  }
+
+  void _openAuthorProfile(int userId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ProfilePage(userId: userId)),
+    );
   }
 
   Future<void> _sendReply() async {
@@ -232,6 +241,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                           PostCard(
                             post: _post,
                             isMine: _post.userId == currentUserId,
+                            onTapAuthor: () => _openAuthorProfile(_post.userId),
                             onTapReply: () {},
                             showReplies: false,
                           ),
@@ -247,6 +257,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                 reply: r,
                                 isMine: r.userId == currentUserId,
                                 onLongPress: () => _onReplyLongPress(r),
+                                onTapAuthor: () => _openAuthorProfile(r.userId),
                               ),
                             ),
                         ],
@@ -319,8 +330,14 @@ class _ReplyTile extends StatelessWidget {
   final PostReply reply;
   final bool isMine;
   final VoidCallback onLongPress;
+  final VoidCallback? onTapAuthor;
 
-  const _ReplyTile({required this.reply, required this.isMine, required this.onLongPress});
+  const _ReplyTile({
+    required this.reply,
+    required this.isMine,
+    required this.onLongPress,
+    this.onTapAuthor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -332,30 +349,38 @@ class _ReplyTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              backgroundImage: (reply.avatarUrl != null && reply.avatarUrl!.isNotEmpty)
-                  ? NetworkImage(reply.avatarUrl!)
-                  : null,
-              child: (reply.avatarUrl == null || reply.avatarUrl!.isEmpty)
-                  ? Text(reply.authorName.substring(0, 1).toUpperCase())
-                  : null,
+            InkWell(
+              onTap: onTapAuthor,
+              borderRadius: BorderRadius.circular(16),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                backgroundImage: (reply.avatarUrl != null && reply.avatarUrl!.isNotEmpty)
+                    ? NetworkImage(reply.avatarUrl!)
+                    : null,
+                child: (reply.avatarUrl == null || reply.avatarUrl!.isEmpty)
+                    ? Text(reply.authorName.substring(0, 1).toUpperCase())
+                    : null,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    reply.authorName,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
+                  InkWell(
+                    onTap: onTapAuthor,
+                    child: VerifiedName(
+                      name: reply.authorName,
+                      verified: reply.isVerified,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(reply.content, style: theme.textTheme.bodyMedium),
+                  MarkdownContent(data: reply.content),
                   const SizedBox(height: 2),
                   Text(
                     _formatDate(reply.createdAt),

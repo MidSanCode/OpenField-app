@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:openfield/data/models/post.dart';
 import 'package:openfield/l10n/app_localizations.dart';
+import 'package:openfield/widgets/markdown_content.dart';
+import 'package:openfield/widgets/verified_badge.dart';
 
 class PostCard extends StatelessWidget {
   final Post post;
@@ -8,6 +10,7 @@ class PostCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final VoidCallback? onTapReply;
+  final VoidCallback? onTapAuthor;
   final bool showReplies;
 
   const PostCard({
@@ -17,6 +20,7 @@ class PostCard extends StatelessWidget {
     this.onEdit,
     this.onDelete,
     this.onTapReply,
+    this.onTapAuthor,
     this.showReplies = true,
   });
 
@@ -33,26 +37,37 @@ class PostCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundImage: post.avatarUrl != null && post.avatarUrl!.isNotEmpty
-                      ? NetworkImage(post.avatarUrl!)
-                      : null,
-                  child: post.avatarUrl == null || post.avatarUrl!.isEmpty
-                      ? Text(post.authorName.substring(0, 1).toUpperCase())
-                      : null,
+                InkWell(
+                  onTap: onTapAuthor,
+                  borderRadius: BorderRadius.circular(24),
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundImage: post.avatarUrl != null && post.avatarUrl!.isNotEmpty
+                        ? NetworkImage(post.avatarUrl!)
+                        : null,
+                    child: post.avatarUrl == null || post.avatarUrl!.isEmpty
+                        ? Text(post.authorName.substring(0, 1).toUpperCase())
+                        : null,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(post.authorName, style: theme.textTheme.titleMedium),
-                      Text(
-                        _formatDate(post.createdAt),
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                    ],
+                  child: InkWell(
+                    onTap: onTapAuthor,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        VerifiedName(
+                          name: post.authorName,
+                          verified: post.authorVerified,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        Text(
+                          _formatDate(post.createdAt),
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 if (isMine)
@@ -78,7 +93,7 @@ class PostCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Text(post.content, style: theme.textTheme.bodyLarge),
+            MarkdownContent(data: post.content),
             if (post.attachments.any((a) => a.isImage)) ...[
               const SizedBox(height: 12),
               _buildImages(context),

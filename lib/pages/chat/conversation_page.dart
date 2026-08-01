@@ -7,6 +7,8 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
+import 'package:openfield/widgets/markdown_content.dart';
+import 'package:openfield/widgets/verified_badge.dart';
 
 class ConversationPage extends StatefulWidget {
   final int conversationId;
@@ -729,8 +731,9 @@ class _MessageBubble extends StatelessWidget {
                   if (showSenderName && message.displayName.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 2),
-                      child: Text(
-                        message.displayName,
+                      child: VerifiedName(
+                        name: message.displayName,
+                        verified: message.senderVerified,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.primary,
                         ),
@@ -784,9 +787,9 @@ class _MessageBubble extends StatelessWidget {
                             ),
                           )
                         else
-                          SelectableText(
-                            message.content,
-                            style: theme.textTheme.bodyMedium,
+                          MarkdownContent(
+                            data: message.content,
+                            padding: EdgeInsets.zero,
                           ),
                         if (message.isEdited)
                           Text(
