@@ -44,12 +44,8 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final auth = Provider.of<AuthService>(context, listen: false);
       final token = auth.accessToken;
-      if (token == null) {
-        setState(() => _error = 'Not authenticated');
-        return;
-      }
-      final user = await _apiService.getUser(token, widget.userId);
-      final posts = await _apiService.getPostsByUser(widget.userId, token);
+      final user = await _apiService.getUser(widget.userId, token: token);
+      final posts = await _apiService.getPostsByUser(widget.userId, token: token);
       if (mounted) {
         setState(() {
           _user = user;

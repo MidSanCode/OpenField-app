@@ -195,10 +195,10 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to get user'));
   }
 
-  Future<User> getUser(String accessToken, int userId) async {
+  Future<User> getUser(int userId, {String? token}) async {
     final response = await _client.get(
       Uri.parse('$baseUrl/users/$userId'),
-      headers: _headers(token: accessToken, json: false),
+      headers: _headers(token: token, json: false),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 200 && data != null) {
@@ -339,7 +339,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load posts'));
   }
 
-  Future<Post> getPost(int postId, String token) async {
+  Future<Post> getPost(int postId, [String? token]) async {
     final response = await _client.get(
       Uri.parse('$baseUrl/posts/$postId'),
       headers: _headers(token: token, json: false),
@@ -352,7 +352,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load post'));
   }
 
-  Future<List<Post>> getPostsByUser(int userId, String token, {int page = 1, int limit = 20}) async {
+  Future<List<Post>> getPostsByUser(int userId, {String? token, int page = 1, int limit = 20}) async {
     final response = await _client.get(
       Uri.parse('$baseUrl/users/$userId/posts?page=$page&limit=$limit'),
       headers: _headers(token: token, json: false),
@@ -410,7 +410,7 @@ class ApiService {
 
   // ---- Post replies ----
 
-  Future<List<PostReply>> listReplies(int postId, String token, {int page = 1, int limit = 50}) async {
+  Future<List<PostReply>> listReplies(int postId, {String? token, int page = 1, int limit = 50}) async {
     final response = await _client.get(
       Uri.parse('$baseUrl/posts/$postId/replies?page=$page&limit=$limit'),
       headers: _headers(token: token, json: false),

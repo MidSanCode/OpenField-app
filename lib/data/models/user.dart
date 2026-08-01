@@ -10,6 +10,7 @@ class User {
   final int storageQuota;
   final int storageUsed;
   final String oauth2Provider;
+  final String oauth2Username;
   final String bio;
   final bool isVerified;
 
@@ -25,6 +26,7 @@ class User {
     this.storageQuota = 0,
     this.storageUsed = 0,
     this.oauth2Provider = '',
+    this.oauth2Username = '',
     this.bio = '',
     this.isVerified = false,
   });
@@ -42,6 +44,7 @@ class User {
       storageQuota: (json['storage_quota'] as num?)?.toInt() ?? 0,
       storageUsed: (json['storage_used'] as num?)?.toInt() ?? 0,
       oauth2Provider: json['oauth2_provider'] as String? ?? '',
+      oauth2Username: json['oauth2_username'] as String? ?? '',
       bio: json['bio'] as String? ?? '',
       isVerified: json['is_verified'] as bool? ?? false,
     );

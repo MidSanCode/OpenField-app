@@ -4,6 +4,7 @@ import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
+import 'package:openfield/pages/media/media_preview_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 
 class AttachmentsPage extends StatefulWidget {
@@ -122,21 +123,17 @@ class _AttachmentsPageState extends State<AttachmentsPage> {
         ),
         itemBuilder: (context, index) {
           final att = _attachments[index];
-          return _AttachmentGridTile(
-            attachment: att,
-            onOpen: () => _openAttachment(context, att),
-            onDelete: () => _delete(att),
-          );
+          return _buildTile(context, att, () => _openAttachment(context, att), () => _delete(att));
         },
       ),
     );
   }
 
   void _openAttachment(BuildContext context, Attachment att) {
-    if (att.isImage) {
+    if (att.isImage || att.isVideo || att.isAudio) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => _AttachmentPreviewPage(attachment: att),
+          builder: (_) => MediaPreviewPage(attachment: att),
         ),
       );
     } else {
@@ -145,114 +142,68 @@ class _AttachmentsPageState extends State<AttachmentsPage> {
   }
 }
 
-class _AttachmentGridTile extends StatelessWidget {
-  final Attachment attachment;
-  final VoidCallback onOpen;
-  final VoidCallback onDelete;
-
-  const _AttachmentGridTile({
-    required this.attachment,
-    required this.onOpen,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpen,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Container(
-                color: theme.colorScheme.surfaceContainerHighest,
-                child: attachment.isImage
-                    ? Image.network(
-                        attachment.url,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const Center(child: CircularProgressIndicator());
-                        },
-                        errorBuilder: (context, error, stack) => const Icon(
-                          Icons.broken_image_outlined,
-                          size: 32,
-                        ),
-                      )
-                    : Icon(
-                        _iconFor(attachment),
-                        size: 32,
-                        color: theme.colorScheme.primary,
-                      ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    attachment.originalName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  Text(
-                    formatBytes(attachment.sizeBytes),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  IconData _iconFor(Attachment att) {
+Widget _buildTile(BuildContext context, Attachment attachment, VoidCallback onOpen, VoidCallback onDelete) {
+  final theme = Theme.of(context);
+  IconData iconFor(Attachment att) {
     if (att.isAudio) return Icons.audio_file_outlined;
     if (att.isVideo) return Icons.video_file_outlined;
     if (att.isText) return Icons.description_outlined;
     return Icons.insert_drive_file_outlined;
   }
-}
 
-class _AttachmentPreviewPage extends StatelessWidget {
-  final Attachment attachment;
-
-  const _AttachmentPreviewPage({required this.attachment});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
-      body: Center(
-        child: InteractiveViewer(
-          child: Image.network(
-            attachment.url,
-            fit: BoxFit.contain,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              );
-            },
-            errorBuilder: (context, error, stack) => const Icon(
-              Icons.broken_image_outlined,
-              size: 48,
-              color: Colors.white,
+  return Card(
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onOpen,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Container(
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: attachment.isImage
+                  ? Image.network(
+                      attachment.url,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(child: CircularProgressIndicator());
+                      },
+                      errorBuilder: (context, error, stack) => const Icon(
+                        Icons.broken_image_outlined,
+                        size: 32,
+                      ),
+                    )
+                  : Icon(
+                      iconFor(attachment),
+                      size: 32,
+                      color: theme.colorScheme.primary,
+                    ),
             ),
           ),
-        ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  attachment.originalName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
+                Text(
+                  formatBytes(attachment.sizeBytes),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }

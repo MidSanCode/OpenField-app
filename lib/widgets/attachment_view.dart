@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/data/models/attachment.dart';
+import 'package:openfield/pages/media/media_preview_page.dart';
 
 class AttachmentView extends StatelessWidget {
   final List<Attachment> attachments;
@@ -55,7 +56,7 @@ class _ImageGrid extends StatelessWidget {
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: InkWell(
-            onTap: () => _openUrl(context, att.url),
+            onTap: () => _openAttachment(context, att),
             child: Image.network(
               att.url,
               fit: BoxFit.cover,
@@ -109,7 +110,7 @@ class _AttachmentTile extends StatelessWidget {
       onTap: interactive
           ? () {
               onOpen?.call();
-              _openUrl(context, attachment.url);
+              _openAttachment(context, attachment);
             }
           : null,
       borderRadius: BorderRadius.circular(8),
@@ -175,6 +176,18 @@ class _AttachmentTile extends StatelessWidget {
 
 Future<void> _openUrl(BuildContext context, String url) async {
   await openAttachmentUrl(context, url);
+}
+
+void _openAttachment(BuildContext context, Attachment att) {
+  if (att.isImage || att.isVideo || att.isAudio) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MediaPreviewPage(attachment: att),
+      ),
+    );
+    return;
+  }
+  _openUrl(context, att.url);
 }
 
 Future<void> openAttachmentUrl(BuildContext context, String url) async {

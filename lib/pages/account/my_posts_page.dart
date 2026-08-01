@@ -43,7 +43,7 @@ class _MyPostsPageState extends State<MyPostsPage> {
         setState(() => _error = 'Not authenticated');
         return;
       }
-      final posts = await _apiService.getPostsByUser(widget.userId, token);
+      final posts = await _apiService.getPostsByUser(widget.userId, token: token);
       if (mounted) {
         setState(() {
           _posts = posts;

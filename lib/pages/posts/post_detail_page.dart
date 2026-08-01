@@ -50,9 +50,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
     });
     try {
       final post = token != null ? await _apiService.getPost(_post.id, token) : _post;
-      final replies = token != null
-          ? await _apiService.listReplies(_post.id, token)
-          : const <PostReply>[];
+      final replies = await _apiService.listReplies(_post.id, token: token);
       if (!mounted) return;
       setState(() {
         _post = post;

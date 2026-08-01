@@ -76,12 +76,14 @@ class _AccountPageState extends State<AccountPage> {
       await authService.fetchCurrentUser();
       if (mounted) {
         final success = bindResult == 'success';
+        final name = uri.queryParameters['name'];
+        final msg = success
+            ? (name != null && name.isNotEmpty
+                ? '${l10n.oauthBindSuccess} ($name)'
+                : l10n.oauthBindSuccess)
+            : l10n.oauthBindFailed;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              success ? l10n.oauthBindSuccess : l10n.oauthBindFailed,
-            ),
-          ),
+          SnackBar(content: Text(msg)),
         );
         setState(() {});
       }
@@ -258,6 +260,7 @@ class _AccountPageState extends State<AccountPage> {
     final displayName = user?.displayName ?? authService.username ?? l10n.username;
 
     final hasOAuth = user?.hasOAuthBinding ?? false;
+    final oauthName = hasOAuth ? (user?.oauth2Username.isNotEmpty == true ? user!.oauth2Username : 'OIDC') : '';
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -373,9 +376,7 @@ class _AccountPageState extends State<AccountPage> {
                   leading: const Icon(Icons.link),
                   title: Text(l10n.oauthBinding),
                   subtitle: Text(
-                    hasOAuth
-                        ? 'OIDC'
-                        : l10n.oauthNotBound,
+                    hasOAuth ? oauthName : l10n.oauthNotBound,
                     style: const TextStyle(fontSize: 12),
                   ),
                   contentPadding: const EdgeInsets.only(left: 24, right: 17),
