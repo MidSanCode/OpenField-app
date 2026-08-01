@@ -57,17 +57,28 @@ class _ImageGrid extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           child: InkWell(
             onTap: () => _openAttachment(context, att),
-            child: Image.network(
-              att.url,
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return Container(color: Theme.of(context).colorScheme.surfaceContainerHighest);
-              },
-              errorBuilder: (context, error, stack) => Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: const Icon(Icons.broken_image_outlined),
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.network(
+                  att.url,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return Container(color: Theme.of(context).colorScheme.surfaceContainerHighest);
+                  },
+                  errorBuilder: (context, error, stack) => Container(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: const Icon(Icons.broken_image_outlined),
+                  ),
+                ),
+                if (!att.isPublic)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: _VisibilityBadge(visibility: att.visibility),
+                  ),
+              ],
             ),
           ),
         );
@@ -133,14 +144,25 @@ class _AttachmentTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    attachment.originalName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          attachment.originalName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      if (!attachment.isPublic) ...[
+                        const SizedBox(width: 6),
+                        _VisibilityBadge(visibility: attachment.visibility),
+                      ],
+                    ],
                   ),
                   Text(
-                    '${_typeLabel(context)} · ${formatBytes(attachment.sizeBytes)}',                    style: theme.textTheme.bodySmall?.copyWith(
+                    '${_typeLabel(context)} · ${formatBytes(attachment.sizeBytes)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -171,6 +193,25 @@ class _AttachmentTile extends StatelessWidget {
     if (att.isVideo) return Icons.video_file_outlined;
     if (att.isText) return Icons.description_outlined;
     return Icons.insert_drive_file_outlined;
+  }
+}
+
+class _VisibilityBadge extends StatelessWidget {
+  final String visibility;
+
+  const _VisibilityBadge({required this.visibility});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    switch (visibility) {
+      case 'private':
+        return Icon(Icons.lock, size: 14, color: theme.colorScheme.error);
+      case 'restricted':
+        return Icon(Icons.group, size: 14, color: theme.colorScheme.primary);
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }
 

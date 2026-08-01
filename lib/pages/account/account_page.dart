@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/core/widgets/error_dialog.dart';
@@ -10,6 +9,7 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
 import 'package:openfield/pages/account/my_posts_page.dart';
+import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
 import 'package:openfield/pages/settings/settings_page.dart';
 import 'package:openfield/widgets/markdown_content.dart';
@@ -29,7 +29,6 @@ class _AccountPageState extends State<AccountPage> {
   StreamSubscription<Uri>? _linkSubscription;
   bool _isLoggingIn = false;
   bool _isPasswordLogin = false;
-  bool _isUploadingImage = false;
   bool _isBindingOAuth = false;
 
   @override
@@ -166,24 +165,6 @@ class _AccountPageState extends State<AccountPage> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _pickImage(Future<void> Function(String path) onPicked) async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery);
-    if (file == null) return;
-
-    setState(() => _isUploadingImage = true);
-    try {
-      await onPicked(file.path);
-      await authService.fetchCurrentUser();
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (mounted) await showApiErrorDialog(context, e);
-    } finally {
-      if (mounted) setState(() => _isUploadingImage = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
@@ -288,43 +269,26 @@ class _AccountPageState extends State<AccountPage> {
                     ),
             ),
             Positioned(
-              right: 8,
-              top: 8,
-              child: IconButton.filledTonal(
-                onPressed: _isUploadingImage
-                    ? null
-                    : () => _pickImage((path) => _apiService.uploadBanner(path, authService.accessToken!)),
-                icon: const Icon(Icons.edit),
-                tooltip: l10n.setBanner,
-              ),
-            ),
-            Positioned(
               left: 0,
               right: 0,
               bottom: -52,
               child: Column(
                 children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      CircleAvatar(
-                        radius: 44,
-                        backgroundColor: theme.colorScheme.surface,
-                        backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                        child: avatarUrl == null ? const Icon(Icons.person, size: 44) : null,
-                      ),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: IconButton.filledTonal(
-                          onPressed: _isUploadingImage
-                              ? null
-                              : () => _pickImage((path) => _apiService.uploadAvatar(path, authService.accessToken!)),
-                          icon: const Icon(Icons.edit, size: 16),
-                          tooltip: l10n.setAvatar,
-                        ),
-                      ),
-                    ],
+                  InkWell(
+                    onTap: () {
+                      final currentUser = authService.user;
+                      if (currentUser != null) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => ProfilePage(userId: currentUser.id)),
+                        );
+                      }
+                    },
+                    child: CircleAvatar(
+                      radius: 44,
+                      backgroundColor: theme.colorScheme.surface,
+                      backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                      child: avatarUrl == null ? const Icon(Icons.person, size: 44) : null,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   VerifiedName(

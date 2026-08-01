@@ -272,9 +272,20 @@ class ApiService {
 
   // ---- Storage ----
 
-  Future<Attachment> uploadAttachment(String filePath, String accessToken) async {
-    final data = await _uploadMultipart('$baseUrl/attachments', filePath, accessToken);
-    return Attachment.fromJson(data);
+  Future<Attachment> uploadAttachment(String filePath, String accessToken, {String visibility = 'public'}) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/attachments'));
+    request.headers['Authorization'] = 'Bearer $accessToken';
+    request.files.add(await http.MultipartFile.fromPath('file', filePath));
+    request.fields['visibility'] = visibility;
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    final data = _decodeMap(response);
+    if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
+      return Attachment.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode,
+        _decodeError(response, 'Upload failed (${response.statusCode})'));
   }
 
   Future<List<Attachment>> listMyAttachments(String accessToken, {int limit = 100}) async {
