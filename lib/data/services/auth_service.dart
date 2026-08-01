@@ -87,9 +87,9 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Completes registration for a new OAuth user.
-  Future<User> register(String username, String nickname) async {
+  Future<User> register(String username, String nickname, {String bio = ''}) async {
     if (_accessToken == null) throw Exception('Not authenticated');
-    final user = await _api.register(username, nickname, _accessToken!);
+    final user = await _api.register(username, nickname, _accessToken!, bio: bio);
     _user = user;
     await setUser(username: user.username, email: user.email, avatarUrl: user.avatarUrl);
     return user;

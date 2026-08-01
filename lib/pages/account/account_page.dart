@@ -260,7 +260,9 @@ class _AccountPageState extends State<AccountPage> {
     final displayName = user?.displayName ?? authService.username ?? l10n.username;
 
     final hasOAuth = user?.hasOAuthBinding ?? false;
-    final oauthName = hasOAuth ? (user?.oauth2Username.isNotEmpty == true ? user!.oauth2Username : 'OIDC') : '';
+    final oauthName = hasOAuth && user != null
+        ? (user.oauth2Username.isNotEmpty ? user.oauth2Username : 'OIDC')
+        : '';
 
     return ListView(
       padding: EdgeInsets.zero,

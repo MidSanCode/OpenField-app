@@ -163,11 +163,11 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Login failed'));
   }
 
-  Future<User> register(String username, String nickname, String accessToken) async {
+  Future<User> register(String username, String nickname, String accessToken, {String bio = ''}) async {
     final response = await _client.post(
       Uri.parse('$baseUrl/auth/register'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'username': username, 'nickname': nickname}),
+      body: jsonEncode({'username': username, 'nickname': nickname, 'bio': bio}),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 200 && data != null) {
