@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\openfield]
+@="URL:OpenField Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\openfield\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\openfield\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\openfield\shell\open\command]
+@="\"C:\\Users\\Administrator\\AppData\\Local\\openfield\\openfield.exe\" \"%1\""
