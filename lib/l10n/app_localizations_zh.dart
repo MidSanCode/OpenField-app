@@ -39,6 +39,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get message => '消息';
 
   @override
+  String get attachFile => '添加附件';
+
+  @override
   String get search => '搜索';
 
   @override
@@ -360,41 +363,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String get oauthBindFailed => 'OAuth 账号绑定失败';
 
   @override
-  String get serverHost => '服务器地址';
+  String get myPosts => '我的帖子';
 
   @override
-  String get serverHostHint => 'API 服务器地址，例如 http://localhost:8080';
+  String get myPostsHint => '查看和管理你的帖子';
+
+  @override
+  String get bio => '简介';
+
+  @override
+  String get bioHint => '介绍一下你自己';
+
+  @override
+  String get serverHost => '服务器';
+
+  @override
+  String get serverHostHint => '服务器地址';
 
   @override
   String get backgroundImage => '背景图片';
 
   @override
-  String get backgroundImageHint => '使用自定义图片作为应用背景';
+  String get backgroundImageHint => '为本设备设置背景图片';
 
   @override
   String get clear => '清除';
 
   @override
-  String get noBackgroundImage => '默认背景';
+  String get showMore => '展开更多';
 
   @override
-  String get myPosts => '我的帖子';
-
-  @override
-  String get myPostsHint => '查看你发布的帖子';
-
-  @override
-  String get bio => '个人简介';
-
-  @override
-  String get bioHint => '关于你的简短介绍，支持 Markdown';
-
-  @override
-  String get verifiedAccount => '已认证账号';
-
-  @override
-  String get postsCount => '帖子';
-
-  @override
-  String get showMore => '展开全文';
+  String get verifiedAccount => '认证账号';
 }

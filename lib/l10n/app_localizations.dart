@@ -158,6 +158,12 @@ abstract class AppLocalizations {
   /// **'Message'**
   String get message;
 
+  /// No description provided for @attachFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach file'**
+  String get attachFile;
+
   /// No description provided for @search.
   ///
   /// In en, this message translates to:
@@ -800,42 +806,6 @@ abstract class AppLocalizations {
   /// **'Failed to bind OAuth account'**
   String get oauthBindFailed;
 
-  /// No description provided for @serverHost.
-  ///
-  /// In en, this message translates to:
-  /// **'Server Host'**
-  String get serverHost;
-
-  /// No description provided for @serverHostHint.
-  ///
-  /// In en, this message translates to:
-  /// **'API server address, e.g. http://localhost:8080'**
-  String get serverHostHint;
-
-  /// No description provided for @backgroundImage.
-  ///
-  /// In en, this message translates to:
-  /// **'Background Image'**
-  String get backgroundImage;
-
-  /// No description provided for @backgroundImageHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Use a custom image as the app background'**
-  String get backgroundImageHint;
-
-  /// No description provided for @clear.
-  ///
-  /// In en, this message translates to:
-  /// **'Clear'**
-  String get clear;
-
-  /// No description provided for @noBackgroundImage.
-  ///
-  /// In en, this message translates to:
-  /// **'Default background'**
-  String get noBackgroundImage;
-
   /// No description provided for @myPosts.
   ///
   /// In en, this message translates to:
@@ -845,7 +815,7 @@ abstract class AppLocalizations {
   /// No description provided for @myPostsHint.
   ///
   /// In en, this message translates to:
-  /// **'View your published posts'**
+  /// **'View and manage your posts'**
   String get myPostsHint;
 
   /// No description provided for @bio.
@@ -857,26 +827,50 @@ abstract class AppLocalizations {
   /// No description provided for @bioHint.
   ///
   /// In en, this message translates to:
-  /// **'A short description about yourself. Markdown is supported.'**
+  /// **'Tell others about yourself'**
   String get bioHint;
 
-  /// No description provided for @verifiedAccount.
+  /// No description provided for @serverHost.
   ///
   /// In en, this message translates to:
-  /// **'Verified account'**
-  String get verifiedAccount;
+  /// **'Server'**
+  String get serverHost;
 
-  /// No description provided for @postsCount.
+  /// No description provided for @serverHostHint.
   ///
   /// In en, this message translates to:
-  /// **'posts'**
-  String get postsCount;
+  /// **'Server address'**
+  String get serverHostHint;
+
+  /// No description provided for @backgroundImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Background Image'**
+  String get backgroundImage;
+
+  /// No description provided for @backgroundImageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a background image for this device'**
+  String get backgroundImageHint;
+
+  /// No description provided for @clear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clear;
 
   /// No description provided for @showMore.
   ///
   /// In en, this message translates to:
   /// **'Show more'**
   String get showMore;
+
+  /// No description provided for @verifiedAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified account'**
+  String get verifiedAccount;
 }
 
 class _AppLocalizationsDelegate

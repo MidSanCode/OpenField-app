@@ -10,6 +10,7 @@
   "postContent": "What's on your mind?",
   "send": "Send",
   "message": "Message",
+  "attachFile": "Attach file",
   "search": "Search",
   "noPosts": "No posts yet",
   "loadFailed": "Failed to load",
@@ -116,5 +117,16 @@
   "bindOAuth": "Bind",
   "oauthUnbindAdminOnly": "OAuth accounts can only be unbound in the admin panel.",
   "oauthBindSuccess": "OAuth account bound successfully",
-  "oauthBindFailed": "Failed to bind OAuth account"
+  "oauthBindFailed": "Failed to bind OAuth account",
+  "myPosts": "My Posts",
+  "myPostsHint": "View and manage your posts",
+  "bio": "Bio",
+  "bioHint": "Tell others about yourself",
+  "serverHost": "Server",
+  "serverHostHint": "Server address",
+  "backgroundImage": "Background Image",
+  "backgroundImageHint": "Set a background image for this device",
+  "clear": "Clear",
+  "showMore": "Show more",
+  "verifiedAccount": "Verified account"
 }

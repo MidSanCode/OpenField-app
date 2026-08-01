@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:openfield/data/models/post.dart';
 import 'package:openfield/l10n/app_localizations.dart';
+import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
@@ -132,9 +133,9 @@ class _PostCardState extends State<PostCard> {
                 ),
               ),
             ],
-            if (post.attachments.any((a) => a.isImage)) ...[
+            if (post.attachments.isNotEmpty) ...[
               const SizedBox(height: 12),
-              _buildImages(context),
+              AttachmentView(attachments: post.attachments),
             ],
             if (widget.showReplies) ...[
               const SizedBox(height: 8),
@@ -169,38 +170,6 @@ class _PostCardState extends State<PostCard> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildImages(BuildContext context) {
-    final images = post.attachments.where((a) => a.isImage).toList();
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: images.length,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: images.length == 1 ? 1 : 3,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
-        childAspectRatio: 1,
-      ),
-      itemBuilder: (context, index) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            images[index].url,
-            fit: BoxFit.cover,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return Container(color: Theme.of(context).colorScheme.surfaceContainerHighest);
-            },
-            errorBuilder: (context, error, stack) => Container(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: const Icon(Icons.broken_image_outlined),
-            ),
-          ),
-        );
-      },
     );
   }
 

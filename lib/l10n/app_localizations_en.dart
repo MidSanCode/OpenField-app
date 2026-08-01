@@ -39,6 +39,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get message => 'Message';
 
   @override
+  String get attachFile => 'Attach file';
+
+  @override
   String get search => 'Search';
 
   @override
@@ -363,43 +366,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get oauthBindFailed => 'Failed to bind OAuth account';
 
   @override
-  String get serverHost => 'Server Host';
-
-  @override
-  String get serverHostHint => 'API server address, e.g. http://localhost:8080';
-
-  @override
-  String get backgroundImage => 'Background Image';
-
-  @override
-  String get backgroundImageHint =>
-      'Use a custom image as the app background';
-
-  @override
-  String get clear => 'Clear';
-
-  @override
-  String get noBackgroundImage => 'Default background';
-
-  @override
   String get myPosts => 'My Posts';
 
   @override
-  String get myPostsHint => 'View your published posts';
+  String get myPostsHint => 'View and manage your posts';
 
   @override
   String get bio => 'Bio';
 
   @override
-  String get bioHint =>
-      'A short description about yourself. Markdown is supported.';
+  String get bioHint => 'Tell others about yourself';
 
   @override
-  String get verifiedAccount => 'Verified account';
+  String get serverHost => 'Server';
 
   @override
-  String get postsCount => 'posts';
+  String get serverHostHint => 'Server address';
+
+  @override
+  String get backgroundImage => 'Background Image';
+
+  @override
+  String get backgroundImageHint => 'Set a background image for this device';
+
+  @override
+  String get clear => 'Clear';
 
   @override
   String get showMore => 'Show more';
+
+  @override
+  String get verifiedAccount => 'Verified account';
 }

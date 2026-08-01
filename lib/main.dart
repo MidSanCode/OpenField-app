@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logging/logging.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/log/log_recorder.dart';
@@ -18,6 +19,7 @@ import 'package:openfield/core/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   _initConsoleLogging();
   runApp(const OpenFieldApp());
 }

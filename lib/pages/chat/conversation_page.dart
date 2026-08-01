@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/data/models/chat_member.dart';
 import 'package:openfield/data/models/chat_message.dart';
@@ -7,6 +8,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
+import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
@@ -131,6 +133,40 @@ class _ConversationPageState extends State<ConversationPage> {
         widget.conversationId,
         content,
         replyToId: replyToId,
+      );
+      if (!mounted) return;
+      setState(() => _messages = [..._messages, msg]);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+      await _apiService.markConversationRead(token, widget.conversationId, msg.id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  Future<void> _pickAndSendAttachment() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    final result = await FilePicker.platform.pickFiles();
+    final file = result?.files.single;
+    if (file == null || file.path == null) return;
+    try {
+      final attachment = await _apiService.uploadAttachment(file.path!, token);
+      final msg = await _apiService.sendChatMessage(
+        token,
+        widget.conversationId,
+        '',
+        attachmentIds: [attachment.id],
       );
       if (!mounted) return;
       setState(() => _messages = [..._messages, msg]);
@@ -646,6 +682,11 @@ class _ConversationPageState extends State<ConversationPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            IconButton(
+              onPressed: _pickAndSendAttachment,
+              icon: const Icon(Icons.attach_file),
+              tooltip: l10n.attachFile,
+            ),
             Expanded(
               child: TextField(
                 controller: _inputController,
@@ -791,6 +832,10 @@ class _MessageBubble extends StatelessWidget {
                             data: message.content,
                             padding: EdgeInsets.zero,
                           ),
+                        if (message.attachments.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          AttachmentView(attachments: message.attachments),
+                        ],
                         if (message.isEdited)
                           Text(
                             l10n.chatEdited,

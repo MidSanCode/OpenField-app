@@ -24,4 +24,13 @@ class Attachment {
   }
 
   bool get isImage => mimeType.startsWith('image/');
+
+  bool get isAudio => mimeType.startsWith('audio/');
+
+  bool get isVideo => mimeType.startsWith('video/');
+
+  bool get isText => mimeType.startsWith('text/');
+
+  bool get isBinary =>
+      !isImage && !isAudio && !isVideo && !isText;
 }

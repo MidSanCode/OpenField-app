@@ -10,6 +10,7 @@
   "postContent": "你在想什么？",
   "send": "发送",
   "message": "消息",
+  "attachFile": "添加附件",
   "search": "搜索",
   "noPosts": "暂无帖子",
   "loadFailed": "加载失败",
@@ -116,5 +117,16 @@
   "bindOAuth": "绑定",
   "oauthUnbindAdminOnly": "OAuth 账号仅可在管理面板解绑。",
   "oauthBindSuccess": "OAuth 账号绑定成功",
-  "oauthBindFailed": "OAuth 账号绑定失败"
+  "oauthBindFailed": "OAuth 账号绑定失败",
+  "myPosts": "我的帖子",
+  "myPostsHint": "查看和管理你的帖子",
+  "bio": "简介",
+  "bioHint": "介绍一下你自己",
+  "serverHost": "服务器",
+  "serverHostHint": "服务器地址",
+  "backgroundImage": "背景图片",
+  "backgroundImageHint": "为本设备设置背景图片",
+  "clear": "清除",
+  "showMore": "展开更多",
+  "verifiedAccount": "认证账号"
 }
