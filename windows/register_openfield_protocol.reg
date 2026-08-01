@@ -1,0 +1,15 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\openfield]
+@="URL:OpenField Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\openfield\DefaultIcon]
+@="\"F:\\exeliang\\OpenField\\openfield\\build\\windows\\x64\\runner\\Debug\\openfield.exe\",0"
+
+[HKEY_CURRENT_USER\Software\Classes\openfield\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\openfield\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\openfield\shell\open\command]
+@="\"F:\\exeliang\\OpenField\\openfield\\build\\windows\\x64\\runner\\Debug\\openfield.exe\" \"%1\""

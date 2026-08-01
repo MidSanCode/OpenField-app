@@ -1,0 +1,31 @@
+name: openfield
+description: "OpenField - An open social media platform."
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  provider: ^6.1.2
+  go_router: ^14.2.7
+  http: ^1.2.2
+  shared_preferences: ^2.3.3
+  url_launcher: ^6.3.0
+  app_links: ^6.3.2
+  image_picker: ^1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  generate: true
+  uses-material-design: true
