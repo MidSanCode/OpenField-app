@@ -399,4 +399,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get postsCount => 'posts';
+
+  @override
+  String get showMore => 'Show more';
 }

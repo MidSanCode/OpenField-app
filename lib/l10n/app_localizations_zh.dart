@@ -394,4 +394,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get postsCount => '帖子';
+
+  @override
+  String get showMore => '展开全文';
 }

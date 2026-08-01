@@ -4,7 +4,7 @@ import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
-class PostCard extends StatelessWidget {
+class PostCard extends StatefulWidget {
   final Post post;
   final bool isMine;
   final VoidCallback? onEdit;
@@ -25,6 +25,27 @@ class PostCard extends StatelessWidget {
   });
 
   @override
+  State<PostCard> createState() => _PostCardState();
+}
+
+class _PostCardState extends State<PostCard> {
+  static const int _truncateLength = 200;
+  late bool _expanded;
+
+  Post get post => widget.post;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = post.content.length <= _truncateLength;
+  }
+
+  bool get _isTruncated => post.content.length > _truncateLength;
+
+  String get _displayContent =>
+      _expanded || !_isTruncated ? post.content : post.content.substring(0, _truncateLength);
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
@@ -38,7 +59,7 @@ class PostCard extends StatelessWidget {
             Row(
               children: [
                 InkWell(
-                  onTap: onTapAuthor,
+                  onTap: widget.onTapAuthor,
                   borderRadius: BorderRadius.circular(24),
                   child: CircleAvatar(
                     radius: 20,
@@ -53,7 +74,7 @@ class PostCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: InkWell(
-                    onTap: onTapAuthor,
+                    onTap: widget.onTapAuthor,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -70,11 +91,11 @@ class PostCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (isMine)
+                if (widget.isMine)
                   PopupMenuButton<String>(
                     onSelected: (value) {
-                      if (value == 'edit') onEdit?.call();
-                      if (value == 'delete') onDelete?.call();
+                      if (value == 'edit') widget.onEdit?.call();
+                      if (value == 'delete') widget.onDelete?.call();
                     },
                     itemBuilder: (context) => [
                       PopupMenuItem(
@@ -93,17 +114,34 @@ class PostCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            MarkdownContent(data: post.content),
+            MarkdownContent(data: _displayContent),
+            if (_isTruncated && !_expanded) ...[
+              const SizedBox(height: 4),
+              InkWell(
+                onTap: () => setState(() => _expanded = true),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    AppLocalizations.of(context)!.showMore,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
             if (post.attachments.any((a) => a.isImage)) ...[
               const SizedBox(height: 12),
               _buildImages(context),
             ],
-            if (showReplies) ...[
+            if (widget.showReplies) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
                   InkWell(
-                    onTap: onTapReply,
+                    onTap: widget.onTapReply,
                     borderRadius: BorderRadius.circular(16),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
