@@ -67,11 +67,17 @@ class _AccountPageState extends State<AccountPage> {
   Future<void> _handleDeepLink(Uri uri) async {
     if (uri.host != 'oauth' && !uri.path.startsWith('/oauth')) return;
 
+    // Skip if main.dart already processed this deep link (e.g., Windows argv).
+    final incomingToken = uri.queryParameters['access_token'];
+    final authService = Provider.of<AuthService>(context, listen: false);
+    if (incomingToken != null && authService.accessToken == incomingToken) {
+      return;
+    }
+
     // OAuth account-binding callback (no access_token is issued).
     final bindResult = uri.queryParameters['bind'];
     if (bindResult != null) {
       final l10n = AppLocalizations.of(context)!;
-      final authService = Provider.of<AuthService>(context, listen: false);
       await authService.fetchCurrentUser();
       if (mounted) {
         final success = bindResult == 'success';
@@ -95,7 +101,6 @@ class _AccountPageState extends State<AccountPage> {
     final needsRegistration = uri.queryParameters['needs_registration'] == 'true';
     if (accessToken == null) return;
 
-    final authService = Provider.of<AuthService>(context, listen: false);
     await authService.setTokens(accessToken);
     if (username != null) authService.setUsername(username);
     if (email != null) authService.setEmail(email);

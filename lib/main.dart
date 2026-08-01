@@ -46,6 +46,7 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   final SettingsService _settingsService = SettingsService();
   late final GoRouter _router;
   StreamSubscription<Uri>? _linkSubscription;
+  bool _deepLinkHandled = false;
 
   @override
   void initState() {
@@ -69,6 +70,19 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   }
 
   Future<void> _setupDeepLinks() async {
+    // Windows fallback: when the app is launched from a protocol URL,
+    // the URI is passed as a command-line argument because app_links
+    // does not reliably deliver the initial link on this platform.
+    if (Platform.isWindows) {
+      for (final arg in Platform.executableArguments) {
+        final trimmed = arg.trim();
+        if (trimmed.startsWith('openfield://')) {
+          _handleDeepLink(Uri.parse(trimmed));
+          break;
+        }
+      }
+    }
+
     final appLinks = AppLinks();
     final initial = await appLinks.getInitialLink();
     if (initial != null) {
@@ -79,6 +93,8 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
 
   void _handleDeepLink(Uri uri) {
     if (uri.host != 'oauth' && !uri.path.startsWith('/oauth')) return;
+    if (_deepLinkHandled) return;
+    _deepLinkHandled = true;
 
     final accessToken = uri.queryParameters['access_token'];
     if (accessToken == null) return;
@@ -89,6 +105,25 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
       email: uri.queryParameters['email'],
       avatarUrl: uri.queryParameters['avatar_url'],
     );
+
+    // Bind result (no token issued).
+    final bindResult = uri.queryParameters['bind'];
+    if (bindResult != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+      return;
+    }
+
+    // Login: fetch full profile and navigate to account page.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _authService.fetchCurrentUser();
+      if (mounted) {
+        setState(() {});
+        _router.go('/account');
+      }
+    });
   }
   @override
   Widget build(BuildContext context) {
