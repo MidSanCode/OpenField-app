@@ -13,6 +13,8 @@ class User {
   final String oauth2Username;
   final String bio;
   final bool isVerified;
+  final String verifiedNote;
+  final String verifiedBy;
 
   User({
     required this.id,
@@ -29,6 +31,8 @@ class User {
     this.oauth2Username = '',
     this.bio = '',
     this.isVerified = false,
+    this.verifiedNote = '',
+    this.verifiedBy = '',
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -47,6 +51,8 @@ class User {
       oauth2Username: json['oauth2_username'] as String? ?? '',
       bio: json['bio'] as String? ?? '',
       isVerified: json['is_verified'] as bool? ?? false,
+      verifiedNote: json['verified_note'] as String? ?? '',
+      verifiedBy: json['verified_by'] as String? ?? '',
     );
   }
 

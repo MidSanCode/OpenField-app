@@ -192,7 +192,7 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                 Row(
                   children: [
                     Flexible(
                       child: VerifiedName(
@@ -203,6 +203,24 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ],
                 ),
+                if (user.isVerified && user.verifiedBy.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Chip(
+                    avatar: const Icon(Icons.verified, size: 16, color: Colors.lightBlue),
+                    label: Text(user.verifiedBy),
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                  ),
+                ],
+                if (user.isVerified && user.verifiedNote.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    user.verifiedNote,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 2),
                 Text(
                   '@${user.username}',
