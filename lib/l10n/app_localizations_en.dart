@@ -333,4 +333,32 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get replyEmpty => 'No replies yet';
+
+  @override
+  String get error => 'Error';
+
+  @override
+  String get ok => 'OK';
+
+  @override
+  String get oauthBinding => 'OAuth Account';
+
+  @override
+  String get oauthNotBound => 'Not bound';
+
+  @override
+  String get oauthBound => 'Bound';
+
+  @override
+  String get bindOAuth => 'Bind';
+
+  @override
+  String get oauthUnbindAdminOnly =>
+      'OAuth accounts can only be unbound in the admin panel.';
+
+  @override
+  String get oauthBindSuccess => 'OAuth account bound successfully';
+
+  @override
+  String get oauthBindFailed => 'Failed to bind OAuth account';
 }

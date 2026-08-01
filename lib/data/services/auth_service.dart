@@ -67,15 +67,23 @@ class AuthService extends ChangeNotifier {
   /// Logs in with username + password (local accounts created by admins).
   Future<User> login(String username, String password) async {
     final result = await _api.login(username, password);
-    await setTokens(result['access_token'] as String);
-    final user = User.fromJson(result['user'] as Map<String, dynamic>);
-    _user = user;
-    await setUser(
-      username: user.username,
-      email: user.email,
-      avatarUrl: user.avatarUrl,
-    );
-    return user;
+    final token = result['access_token'];
+    if (token is! String || token.isEmpty) {
+      throw Exception('Invalid login response');
+    }
+    await setTokens(token);
+    final userData = result['user'];
+    if (userData is Map<String, dynamic>) {
+      final user = User.fromJson(userData);
+      _user = user;
+      await setUser(
+        username: user.username,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+      );
+      return user;
+    }
+    return _user!;
   }
 
   /// Completes registration for a new OAuth user.

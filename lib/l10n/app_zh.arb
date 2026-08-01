@@ -107,5 +107,14 @@
   "replies": "回复",
   "reply": "回复",
   "replyContent": "写回复...",
-  "replyEmpty": "暂无回复"
+  "replyEmpty": "暂无回复",
+  "error": "错误",
+  "ok": "确定",
+  "oauthBinding": "OAuth 账号",
+  "oauthNotBound": "未绑定",
+  "oauthBound": "已绑定",
+  "bindOAuth": "绑定",
+  "oauthUnbindAdminOnly": "OAuth 账号仅可在管理面板解绑。",
+  "oauthBindSuccess": "OAuth 账号绑定成功",
+  "oauthBindFailed": "OAuth 账号绑定失败"
 }

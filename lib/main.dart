@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
@@ -14,7 +15,19 @@ import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/core/theme/app_theme.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  _initConsoleLogging();
   runApp(const OpenFieldApp());
+}
+
+void _initConsoleLogging() {
+  Logger.root.level = Level.ALL;
+  Logger.root.onRecord.listen((record) {
+    if (kDebugMode) {
+      final stack = record.error != null ? ' error=${record.error}' : '';
+      debugPrint('[${record.level.name}] ${record.message}$stack');
+    }
+  });
 }
 
 class OpenFieldApp extends StatefulWidget {
@@ -33,7 +46,6 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   @override
   void initState() {
     super.initState();
-    Logger.root.level = Level.ALL;
     LogService.instance.setEnabled(_settingsService.developerMode);
     _router = createRouter(_authService, appNavigatorKey);
     _setupDeepLinks();
