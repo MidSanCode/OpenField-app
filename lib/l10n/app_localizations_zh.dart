@@ -331,4 +331,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get replyEmpty => '暂无回复';
+
+  @override
+  String get error => '错误';
+
+  @override
+  String get ok => '确定';
+
+  @override
+  String get oauthBinding => 'OAuth 账号';
+
+  @override
+  String get oauthNotBound => '未绑定';
+
+  @override
+  String get oauthBound => '已绑定';
+
+  @override
+  String get bindOAuth => '绑定';
+
+  @override
+  String get oauthUnbindAdminOnly => 'OAuth 账号仅可在管理面板解绑。';
+
+  @override
+  String get oauthBindSuccess => 'OAuth 账号绑定成功';
+
+  @override
+  String get oauthBindFailed => 'OAuth 账号绑定失败';
 }

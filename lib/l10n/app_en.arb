@@ -107,5 +107,14 @@
   "replies": "Replies",
   "reply": "Reply",
   "replyContent": "Write a reply...",
-  "replyEmpty": "No replies yet"
+  "replyEmpty": "No replies yet",
+  "error": "Error",
+  "ok": "OK",
+  "oauthBinding": "OAuth Account",
+  "oauthNotBound": "Not bound",
+  "oauthBound": "Bound",
+  "bindOAuth": "Bind",
+  "oauthUnbindAdminOnly": "OAuth accounts can only be unbound in the admin panel.",
+  "oauthBindSuccess": "OAuth account bound successfully",
+  "oauthBindFailed": "Failed to bind OAuth account"
 }

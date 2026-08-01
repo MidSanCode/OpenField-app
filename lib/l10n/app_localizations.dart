@@ -745,6 +745,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No replies yet'**
   String get replyEmpty;
+
+  /// No description provided for @error.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get error;
+
+  /// No description provided for @ok.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get ok;
+
+  /// No description provided for @oauthBinding.
+  ///
+  /// In en, this message translates to:
+  /// **'OAuth Account'**
+  String get oauthBinding;
+
+  /// No description provided for @oauthNotBound.
+  ///
+  /// In en, this message translates to:
+  /// **'Not bound'**
+  String get oauthNotBound;
+
+  /// No description provided for @oauthBound.
+  ///
+  /// In en, this message translates to:
+  /// **'Bound'**
+  String get oauthBound;
+
+  /// No description provided for @bindOAuth.
+  ///
+  /// In en, this message translates to:
+  /// **'Bind'**
+  String get bindOAuth;
+
+  /// No description provided for @oauthUnbindAdminOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'OAuth accounts can only be unbound in the admin panel.'**
+  String get oauthUnbindAdminOnly;
+
+  /// No description provided for @oauthBindSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'OAuth account bound successfully'**
+  String get oauthBindSuccess;
+
+  /// No description provided for @oauthBindFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to bind OAuth account'**
+  String get oauthBindFailed;
 }
 
 class _AppLocalizationsDelegate

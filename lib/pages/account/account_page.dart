@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:openfield/core/widgets/error_dialog.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
@@ -26,6 +27,7 @@ class _AccountPageState extends State<AccountPage> {
   bool _isLoggingIn = false;
   bool _isPasswordLogin = false;
   bool _isUploadingImage = false;
+  bool _isBindingOAuth = false;
 
   @override
   void initState() {
@@ -63,6 +65,26 @@ class _AccountPageState extends State<AccountPage> {
   Future<void> _handleDeepLink(Uri uri) async {
     if (uri.host != 'oauth' && !uri.path.startsWith('/oauth')) return;
 
+    // OAuth account-binding callback (no access_token is issued).
+    final bindResult = uri.queryParameters['bind'];
+    if (bindResult != null) {
+      final l10n = AppLocalizations.of(context)!;
+      final authService = Provider.of<AuthService>(context, listen: false);
+      await authService.fetchCurrentUser();
+      if (mounted) {
+        final success = bindResult == 'success';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success ? l10n.oauthBindSuccess : l10n.oauthBindFailed,
+            ),
+          ),
+        );
+        setState(() {});
+      }
+      return;
+    }
+
     final accessToken = uri.queryParameters['access_token'];
     final username = uri.queryParameters['username'];
     final email = uri.queryParameters['email'];
@@ -82,6 +104,25 @@ class _AccountPageState extends State<AccountPage> {
     }
   }
 
+  Future<void> _bindOAuth() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+
+    setState(() => _isBindingOAuth = true);
+    try {
+      final authUrl = await _apiService.getOIDCBindUrl(token);
+      final uri = Uri.parse(authUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    } finally {
+      if (mounted) setState(() => _isBindingOAuth = false);
+    }
+  }
+
   Future<void> _loginWithOIDC() async {
     setState(() => _isLoggingIn = true);
     try {
@@ -91,11 +132,7 @@ class _AccountPageState extends State<AccountPage> {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.loadFailed)),
-        );
-      }
+      if (mounted) await showApiErrorDialog(context, e);
     } finally {
       if (mounted) setState(() => _isLoggingIn = false);
     }
@@ -107,17 +144,12 @@ class _AccountPageState extends State<AccountPage> {
     if (username.isEmpty || password.isEmpty) return;
 
     setState(() => _isLoggingIn = true);
-    final l10n = AppLocalizations.of(context)!;
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       await authService.login(username, password);
       if (mounted) setState(() {});
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.loginFailed)),
-        );
-      }
+      if (mounted) await showApiErrorDialog(context, e);
     } finally {
       if (mounted) setState(() => _isLoggingIn = false);
     }
@@ -141,11 +173,7 @@ class _AccountPageState extends State<AccountPage> {
       await authService.fetchCurrentUser();
       if (mounted) setState(() {});
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
-      }
+      if (mounted) await showApiErrorDialog(context, e);
     } finally {
       if (mounted) setState(() => _isUploadingImage = false);
     }
@@ -225,6 +253,8 @@ class _AccountPageState extends State<AccountPage> {
         ? authService.avatarUrl!
         : (user?.avatarUrl.isNotEmpty == true ? user!.avatarUrl : null);
     final displayName = user?.displayName ?? authService.username ?? l10n.username;
+
+    final hasOAuth = user?.hasOAuthBinding ?? false;
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -316,77 +346,128 @@ class _AccountPageState extends State<AccountPage> {
         ),
         const SizedBox(height: 62),
 
-        // ---- Attachment management ----
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: _SectionCard(
-            title: l10n.myAttachments,
-            icon: Icons.folder_outlined,
-            child: ListTile(
-              leading: const Icon(Icons.attach_file),
-              title: Text(l10n.myAttachments),
-              subtitle: Text(l10n.manageAttachmentsHint),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AttachmentsPage()),
-                );
-              },
-            ),
-          ),
-        ),
-
-        // ---- Settings ----
+        // ---- Sections ----
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _SectionCard(
-            title: l10n.settings,
-            icon: Icons.tune,
-            child: ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: Text(l10n.settings),
-              subtitle: Text(l10n.accountSettings),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsPage()),
-                );
-                if (mounted) setState(() {});
-              },
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
+          child: Column(
+            spacing: 16,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SettingsSection(
+                title: l10n.oauthBinding,
+                children: [
+                  ListTile(
+                    minLeadingWidth: 48,
+                    leading: const Icon(Icons.link),
+                    title: Text(l10n.oauthBinding),
+                    subtitle: Text(
+                      hasOAuth
+                          ? 'OIDC'
+                          : l10n.oauthNotBound,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                    trailing: hasOAuth
+                        ? Text(l10n.oauthBound,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.primary,
+                            ))
+                        : TextButton(
+                            onPressed: _isBindingOAuth ? null : _bindOAuth,
+                            child: Text(l10n.bindOAuth),
+                          ),
+                  ),
+                  if (!hasOAuth) ...[
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                      child: Text(
+                        l10n.oauthUnbindAdminOnly,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
 
-        // ---- Account settings ----
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _SectionCard(
-            title: l10n.accountSettings,
-            icon: Icons.person_outline,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.badge_outlined),
-                  title: Text(l10n.editProfile),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const EditProfilePage()),
-                    );
-                    if (mounted) setState(() {});
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.logout),
-                  title: Text(l10n.logout),
-                  onTap: _logout,
-                ),
-              ],
-            ),
+              _SettingsSection(
+                title: l10n.myAttachments,
+                children: [
+                  ListTile(
+                    minLeadingWidth: 48,
+                    leading: const Icon(Icons.attach_file),
+                    title: Text(l10n.myAttachments),
+                    subtitle: Text(
+                      l10n.manageAttachmentsHint,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AttachmentsPage()),
+                      );
+                    },
+                  ),
+                ],
+              ),
+
+              _SettingsSection(
+                title: l10n.settings,
+                children: [
+                  ListTile(
+                    minLeadingWidth: 48,
+                    leading: const Icon(Icons.settings_outlined),
+                    title: Text(l10n.settings),
+                    subtitle: Text(
+                      l10n.accountSettings,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SettingsPage()),
+                      );
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ],
+              ),
+
+              _SettingsSection(
+                title: l10n.accountSettings,
+                children: [
+                  ListTile(
+                    minLeadingWidth: 48,
+                    leading: const Icon(Icons.badge_outlined),
+                    title: Text(l10n.editProfile),
+                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const EditProfilePage()),
+                      );
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    minLeadingWidth: 48,
+                    leading: const Icon(Icons.logout),
+                    title: Text(l10n.logout),
+                    contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                    onTap: _logout,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -425,12 +506,11 @@ class _StorageChip extends StatelessWidget {
   }
 }
 
-class _SectionCard extends StatelessWidget {
+class _SettingsSection extends StatelessWidget {
   final String title;
-  final IconData icon;
-  final Widget child;
+  final List<Widget> children;
 
-  const _SectionCard({required this.title, required this.icon, required this.child});
+  const _SettingsSection({required this.title, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -441,16 +521,17 @@ class _SectionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                Icon(icon, size: 18, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(title, style: theme.textTheme.titleMedium),
-              ],
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+            child: Text(
+              title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-          child,
+          ...children,
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -484,18 +565,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   Future<void> _save() async {
     final auth = Provider.of<AuthService>(context, listen: false);
-    final l10n = AppLocalizations.of(context)!;
     setState(() => _isSaving = true);
     try {
       await _apiService.updateProfile(auth.accessToken!, nickname: _nicknameController.text.trim());
       await auth.fetchCurrentUser();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.saved)),
-        );
-      }
+      if (mounted) await showApiErrorDialog(context, e);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
