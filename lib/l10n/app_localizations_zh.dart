@@ -205,4 +205,130 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountSettings => '账号设置';
+
+  @override
+  String get chatRequests => '申请';
+
+  @override
+  String get chatRequestsEmpty => '暂无待处理的申请';
+
+  @override
+  String get chatStartPrivate => '发起私聊';
+
+  @override
+  String get chatNewGroup => '创建群聊';
+
+  @override
+  String get chatGroupCreate => '创建群聊';
+
+  @override
+  String get chatEmpty => '暂无会话';
+
+  @override
+  String get chatRequestSent => '私聊申请已发送';
+
+  @override
+  String get chatInviteSent => '邀请已发送';
+
+  @override
+  String get chatRequestAccept => '接受';
+
+  @override
+  String get chatRequestDecline => '拒绝';
+
+  @override
+  String get chatRequestTypePrivate => '私聊申请';
+
+  @override
+  String get chatRequestTypeGroup => '群聊邀请';
+
+  @override
+  String get chatQuoteReply => '回复';
+
+  @override
+  String get chatGroupMembers => '成员';
+
+  @override
+  String get chatGroupInvite => '邀请';
+
+  @override
+  String get chatGroupNickname => '群昵称';
+
+  @override
+  String get chatGroupLeave => '退出群聊';
+
+  @override
+  String get chatGroupLeaveConfirm => '确定退出该群聊？';
+
+  @override
+  String get chatNote => '备注';
+
+  @override
+  String get chatEdited => '已编辑';
+
+  @override
+  String get chatLoadEarlier => '加载更早消息';
+
+  @override
+  String get chatReplying => '回复中...';
+
+  @override
+  String get chatOwnerRole => '群主';
+
+  @override
+  String get messageDeleted => '消息已删除';
+
+  @override
+  String get groupTitle => '群名称';
+
+  @override
+  String get groupTitleHint => '请输入群名称';
+
+  @override
+  String get chatSearchUsers => '搜索用户';
+
+  @override
+  String get chatSearchHint => '按用户名或昵称搜索';
+
+  @override
+  String get chatNoUsers => '未找到用户';
+
+  @override
+  String get myPermissions => '我的权限';
+
+  @override
+  String get myPermissionsHint => '查看所属分组与权限';
+
+  @override
+  String get myGroups => '所属分组';
+
+  @override
+  String get noGroups => '你暂不属于任何分组';
+
+  @override
+  String get noPermissions => '暂无被授予的权限';
+
+  @override
+  String get developerMode => '开发者模式';
+
+  @override
+  String get developerModeHint => '记录日志以辅助调试';
+
+  @override
+  String get logViewer => '日志查看器';
+
+  @override
+  String get logViewerHint => '打开悬浮日志面板';
+
+  @override
+  String get replies => '回复';
+
+  @override
+  String get reply => '回复';
+
+  @override
+  String get replyContent => '写回复...';
+
+  @override
+  String get replyEmpty => '暂无回复';
 }

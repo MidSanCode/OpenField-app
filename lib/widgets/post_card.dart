@@ -7,6 +7,8 @@ class PostCard extends StatelessWidget {
   final bool isMine;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onTapReply;
+  final bool showReplies;
 
   const PostCard({
     super.key,
@@ -14,6 +16,8 @@ class PostCard extends StatelessWidget {
     this.isMine = false,
     this.onEdit,
     this.onDelete,
+    this.onTapReply,
+    this.showReplies = true,
   });
 
   @override
@@ -78,6 +82,36 @@ class PostCard extends StatelessWidget {
             if (post.attachments.any((a) => a.isImage)) ...[
               const SizedBox(height: 12),
               _buildImages(context),
+            ],
+            if (showReplies) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  InkWell(
+                    onTap: onTapReply,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            post.replyCount > 0 ? '${post.replyCount}' : AppLocalizations.of(context)!.reply,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ],
         ),

@@ -3,7 +3,10 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
+import 'package:logging/logging.dart';
 import 'package:provider/provider.dart';
+import 'package:openfield/core/log/log_overlay.dart';
+import 'package:openfield/core/log/log_recorder.dart';
 import 'package:openfield/core/router/app_router.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
@@ -30,7 +33,9 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   @override
   void initState() {
     super.initState();
-    _router = createRouter(_authService);
+    Logger.root.level = Level.ALL;
+    LogService.instance.setEnabled(_settingsService.developerMode);
+    _router = createRouter(_authService, appNavigatorKey);
     _setupDeepLinks();
   }
 

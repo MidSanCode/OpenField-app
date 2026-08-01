@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/pages/account/account_page.dart';
@@ -5,8 +6,9 @@ import 'package:openfield/pages/chat/chat_page.dart';
 import 'package:openfield/pages/posts/posts_page.dart';
 import 'package:openfield/widgets/app_shell.dart';
 
-GoRouter createRouter(AuthService authService) {
+GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigatorKey) {
   return GoRouter(
+    navigatorKey: navigatorKey,
     initialLocation: '/posts',
     routes: [
       StatefulShellRoute.indexedStack(

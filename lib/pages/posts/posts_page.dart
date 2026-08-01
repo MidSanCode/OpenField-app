@@ -7,6 +7,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/draft_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
+import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
 
 /// A media item in the composer: either an existing server attachment
@@ -55,7 +56,8 @@ class _PostsPageState extends State<PostsPage> {
     }
 
     try {
-      final posts = await _apiService.getPosts();
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final posts = await _apiService.getPosts(token: authService.accessToken);
       if (!mounted) return;
       setState(() {
         _posts = posts;
@@ -229,6 +231,11 @@ class _PostsPageState extends State<PostsPage> {
             isMine: post.userId == currentUserId,
             onEdit: () => _openEdit(post),
             onDelete: () => _deletePost(post),
+            onTapReply: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
+              );
+            },
           );
         },
       ),

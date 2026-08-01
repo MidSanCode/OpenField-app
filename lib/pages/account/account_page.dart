@@ -6,10 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
+import 'package:openfield/pages/settings/settings_page.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -224,188 +224,167 @@ class _AccountPageState extends State<AccountPage> {
     final avatarUrl = authService.avatarUrl != null && authService.avatarUrl!.isNotEmpty
         ? authService.avatarUrl!
         : (user?.avatarUrl.isNotEmpty == true ? user!.avatarUrl : null);
+    final displayName = user?.displayName ?? authService.username ?? l10n.username;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.zero,
       children: [
-        Card(
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              SizedBox(
-                height: 160,
-                width: double.infinity,
-                child: bannerUrl != null
-                    ? Image.network(bannerUrl, fit: BoxFit.cover)
-                    : Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        child: const Center(child: Icon(Icons.image_outlined, size: 48)),
-                      ),
-              ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: IconButton.filledTonal(
-                  onPressed: _isUploadingImage
-                      ? null
-                      : () => _pickImage((path) => _apiService.uploadBanner(path, authService.accessToken!)),
-                  icon: const Icon(Icons.edit),
-                  tooltip: l10n.setBanner,
-                ),
-              ),
-              Positioned(
-                left: 16,
-                bottom: -40,
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundColor: theme.colorScheme.surface,
-                      backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                      child: avatarUrl == null
-                          ? const Icon(Icons.person, size: 40)
-                          : null,
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: IconButton.filledTonal(
-                        onPressed: _isUploadingImage
-                            ? null
-                            : () => _pickImage((path) => _apiService.uploadAvatar(path, authService.accessToken!)),
-                        icon: const Icon(Icons.edit, size: 16),
-                        tooltip: l10n.setAvatar,
+        // ---- Banner with centered avatar + nickname ----
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            SizedBox(
+              height: 180,
+              width: double.infinity,
+              child: bannerUrl != null
+                  ? Image.network(bannerUrl, fit: BoxFit.cover)
+                  : Container(
+                      color: theme.colorScheme.primaryContainer,
+                      child: Center(
+                        child: Icon(
+                          Icons.photo_outlined,
+                          size: 48,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
                       ),
                     ),
-                  ],
-                ),
+            ),
+            Positioned(
+              right: 8,
+              top: 8,
+              child: IconButton.filledTonal(
+                onPressed: _isUploadingImage
+                    ? null
+                    : () => _pickImage((path) => _apiService.uploadBanner(path, authService.accessToken!)),
+                icon: const Icon(Icons.edit),
+                tooltip: l10n.setBanner,
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 48),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(user?.displayName ?? authService.username ?? l10n.username,
-                        style: theme.textTheme.headlineSmall),
-                    if (authService.email != null && authService.email!.isNotEmpty)
-                      Text(authService.email!, style: theme.textTheme.bodyMedium),
-                    if (user?.role == 'admin') ...[
-                      const SizedBox(height: 4),
-                      Chip(
-                        avatar: const Icon(Icons.admin_panel_settings, size: 16),
-                        label: Text(l10n.admin),
-                        visualDensity: VisualDensity.compact,
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: -52,
+              child: Column(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      CircleAvatar(
+                        radius: 44,
+                        backgroundColor: theme.colorScheme.surface,
+                        backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                        child: avatarUrl == null ? const Icon(Icons.person, size: 44) : null,
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: IconButton.filledTonal(
+                          onPressed: _isUploadingImage
+                              ? null
+                              : () => _pickImage((path) => _apiService.uploadAvatar(path, authService.accessToken!)),
+                          icon: const Icon(Icons.edit, size: 16),
+                          tooltip: l10n.setAvatar,
+                        ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(displayName, style: theme.textTheme.titleLarge),
+                  if (authService.email != null && authService.email!.isNotEmpty)
+                    Text(
+                      authService.email!,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  if (user?.role == 'admin') ...[
+                    const SizedBox(height: 6),
+                    Chip(
+                      avatar: const Icon(Icons.admin_panel_settings, size: 16),
+                      label: Text(l10n.admin),
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ],
-                ),
+                  if (user != null && user.storageQuota > 0) ...[
+                    const SizedBox(height: 8),
+                    _StorageChip(used: user.storageUsed, quota: user.storageQuota),
+                  ],
+                ],
               ),
-              if (user != null && user.storageQuota > 0)
-                _StorageChip(used: user.storageUsed, quota: user.storageQuota),
-            ],
-          ),
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 62),
 
         // ---- Attachment management ----
-        _SectionCard(
-          title: l10n.myAttachments,
-          icon: Icons.folder_outlined,
-          child: ListTile(
-            leading: const Icon(Icons.attach_file),
-            title: Text(l10n.myAttachments),
-            subtitle: Text(l10n.manageAttachmentsHint),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AttachmentsPage()),
-              );
-            },
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: _SectionCard(
+            title: l10n.myAttachments,
+            icon: Icons.folder_outlined,
+            child: ListTile(
+              leading: const Icon(Icons.attach_file),
+              title: Text(l10n.myAttachments),
+              subtitle: Text(l10n.manageAttachmentsHint),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AttachmentsPage()),
+                );
+              },
+            ),
           ),
         ),
-        const SizedBox(height: 16),
 
-        // ---- App settings ----
-        _SectionCard(
-          title: l10n.appSettings,
-          icon: Icons.tune,
-          child: _buildAppSettings(context, l10n),
+        // ---- Settings ----
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _SectionCard(
+            title: l10n.settings,
+            icon: Icons.tune,
+            child: ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: Text(l10n.settings),
+              subtitle: Text(l10n.accountSettings),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+                );
+                if (mounted) setState(() {});
+              },
+            ),
+          ),
         ),
         const SizedBox(height: 16),
 
         // ---- Account settings ----
-        _SectionCard(
-          title: l10n.accountSettings,
-          icon: Icons.person_outline,
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.badge_outlined),
-                title: Text(l10n.editProfile),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const EditProfilePage()),
-                  );
-                  if (mounted) setState(() {});
-                },
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: Text(l10n.logout),
-                onTap: _logout,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAppSettings(BuildContext context, AppLocalizations l10n) {
-    final settings = Provider.of<SettingsService>(context);
-
-    return Column(
-      children: [
-        ListTile(
-          leading: const Icon(Icons.language),
-          title: Text(l10n.language),
-          subtitle: Text(settings.locale == 'zh' ? '中文' : 'English'),
-          trailing: DropdownButton<String>(
-            value: settings.locale,
-            underline: const SizedBox.shrink(),
-            items: const [
-              DropdownMenuItem(value: null, child: Text('Auto')),
-              DropdownMenuItem(value: 'zh', child: Text('中文')),
-              DropdownMenuItem(value: 'en', child: Text('English')),
-            ],
-            onChanged: (value) => settings.setLocale(value),
-          ),
-        ),
-        const Divider(height: 1),
-        ListTile(
-          leading: const Icon(Icons.brightness_6_outlined),
-          title: Text(l10n.theme),
-          trailing: DropdownButton<ThemeMode>(
-            value: settings.themeMode,
-            underline: const SizedBox.shrink(),
-            items: [
-              DropdownMenuItem(value: ThemeMode.system, child: Text(l10n.systemMode)),
-              DropdownMenuItem(value: ThemeMode.light, child: Text(l10n.lightMode)),
-              DropdownMenuItem(value: ThemeMode.dark, child: Text(l10n.darkMode)),
-            ],
-            onChanged: (mode) {
-              if (mode != null) settings.setThemeMode(mode);
-            },
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _SectionCard(
+            title: l10n.accountSettings,
+            icon: Icons.person_outline,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: Text(l10n.editProfile),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const EditProfilePage()),
+                    );
+                    if (mounted) setState(() {});
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: Text(l10n.logout),
+                  onTap: _logout,
+                ),
+              ],
+            ),
           ),
         ),
       ],

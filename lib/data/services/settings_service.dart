@@ -5,12 +5,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SettingsService extends ChangeNotifier {
   static const _keyLocale = 'settings_locale';
   static const _keyThemeMode = 'settings_theme_mode';
+  static const _keyDeveloperMode = 'settings_developer_mode';
 
   String? _locale;
   ThemeMode _themeMode = ThemeMode.system;
+  bool _developerMode = false;
 
   String? get locale => _locale;
   ThemeMode get themeMode => _themeMode;
+  bool get developerMode => _developerMode;
 
   SettingsService() {
     _load();
@@ -21,6 +24,7 @@ class SettingsService extends ChangeNotifier {
     _locale = prefs.getString(_keyLocale);
     final themeName = prefs.getString(_keyThemeMode);
     _themeMode = _themeNameToMode(themeName);
+    _developerMode = prefs.getBool(_keyDeveloperMode) ?? false;
     notifyListeners();
   }
 
@@ -39,6 +43,13 @@ class SettingsService extends ChangeNotifier {
     _themeMode = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyThemeMode, _modeToName(mode));
+    notifyListeners();
+  }
+
+  Future<void> setDeveloperMode(bool value) async {
+    _developerMode = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyDeveloperMode, value);
     notifyListeners();
   }
 

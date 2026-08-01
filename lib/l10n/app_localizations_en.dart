@@ -108,7 +108,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get completeRegistration => 'Complete Registration';
 
   @override
-  String get registerHint => 'Please set your username and nickname to continue';
+  String get registerHint =>
+      'Please set your username and nickname to continue';
 
   @override
   String get nickname => 'Nickname';
@@ -162,7 +163,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editProfile => 'Edit Profile';
 
   @override
-  String get localAccountHint => 'Admin-created accounts sign in here. Self-registration is not available.';
+  String get localAccountHint =>
+      'Admin-created accounts sign in here. Self-registration is not available.';
 
   @override
   String get draft => 'Draft';
@@ -205,4 +207,130 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accountSettings => 'Account Settings';
+
+  @override
+  String get chatRequests => 'Requests';
+
+  @override
+  String get chatRequestsEmpty => 'No pending requests';
+
+  @override
+  String get chatStartPrivate => 'Start Private Chat';
+
+  @override
+  String get chatNewGroup => 'New Group';
+
+  @override
+  String get chatGroupCreate => 'Create Group';
+
+  @override
+  String get chatEmpty => 'No conversations yet';
+
+  @override
+  String get chatRequestSent => 'Chat request sent';
+
+  @override
+  String get chatInviteSent => 'Invite sent';
+
+  @override
+  String get chatRequestAccept => 'Accept';
+
+  @override
+  String get chatRequestDecline => 'Decline';
+
+  @override
+  String get chatRequestTypePrivate => 'Private chat request';
+
+  @override
+  String get chatRequestTypeGroup => 'Group invite';
+
+  @override
+  String get chatQuoteReply => 'Reply';
+
+  @override
+  String get chatGroupMembers => 'Members';
+
+  @override
+  String get chatGroupInvite => 'Invite';
+
+  @override
+  String get chatGroupNickname => 'Group Nickname';
+
+  @override
+  String get chatGroupLeave => 'Leave Group';
+
+  @override
+  String get chatGroupLeaveConfirm => 'Leave this group?';
+
+  @override
+  String get chatNote => 'Note';
+
+  @override
+  String get chatEdited => 'edited';
+
+  @override
+  String get chatLoadEarlier => 'Load earlier';
+
+  @override
+  String get chatReplying => 'Replying...';
+
+  @override
+  String get chatOwnerRole => 'Owner';
+
+  @override
+  String get messageDeleted => 'Message deleted';
+
+  @override
+  String get groupTitle => 'Group title';
+
+  @override
+  String get groupTitleHint => 'Enter a group title';
+
+  @override
+  String get chatSearchUsers => 'Search Users';
+
+  @override
+  String get chatSearchHint => 'Search by username or nickname';
+
+  @override
+  String get chatNoUsers => 'No users found';
+
+  @override
+  String get myPermissions => 'My Permissions';
+
+  @override
+  String get myPermissionsHint => 'View your groups and permissions';
+
+  @override
+  String get myGroups => 'My Groups';
+
+  @override
+  String get noGroups => 'You are not in any group';
+
+  @override
+  String get noPermissions => 'No permissions granted';
+
+  @override
+  String get developerMode => 'Developer Mode';
+
+  @override
+  String get developerModeHint => 'Record logs for debugging';
+
+  @override
+  String get logViewer => 'Log Viewer';
+
+  @override
+  String get logViewerHint => 'Open the floating log viewer';
+
+  @override
+  String get replies => 'Replies';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String get replyContent => 'Write a reply...';
+
+  @override
+  String get replyEmpty => 'No replies yet';
 }
