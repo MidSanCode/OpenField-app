@@ -128,5 +128,10 @@
   "backgroundImageHint": "为本设备设置背景图片",
   "clear": "清除",
   "showMore": "展开更多",
-  "verifiedAccount": "认证账号"
+  "verifiedAccount": "认证账号",
+  "advancedLogin": "高级登录",
+  "advancedLoginHint": "以下方式用于特殊情况",
+  "tokenLogin": "令牌登录",
+  "tokenLoginHint": "在浏览器登录成功页复制令牌，粘贴到此处登录",
+  "tokenPlaceholder": "粘贴访问令牌"
 }

@@ -394,4 +394,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get verifiedAccount => '认证账号';
+
+  @override
+  String get advancedLogin => '高级登录';
+
+  @override
+  String get advancedLoginHint => '以下方式用于特殊情况';
+
+  @override
+  String get tokenLogin => '令牌登录';
+
+  @override
+  String get tokenLoginHint => '在浏览器登录成功页复制令牌，粘贴到此处登录';
+
+  @override
+  String get tokenPlaceholder => '粘贴访问令牌';
 }

@@ -397,4 +397,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get verifiedAccount => 'Verified account';
+
+  @override
+  String get advancedLogin => 'Advanced Login';
+
+  @override
+  String get advancedLoginHint => 'For special cases';
+
+  @override
+  String get tokenLogin => 'Token Login';
+
+  @override
+  String get tokenLoginHint =>
+      'Paste the token copied from the browser login page';
+
+  @override
+  String get tokenPlaceholder => 'Paste access token';
 }

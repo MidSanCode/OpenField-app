@@ -26,9 +26,9 @@ class _AccountPageState extends State<AccountPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _loginUsernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _tokenController = TextEditingController();
   StreamSubscription<Uri>? _linkSubscription;
   bool _isLoggingIn = false;
-  bool _isPasswordLogin = false;
   bool _isBindingOAuth = false;
 
   @override
@@ -52,6 +52,7 @@ class _AccountPageState extends State<AccountPage> {
     _linkSubscription?.cancel();
     _loginUsernameController.dispose();
     _passwordController.dispose();
+    _tokenController.dispose();
     super.dispose();
   }
 
@@ -164,6 +165,22 @@ class _AccountPageState extends State<AccountPage> {
     }
   }
 
+  Future<void> _loginWithToken() async {
+    final token = _tokenController.text.trim();
+    if (token.isEmpty) return;
+
+    setState(() => _isLoggingIn = true);
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      await authService.loginWithToken(token);
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    } finally {
+      if (mounted) setState(() => _isLoggingIn = false);
+    }
+  }
+
   Future<void> _logout() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     await authService.clearTokens();
@@ -188,50 +205,85 @@ class _AccountPageState extends State<AccountPage> {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircleAvatar(radius: 40, child: Icon(Icons.person, size: 40)),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _isLoggingIn ? null : _loginWithOIDC,
-              icon: const Icon(Icons.login),
-              label: Text(l10n.loginWithOIDC),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => setState(() => _isPasswordLogin = !_isPasswordLogin),
-              child: Text(l10n.loginWithPassword),
-            ),
-            if (_isPasswordLogin) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: _loginUsernameController,
-                decoration: InputDecoration(
-                  labelText: l10n.username,
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: l10n.password,
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(l10n.localAccountHint, style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const CircleAvatar(radius: 40, child: Icon(Icons.person, size: 40)),
+              const SizedBox(height: 24),
               ElevatedButton.icon(
-                onPressed: _isLoggingIn ? null : _loginWithPassword,
+                onPressed: _isLoggingIn ? null : _loginWithOIDC,
                 icon: const Icon(Icons.login),
-                label: Text(l10n.loginWithPassword),
+                label: Text(l10n.loginWithOIDC),
               ),
+              const SizedBox(height: 12),
+              _buildAdvancedLogin(context, l10n),
             ],
-          ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildAdvancedLogin(BuildContext context, AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: const Icon(Icons.keyboard_arrow_down),
+        title: Text(l10n.advancedLogin),
+        subtitle: Text(l10n.advancedLoginHint, style: const TextStyle(fontSize: 12)),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _loginUsernameController,
+            decoration: InputDecoration(
+              labelText: l10n.username,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: InputDecoration(
+              labelText: l10n.password,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(l10n.localAccountHint, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: _isLoggingIn ? null : _loginWithPassword,
+            icon: const Icon(Icons.login),
+            label: Text(l10n.loginWithPassword),
+          ),
+          const Divider(height: 32),
+          TextField(
+            controller: _tokenController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              labelText: l10n.tokenLogin,
+              hintText: l10n.tokenPlaceholder,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(l10n.tokenLoginHint, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: _isLoggingIn ? null : _loginWithToken,
+            icon: const Icon(Icons.vpn_key),
+            label: Text(l10n.tokenLogin),
+          ),
+        ],
       ),
     );
   }

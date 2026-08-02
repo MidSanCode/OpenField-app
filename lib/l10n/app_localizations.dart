@@ -871,6 +871,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Verified account'**
   String get verifiedAccount;
+
+  /// No description provided for @advancedLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced Login'**
+  String get advancedLogin;
+
+  /// No description provided for @advancedLoginHint.
+  ///
+  /// In en, this message translates to:
+  /// **'For special cases'**
+  String get advancedLoginHint;
+
+  /// No description provided for @tokenLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Token Login'**
+  String get tokenLogin;
+
+  /// No description provided for @tokenLoginHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the token copied from the browser login page'**
+  String get tokenLoginHint;
+
+  /// No description provided for @tokenPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste access token'**
+  String get tokenPlaceholder;
 }
 
 class _AppLocalizationsDelegate

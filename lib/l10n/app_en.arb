@@ -128,5 +128,10 @@
   "backgroundImageHint": "Set a background image for this device",
   "clear": "Clear",
   "showMore": "Show more",
-  "verifiedAccount": "Verified account"
+  "verifiedAccount": "Verified account",
+  "advancedLogin": "Advanced Login",
+  "advancedLoginHint": "For special cases",
+  "tokenLogin": "Token Login",
+  "tokenLoginHint": "Paste the token copied from the browser login page",
+  "tokenPlaceholder": "Paste access token"
 }
