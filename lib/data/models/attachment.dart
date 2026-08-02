@@ -4,6 +4,7 @@ class Attachment {
   final String mimeType;
   final int sizeBytes;
   final String url;
+  final String thumbUrl;
   final String visibility;
 
   Attachment({
@@ -12,6 +13,7 @@ class Attachment {
     required this.mimeType,
     required this.sizeBytes,
     required this.url,
+    this.thumbUrl = '',
     this.visibility = 'public',
   });
 
@@ -22,9 +24,26 @@ class Attachment {
       mimeType: json['mime_type'] as String? ?? '',
       sizeBytes: json['size_bytes'] as int? ?? 0,
       url: json['url'] as String? ?? '',
+      thumbUrl: json['thumb_url'] as String? ?? '',
       visibility: json['visibility'] as String? ?? 'public',
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'original_name': originalName,
+      'mime_type': mimeType,
+      'size_bytes': sizeBytes,
+      'url': url,
+      'thumb_url': thumbUrl,
+      'visibility': visibility,
+    };
+  }
+
+  /// The URL to load for a compact preview; falls back to the original when no
+  /// thumbnail exists.
+  String get previewUrl => thumbUrl.isNotEmpty ? thumbUrl : url;
 
   bool get isImage => _matches('image/', {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic'});
   bool get isAudio => _matches('audio/', {'mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'opus'});

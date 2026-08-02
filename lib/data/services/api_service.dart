@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
@@ -328,6 +329,121 @@ class ApiService {
         _decodeError(response, 'Upload failed (${response.statusCode})'));
   }
 
+  /// Default chunk size (4 MiB) used for large-file uploads.
+  static const int chunkSizeBytes = 4 * 1024 * 1024;
+
+  /// Threshold above which a file is uploaded in chunks instead of a single
+  /// multipart request, so large files support resuming after interruptions.
+  static const int chunkedUploadThreshold = 16 * 1024 * 1024;
+
+  /// Uploads a file, transparently switching to chunked upload + resume for
+  /// large files. [onProgress] reports a fraction in [0, 1] when provided.
+  Future<Attachment> uploadAttachmentSmart(
+    String filePath,
+    String accessToken, {
+    String visibility = 'public',
+    ValueChanged<double>? onProgress,
+  }) async {
+    final file = File(filePath);
+    final size = await file.length();
+    if (size < chunkedUploadThreshold) {
+      onProgress?.call(1);
+      return uploadAttachment(filePath, accessToken, visibility: visibility);
+    }
+    return _uploadAttachmentChunked(file, size, accessToken, visibility: visibility, onProgress: onProgress);
+  }
+
+  Future<Attachment> _uploadAttachmentChunked(
+    File file,
+    int fileSize,
+    String accessToken, {
+    required String visibility,
+    ValueChanged<double>? onProgress,
+  }) async {
+    final totalChunks = (fileSize / chunkSizeBytes).ceil();
+    final mimeType = _mediaTypeFor(file.path);
+
+    final init = await _client.post(
+      Uri.parse('$baseUrl/attachments/chunk/init'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        'filename': file.uri.pathSegments.last,
+        'size': fileSize,
+        'total_chunks': totalChunks,
+        'mime_type': mimeType,
+        'visibility': visibility,
+      }),
+    );
+    final initData = _decodeMap(init);
+    if (init.statusCode != 201 || initData == null) {
+      throw ApiException(init.statusCode, _decodeError(init, 'Failed to start upload'));
+    }
+    final uploadId = initData['upload_id'] as String;
+
+    // Resume: query which chunks already landed on the server.
+    final uploaded = <int>{};
+    final status = await _client.get(
+      Uri.parse('$baseUrl/attachments/chunk/$uploadId'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (status.statusCode == 200) {
+      final statusData = _decodeMap(status);
+      final list = statusData?['uploaded'];
+      if (list is List) {
+        uploaded.addAll(list.whereType<int>());
+      }
+    }
+
+    final raf = await file.open();
+    try {
+      for (var index = 1; index <= totalChunks; index++) {
+        if (uploaded.contains(index)) {
+          onProgress?.call(index / totalChunks);
+          continue;
+        }
+        final start = (index - 1) * chunkSizeBytes;
+        await raf.setPosition(start);
+        final length = (start + chunkSizeBytes > fileSize)
+            ? fileSize - start
+            : chunkSizeBytes;
+        final chunk = await raf.read(length);
+
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse('$baseUrl/attachments/chunk/$uploadId/$index'),
+        );
+        request.headers['Authorization'] = 'Bearer $accessToken';
+        request.files.add(http.MultipartFile.fromBytes('chunk', chunk));
+        final streamed = await request.send();
+        final response = await http.Response.fromStream(streamed);
+        if (response.statusCode != 200) {
+          throw ApiException(response.statusCode, _decodeError(response, 'Chunk upload failed'));
+        }
+        onProgress?.call(index / totalChunks);
+      }
+    } finally {
+      raf.close();
+    }
+
+    final complete = await _client.post(
+      Uri.parse('$baseUrl/attachments/chunk/$uploadId/complete'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        'filename': file.uri.pathSegments.last,
+        'size': fileSize,
+        'total_chunks': totalChunks,
+        'mime_type': mimeType,
+        'visibility': visibility,
+      }),
+    );
+    final data = _decodeMap(complete);
+    if ((complete.statusCode == 200 || complete.statusCode == 201) && data != null) {
+      onProgress?.call(1);
+      return Attachment.fromJson(data);
+    }
+    throw ApiException(complete.statusCode, _decodeError(complete, 'Failed to finish upload'));
+  }
+
   Future<List<Attachment>> listMyAttachments(String accessToken, {int limit = 100}) async {
     final response = await _client.get(
       Uri.parse('$baseUrl/attachments?limit=$limit'),
@@ -478,11 +594,12 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load replies'));
   }
 
-  Future<PostReply> createReply(int postId, String content, String accessToken, {int? parentId}) async {
+  Future<PostReply> createReply(int postId, String content, String accessToken,
+      {int? parentId, List<int> attachmentIds = const []}) async {
     final response = await _client.post(
       Uri.parse('$baseUrl/posts/$postId/replies'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'content': content, 'parent_id': parentId}),
+      body: jsonEncode({'content': content, 'parent_id': parentId, 'attachment_ids': attachmentIds}),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 201 && data != null) {
@@ -492,11 +609,12 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to create reply'));
   }
 
-  Future<PostReply> updateReply(int postId, int replyId, String content, String accessToken) async {
+  Future<PostReply> updateReply(int postId, int replyId, String content, String accessToken,
+      {List<int> attachmentIds = const []}) async {
     final response = await _client.put(
       Uri.parse('$baseUrl/posts/$postId/replies/$replyId'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'content': content}),
+      body: jsonEncode({'content': content, 'attachment_ids': attachmentIds}),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 200 && data != null) {
@@ -515,6 +633,93 @@ class ApiService {
       throw ApiException(
           response.statusCode, _decodeError(response, 'Failed to delete reply'));
     }
+  }
+
+  // ---- Post reactions ----
+
+  Future<Post> reactToPost(int postId, String reaction, String accessToken) async {
+    final response = await _client.put(
+      Uri.parse('$baseUrl/posts/$postId/reactions'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'reaction': reaction}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Post.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to set reaction'));
+  }
+
+  Future<Post> removePostReaction(int postId, String accessToken) async {
+    final response = await _client.delete(
+      Uri.parse('$baseUrl/posts/$postId/reactions'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Post.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to remove reaction'));
+  }
+
+  // ---- Follows ----
+
+  Future<void> followUser(int userId, String accessToken) async {
+    final response = await _client.post(
+      Uri.parse('$baseUrl/users/$userId/follow'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to follow user'));
+    }
+  }
+
+  Future<void> unfollowUser(int userId, String accessToken) async {
+    final response = await _client.delete(
+      Uri.parse('$baseUrl/users/$userId/follow'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode != 204) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to unfollow user'));
+    }
+  }
+
+  Future<List<User>> listFollowers(int userId, {String? token, int page = 1, int limit = 50}) async {
+    final response = await _client.get(
+      Uri.parse('$baseUrl/users/$userId/followers?page=$page&limit=$limit'),
+      headers: _headers(token: token, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['users'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((u) => User.fromJson(u)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load followers'));
+  }
+
+  Future<List<User>> listFollowing(int userId, {String? token, int page = 1, int limit = 50}) async {
+    final response = await _client.get(
+      Uri.parse('$baseUrl/users/$userId/following?page=$page&limit=$limit'),
+      headers: _headers(token: token, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['users'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((u) => User.fromJson(u)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load following'));
   }
 
   // ---- Chat: consent requests ----

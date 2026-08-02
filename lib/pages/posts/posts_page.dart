@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,6 +7,7 @@ import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/draft_service.dart';
+import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
@@ -41,11 +43,28 @@ class _PostsPageState extends State<PostsPage> {
   bool _isLoading = true;
   bool _isPosting = false;
   String? _error;
+  StreamSubscription<PushEvent>? _realtimeSub;
 
   @override
   void initState() {
     super.initState();
     _loadPosts();
+    _realtimeSub = RealtimeService.instance.events.listen(_onRealtimeEvent);
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
+  }
+
+  /// Prepends freshly created posts (broadcast by the push service) to the feed.
+  void _onRealtimeEvent(PushEvent event) {
+    if (event.type != 'post.created' || !mounted) return;
+    final post = Post.fromJson(event.data);
+    final exists = _posts.any((p) => p.id == post.id);
+    if (exists) return;
+    setState(() => _posts = [post, ..._posts]);
   }
 
   Future<void> _loadPosts() async {
@@ -130,7 +149,7 @@ class _PostsPageState extends State<PostsPage> {
         if (item.attachmentId != null) {
           attachmentIds.add(item.attachmentId!);
         } else if (item.localPath != null) {
-          final att = await _apiService.uploadAttachment(item.localPath!, token);
+          final att = await _apiService.uploadAttachmentSmart(item.localPath!, token);
           attachmentIds.add(att.id);
         }
       }
@@ -233,6 +252,7 @@ class _PostsPageState extends State<PostsPage> {
         itemCount: _posts.length,
         itemBuilder: (context, index) {
           final post = _posts[index];
+          final authService = Provider.of<AuthService>(context, listen: false);
           return PostCard(
             post: post,
             isMine: post.userId == currentUserId,
@@ -242,6 +262,17 @@ class _PostsPageState extends State<PostsPage> {
             onTapReply: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
+              );
+            },
+            token: authService.accessToken,
+            onPostChanged: (updated) {
+              setState(() {
+                _posts = _posts.map((p) => p.id == updated.id ? updated : p).toList();
+              });
+            },
+            onUnauthenticated: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(AppLocalizations.of(context)!.loginWithOIDC)),
               );
             },
           );

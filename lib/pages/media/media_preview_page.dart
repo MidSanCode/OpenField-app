@@ -1,11 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 
-/// Full-screen in-app preview for an attachment: images are zoomable,
-/// videos and audio play through media_kit.
+/// Full-screen in-app preview for an attachment: images are zoomable and
+/// rotatable (desktop buttons + mobile gestures), videos and audio play
+/// through media_kit with progress/pause/fullscreen controls and streaming.
 class MediaPreviewPage extends StatefulWidget {
   final Attachment attachment;
 
@@ -20,6 +23,11 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
   VideoController? _videoController;
   bool _openFailed = false;
 
+  // Image view state.
+  final TransformationController _transformController = TransformationController();
+  int _rotation = 0; // multiples of 90 degrees
+  double _zoom = 1.0;
+
   bool get _isPlayable => widget.attachment.isVideo || widget.attachment.isAudio;
 
   @override
@@ -28,6 +36,13 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
     if (_isPlayable) {
       _initPlayer();
     }
+  }
+
+  @override
+  void dispose() {
+    _player?.dispose();
+    _transformController.dispose();
+    super.dispose();
   }
 
   Future<void> _initPlayer() async {
@@ -50,10 +65,22 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _player?.dispose();
-    super.dispose();
+  void _rotate(int steps) {
+    setState(() => _rotation = (_rotation + steps) % 4);
+  }
+
+  void _zoomBy(double factor) {
+    final next = (_zoom * factor).clamp(1.0, 8.0);
+    setState(() => _zoom = next);
+    _transformController.value = Matrix4.diagonal3Values(next, next, 1);
+  }
+
+  void _resetView() {
+    setState(() {
+      _zoom = 1.0;
+      _rotation = 0;
+    });
+    _transformController.value = Matrix4.identity();
   }
 
   @override
@@ -71,6 +98,33 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
           style: const TextStyle(fontSize: 16),
         ),
         actions: [
+          if (att.isImage) ...[
+            IconButton(
+              icon: const Icon(Icons.rotate_left),
+              tooltip: 'Rotate left',
+              onPressed: () => _rotate(-1),
+            ),
+            IconButton(
+              icon: const Icon(Icons.rotate_right),
+              tooltip: 'Rotate right',
+              onPressed: () => _rotate(1),
+            ),
+            IconButton(
+              icon: const Icon(Icons.zoom_in),
+              tooltip: 'Zoom in',
+              onPressed: () => _zoomBy(1.5),
+            ),
+            IconButton(
+              icon: const Icon(Icons.zoom_out),
+              tooltip: 'Zoom out',
+              onPressed: () => _zoomBy(1 / 1.5),
+            ),
+            IconButton(
+              icon: const Icon(Icons.fit_screen_outlined),
+              tooltip: 'Reset',
+              onPressed: _resetView,
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.open_in_new),
             tooltip: 'Open externally',
@@ -89,23 +143,56 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
   }
 
   Widget _buildImage(Attachment att) {
-    return InteractiveViewer(
-      maxScale: 6,
-      child: Image.network(
-        att.url,
-        fit: BoxFit.contain,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          );
-        },
-        errorBuilder: (context, error, stack) => const Icon(
-          Icons.broken_image_outlined,
-          size: 48,
-          color: Colors.white,
+    // Rotation is applied outside so InteractiveViewer gestures keep working.
+    final angle = _rotation * math.pi / 2;
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Positioned.fill(
+          child: InteractiveViewer(
+            transformationController: _transformController,
+            maxScale: 8,
+            minScale: 0.5,
+            child: Transform.rotate(
+              angle: angle,
+              child: Center(
+                child: Image.network(
+                  att.url,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    );
+                  },
+                  errorBuilder: (context, error, stack) => const Icon(
+                    Icons.broken_image_outlined,
+                    size: 48,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
+        // Mobile gesture hint.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 16,
+          child: IgnorePointer(
+            child: Center(
+              child: Text(
+                'Pinch to zoom · drag to pan',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -140,9 +227,14 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
     }
 
     if (widget.attachment.isVideo && _videoController != null) {
-      return AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Video(controller: _videoController!),
+      // Video() ships with adaptive controls (play/pause, progress bar,
+      // volume, fullscreen) and streams from the URL.
+      return Video(
+        controller: _videoController!,
+        controls: AdaptiveVideoControls,
+        onEnterFullscreen: () async {
+          // Optional: keep the screen awake while watching fullscreen.
+        },
       );
     }
 

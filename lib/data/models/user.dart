@@ -15,6 +15,9 @@ class User {
   final bool isVerified;
   final String verifiedNote;
   final String verifiedBy;
+  final int followerCount;
+  final int followingCount;
+  final bool isFollowing;
 
   User({
     required this.id,
@@ -33,6 +36,9 @@ class User {
     this.isVerified = false,
     this.verifiedNote = '',
     this.verifiedBy = '',
+    this.followerCount = 0,
+    this.followingCount = 0,
+    this.isFollowing = false,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -53,10 +59,57 @@ class User {
       isVerified: json['is_verified'] as bool? ?? false,
       verifiedNote: json['verified_note'] as String? ?? '',
       verifiedBy: json['verified_by'] as String? ?? '',
+      followerCount: (json['follower_count'] as num?)?.toInt() ?? 0,
+      followingCount: (json['following_count'] as num?)?.toInt() ?? 0,
+      isFollowing: json['is_following'] as bool? ?? false,
     );
   }
 
   bool get hasOAuthBinding => oauth2Provider.isNotEmpty;
 
   String get displayName => nickname.isNotEmpty ? nickname : username;
+
+  User copyWith({
+    int? id,
+    String? username,
+    String? nickname,
+    String? email,
+    String? avatarUrl,
+    String? bannerUrl,
+    String? role,
+    bool? needsRegistration,
+    int? storageQuota,
+    int? storageUsed,
+    String? oauth2Provider,
+    String? oauth2Username,
+    String? bio,
+    bool? isVerified,
+    String? verifiedNote,
+    String? verifiedBy,
+    int? followerCount,
+    int? followingCount,
+    bool? isFollowing,
+  }) {
+    return User(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      nickname: nickname ?? this.nickname,
+      email: email ?? this.email,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      bannerUrl: bannerUrl ?? this.bannerUrl,
+      role: role ?? this.role,
+      needsRegistration: needsRegistration ?? this.needsRegistration,
+      storageQuota: storageQuota ?? this.storageQuota,
+      storageUsed: storageUsed ?? this.storageUsed,
+      oauth2Provider: oauth2Provider ?? this.oauth2Provider,
+      oauth2Username: oauth2Username ?? this.oauth2Username,
+      bio: bio ?? this.bio,
+      isVerified: isVerified ?? this.isVerified,
+      verifiedNote: verifiedNote ?? this.verifiedNote,
+      verifiedBy: verifiedBy ?? this.verifiedBy,
+      followerCount: followerCount ?? this.followerCount,
+      followingCount: followingCount ?? this.followingCount,
+      isFollowing: isFollowing ?? this.isFollowing,
+    );
+  }
 }

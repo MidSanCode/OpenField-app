@@ -14,6 +14,7 @@ import 'package:openfield/core/router/app_router.dart';
 import 'package:openfield/core/windows/protocol_registration.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/core/theme/app_theme.dart';
@@ -21,7 +22,7 @@ import 'package:openfield/core/theme/app_theme.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  if (Platform.isWindows) {
+  if (!kIsWeb && Platform.isWindows) {
     ensureOpenFieldProtocol();
   }
   _initConsoleLogging();
@@ -60,6 +61,19 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     _settingsService.addListener(_syncServerHost);
     _router = createRouter(_authService, appNavigatorKey);
     _setupDeepLinks();
+    _authService.addListener(_syncRealtimeConnection);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncRealtimeConnection());
+  }
+
+  /// Connects the realtime WebSocket while authenticated, disconnecting it
+  /// immediately when the user logs out.
+  void _syncRealtimeConnection() {
+    final token = _authService.accessToken;
+    if (token != null) {
+      RealtimeService.instance.connect(token);
+    } else {
+      RealtimeService.instance.disconnect();
+    }
   }
 
   void _syncServerHost() {
@@ -69,6 +83,8 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   @override
   void dispose() {
     _settingsService.removeListener(_syncServerHost);
+    _authService.removeListener(_syncRealtimeConnection);
+    RealtimeService.instance.disconnect();
     _linkSubscription?.cancel();
     super.dispose();
   }
@@ -77,7 +93,7 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     // Windows fallback: when the app is launched from a protocol URL,
     // the URI is passed as a command-line argument because app_links
     // does not reliably deliver the initial link on this platform.
-    if (Platform.isWindows) {
+    if (!kIsWeb && Platform.isWindows) {
       for (final arg in Platform.executableArguments) {
         final trimmed = arg.trim();
         if (trimmed.startsWith('openfield://')) {

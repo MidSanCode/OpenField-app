@@ -1,3 +1,5 @@
+import 'attachment.dart';
+
 class PostReply {
   final int id;
   final int postId;
@@ -11,6 +13,9 @@ class PostReply {
   final String? nickname;
   final String? avatarUrl;
   final bool isVerified;
+  final String? parentContent;
+  final String? parentName;
+  final List<Attachment> attachments;
 
   const PostReply({
     required this.id,
@@ -25,6 +30,9 @@ class PostReply {
     this.nickname,
     this.avatarUrl,
     this.isVerified = false,
+    this.parentContent,
+    this.parentName,
+    this.attachments = const [],
   });
 
   bool get isDeleted => deletedAt != null;
@@ -45,6 +53,13 @@ class PostReply {
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool? ?? false,
+      parentContent: json['parent_content'] as String?,
+      parentName: json['parent_name'] as String?,
+      attachments: (json['attachments'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map((a) => Attachment.fromJson(a))
+              .toList() ??
+          const [],
     );
   }
 }

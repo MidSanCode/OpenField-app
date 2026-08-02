@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/core/log/log_overlay.dart';
-import 'package:openfield/data/services/api_service.dart';
-import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/pages/settings/permissions_page.dart';
@@ -53,10 +51,6 @@ class SettingsPage extends StatelessWidget {
                     );
                   },
                 ),
-                const Divider(height: 1),
-                const _AvatarTile(),
-                const Divider(height: 1),
-                const _BannerTile(),
               ],
             ),
           ),
@@ -244,72 +238,6 @@ class _BackgroundImageTile extends StatelessWidget {
         final result = await picker.pickImage(source: ImageSource.gallery);
         if (result == null) return;
         await settings.setBackgroundImagePath(result.path);
-      },
-    );
-  }
-}
-
-class _AvatarTile extends StatelessWidget {
-  const _AvatarTile();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final authService = Provider.of<AuthService>(context);
-    final avatarUrl = authService.avatarUrl ?? authService.user?.avatarUrl;
-    return ListTile(
-      leading: const Icon(Icons.person_outline),
-      title: Text(l10n.setAvatar),
-      subtitle: Text(avatarUrl?.isNotEmpty == true ? l10n.saved : ''),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () async {
-        final picker = ImagePicker();
-        final result = await picker.pickImage(source: ImageSource.gallery);
-        if (result == null) return;
-        try {
-          await ApiService().uploadAvatar(result.path, authService.accessToken!);
-          await authService.fetchCurrentUser();
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.saved)));
-          }
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-          }
-        }
-      },
-    );
-  }
-}
-
-class _BannerTile extends StatelessWidget {
-  const _BannerTile();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final authService = Provider.of<AuthService>(context);
-    final bannerUrl = authService.user?.bannerUrl;
-    return ListTile(
-      leading: const Icon(Icons.photo_outlined),
-      title: Text(l10n.setBanner),
-      subtitle: Text(bannerUrl?.isNotEmpty == true ? l10n.saved : ''),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () async {
-        final picker = ImagePicker();
-        final result = await picker.pickImage(source: ImageSource.gallery);
-        if (result == null) return;
-        try {
-          await ApiService().uploadBanner(result.path, authService.accessToken!);
-          await authService.fetchCurrentUser();
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.saved)));
-          }
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-          }
-        }
       },
     );
   }

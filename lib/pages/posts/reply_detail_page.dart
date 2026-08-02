@@ -1,4 +1,4 @@
-﻿import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/data/models/attachment.dart';
@@ -8,23 +8,24 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/pages/account/profile_page.dart';
-import 'package:openfield/pages/posts/reply_detail_page.dart';
-import 'package:openfield/widgets/post_card.dart';
 import 'package:openfield/widgets/reply_tile.dart';
 
-class PostDetailPage extends StatefulWidget {
+/// A full thread view for a single reply: the target reply plus every nested
+/// descendant, with a composer to reply into the thread.
+class ReplyDetailPage extends StatefulWidget {
   final Post post;
+  final PostReply reply;
 
-  const PostDetailPage({super.key, required this.post});
+  const ReplyDetailPage({super.key, required this.post, required this.reply});
 
   @override
-  State<PostDetailPage> createState() => _PostDetailPageState();
+  State<ReplyDetailPage> createState() => _ReplyDetailPageState();
 }
 
-class _PostDetailPageState extends State<PostDetailPage> {
+class _ReplyDetailPageState extends State<ReplyDetailPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _replyController = TextEditingController();
-  late Post _post;
+  late PostReply _reply;
   List<PostReply> _replies = [];
   bool _isLoading = true;
   bool _isSending = false;
@@ -35,7 +36,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
   @override
   void initState() {
     super.initState();
-    _post = widget.post;
+    _reply = widget.reply;
     _load();
   }
 
@@ -53,12 +54,17 @@ class _PostDetailPageState extends State<PostDetailPage> {
       _error = null;
     });
     try {
-      final post = token != null ? await _apiService.getPost(_post.id, token) : _post;
-      final replies = await _apiService.listReplies(_post.id, token: token);
+      final replies = await _apiService.listReplies(widget.post.id, token: token);
       if (!mounted) return;
       setState(() {
-        _post = post;
         _replies = replies;
+        // Prefer the freshest copy of the target reply from the list.
+        for (final r in replies) {
+          if (r.id == widget.reply.id) {
+            _reply = r;
+            break;
+          }
+        }
         _isLoading = false;
       });
     } catch (e) {
@@ -68,12 +74,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
         _isLoading = false;
       });
     }
-  }
-
-  void _openAuthorProfile(int userId) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ProfilePage(userId: userId)),
-    );
   }
 
   Future<void> _pickAttachment() async {
@@ -107,10 +107,10 @@ class _PostDetailPageState extends State<PostDetailPage> {
         attachmentId = att.id;
       }
       final reply = await _apiService.createReply(
-        _post.id,
+        widget.post.id,
         content,
         token,
-        parentId: _replyingTo?.id,
+        parentId: _replyingTo?.id ?? _reply.id,
         attachmentIds: attachmentId != null ? [attachmentId] : const [],
       );
       _replyController.clear();
@@ -120,19 +120,8 @@ class _PostDetailPageState extends State<PostDetailPage> {
         _isSending = false;
         _replyingTo = null;
         _pendingAttachment = null;
-        _post = Post(
-          id: _post.id,
-          userId: _post.userId,
-          content: _post.content,
-          createdAt: _post.createdAt,
-          updatedAt: _post.updatedAt,
-          username: _post.username,
-          nickname: _post.nickname,
-          avatarUrl: _post.avatarUrl,
-          attachments: _post.attachments,
-          replyCount: _post.replyCount + 1,
-        );
       });
+      _scrollToBottom();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSending = false);
@@ -140,17 +129,27 @@ class _PostDetailPageState extends State<PostDetailPage> {
     }
   }
 
-  void _replyTo(PostReply reply) {
-    setState(() {
-      _replyingTo = reply;
+  final _scrollController = ScrollController();
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
     });
+  }
+
+  void _replyTo(PostReply reply) {
+    setState(() => _replyingTo = reply);
   }
 
   Future<void> _onReplyLongPress(PostReply reply) async {
     final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
-    if (token == null) return;
     final isMine = reply.userId == authService.user?.id;
 
     final action = await showModalBottomSheet<String>(
@@ -183,18 +182,15 @@ class _PostDetailPageState extends State<PostDetailPage> {
     if (action == null) return;
     if (action == 'reply') {
       _replyTo(reply);
-    } else if (action == 'edit') {
-      await _editReply(reply);
-    } else if (action == 'delete') {
-      await _deleteReply(reply);
+    } else if (action == 'edit' && token != null) {
+      await _editReply(reply, token);
+    } else if (action == 'delete' && token != null) {
+      await _deleteReply(reply, token);
     }
   }
 
-  Future<void> _editReply(PostReply reply) async {
+  Future<void> _editReply(PostReply reply, String token) async {
     final l10n = AppLocalizations.of(context)!;
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final token = authService.accessToken;
-    if (token == null) return;
     final controller = TextEditingController(text: reply.content);
     final content = await showDialog<String>(
       context: context,
@@ -219,7 +215,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
     if (content == null || content.isEmpty) return;
     try {
       final updated = await _apiService.updateReply(
-        _post.id,
+        widget.post.id,
         reply.id,
         content,
         token,
@@ -228,6 +224,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
       if (!mounted) return;
       setState(() {
         _replies = _replies.map((r) => r.id == updated.id ? updated : r).toList();
+        if (updated.id == _reply.id) _reply = updated;
       });
     } catch (e) {
       if (mounted) {
@@ -236,27 +233,12 @@ class _PostDetailPageState extends State<PostDetailPage> {
     }
   }
 
-  Future<void> _deleteReply(PostReply reply) async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final token = authService.accessToken;
-    if (token == null) return;
+  Future<void> _deleteReply(PostReply reply, String token) async {
     try {
-      await _apiService.deleteReply(_post.id, reply.id, token);
+      await _apiService.deleteReply(widget.post.id, reply.id, token);
       if (!mounted) return;
       setState(() {
         _replies = _replies.where((r) => r.id != reply.id).toList();
-        _post = Post(
-          id: _post.id,
-          userId: _post.userId,
-          content: _post.content,
-          createdAt: _post.createdAt,
-          updatedAt: _post.updatedAt,
-          username: _post.username,
-          nickname: _post.nickname,
-          avatarUrl: _post.avatarUrl,
-          attachments: _post.attachments,
-          replyCount: (_post.replyCount - 1).clamp(0, 1 << 30),
-        );
       });
     } catch (e) {
       if (mounted) {
@@ -265,95 +247,93 @@ class _PostDetailPageState extends State<PostDetailPage> {
     }
   }
 
-  /// Builds a reply tree: top-level replies followed by their nested children.
-  List<Widget> _buildReplyTree(List<PostReply> replies) {
+  /// Collects the descendant thread of the target reply, in tree order.
+  List<PostReply> _descendants() {
     final childrenOf = <int?, List<PostReply>>{};
-    for (final r in replies) {
+    for (final r in _replies) {
+      if (r.id == _reply.id) continue;
       childrenOf.putIfAbsent(r.parentId, () => []).add(r);
     }
-    final result = <Widget>[];
-    void addChildren(int? parentId) {
+    final result = <PostReply>[];
+    void walk(int parentId, int depth) {
       for (final r in childrenOf[parentId] ?? []) {
-        final depth = r.parentId == null ? 0 : 1;
-        result.add(_buildReplyItem(r, depth));
-        addChildren(r.id);
+        result.add(r);
+        walk(r.id, depth + 1);
       }
     }
 
-    addChildren(null);
+    walk(_reply.id, 0);
     return result;
   }
 
-  Widget _buildReplyItem(PostReply reply, int depth) {
-    return Padding(
-      padding: EdgeInsets.only(left: depth * 16),
-      child: ReplyTile(
-        reply: reply,
-        onTap: () => _openReplyDetail(reply),
-        onLongPress: () => _onReplyLongPress(reply),
-        onTapAuthor: () => _openAuthorProfile(reply.userId),
-      ),
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.reply)),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        color: Theme.of(context).colorScheme.surfaceContainerLow,
+                        child: ReplyTile(
+                          reply: _reply,
+                          onTap: () => _openAuthorProfile(_reply.userId),
+                          onLongPress: () => _onReplyLongPress(_reply),
+                          onTapAuthor: () => _openAuthorProfile(_reply.userId),
+                        ),
+                      ),
+                      const Divider(),
+                      if (_error != null && _replies.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Center(
+                            child: TextButton(
+                              onPressed: _load,
+                              child: Text(l10n.retry),
+                            ),
+                          ),
+                        )
+                      else
+                        ..._descendants().map((r) => ReplyTile(
+                              reply: r,
+                              onTap: () => _openReplyDetail(r),
+                              onLongPress: () => _onReplyLongPress(r),
+                              onTapAuthor: () => _openAuthorProfile(r.userId),
+                            )),
+                      if (_descendants().isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Center(child: Text(l10n.replyEmpty)),
+                        ),
+                    ],
+                  ),
+                ),
+                _buildReplyBar(l10n),
+              ],
+            ),
+    );
+  }
+
+  void _openAuthorProfile(int userId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ProfilePage(userId: userId)),
     );
   }
 
   void _openReplyDetail(PostReply reply) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ReplyDetailPage(post: _post, reply: reply),
+        builder: (_) => ReplyDetailPage(post: widget.post, reply: reply),
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final authService = Provider.of<AuthService>(context);
-    final currentUserId = authService.user?.id;
-
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.replies)),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null && _replies.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(l10n.loadFailed),
-                      const SizedBox(height: 16),
-                      ElevatedButton(onPressed: _load, child: Text(l10n.retry)),
-                    ],
-                  ),
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        children: [
-                          PostCard(
-                            post: _post,
-                            isMine: _post.userId == currentUserId,
-                            onTapAuthor: () => _openAuthorProfile(_post.userId),
-                            onTapReply: () {},
-                            showReplies: false,
-                            token: Provider.of<AuthService>(context).accessToken,
-                            onPostChanged: (updated) => setState(() => _post = updated),
-                          ),
-                          const Divider(),
-                          if (_replies.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.all(32),
-                              child: Center(child: Text(l10n.replyEmpty)),
-                            )
-                          else
-                            ..._buildReplyTree(_replies),
-                        ],
-                      ),
-                    ),
-                    _buildReplyBar(l10n),
-                  ],
-                ),
     );
   }
 
@@ -474,4 +454,3 @@ class _PostDetailPageState extends State<PostDetailPage> {
     );
   }
 }
-

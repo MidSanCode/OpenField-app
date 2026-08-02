@@ -407,7 +407,7 @@ abstract class AppLocalizations {
   /// No description provided for @editProfile.
   ///
   /// In en, this message translates to:
-  /// **'Edit Profile'**
+  /// **'Account Settings'**
   String get editProfile;
 
   /// No description provided for @localAccountHint.
@@ -632,6 +632,12 @@ abstract class AppLocalizations {
   /// **'Replying...'**
   String get chatReplying;
 
+  /// No description provided for @chatResend.
+  ///
+  /// In en, this message translates to:
+  /// **'Resend'**
+  String get chatResend;
+
   /// No description provided for @chatOwnerRole.
   ///
   /// In en, this message translates to:
@@ -751,6 +757,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No replies yet'**
   String get replyEmpty;
+
+  /// No description provided for @replyingToHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Replying to {name}'**
+  String replyingToHint(Object name);
+
+  /// No description provided for @replyAttachHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach a file to your reply'**
+  String get replyAttachHint;
 
   /// No description provided for @error.
   ///

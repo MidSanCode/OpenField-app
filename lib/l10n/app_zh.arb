@@ -133,5 +133,9 @@
   "advancedLoginHint": "以下方式用于特殊情况",
   "tokenLogin": "令牌登录",
   "tokenLoginHint": "在浏览器登录成功页复制令牌，粘贴到此处登录",
-  "tokenPlaceholder": "粘贴访问令牌"
+  "tokenPlaceholder": "粘贴访问令牌",
+  "follow": "关注",
+  "unfollow": "取消关注",
+  "followers": "粉丝",
+  "following": "正在关注"
 }

@@ -163,7 +163,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saved => 'Saved';
 
   @override
-  String get editProfile => 'Edit Profile';
+  String get editProfile => 'Account Settings';
 
   @override
   String get localAccountHint =>
@@ -278,6 +278,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatReplying => 'Replying...';
 
   @override
+  String get chatResend => 'Resend';
+
+  @override
   String get chatOwnerRole => 'Owner';
 
   @override
@@ -336,6 +339,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get replyEmpty => 'No replies yet';
+
+  @override
+  String replyingToHint(Object name) {
+    return 'Replying to $name';
+  }
+
+  @override
+  String get replyAttachHint => 'Attach a file to your reply';
 
   @override
   String get error => 'Error';

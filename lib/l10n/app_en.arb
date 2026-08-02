@@ -133,5 +133,9 @@
   "advancedLoginHint": "For special cases",
   "tokenLogin": "Token Login",
   "tokenLoginHint": "Paste the token copied from the browser login page",
-  "tokenPlaceholder": "Paste access token"
+  "tokenPlaceholder": "Paste access token",
+  "follow": "Follow",
+  "unfollow": "Unfollow",
+  "followers": "Followers",
+  "following": "Following"
 }

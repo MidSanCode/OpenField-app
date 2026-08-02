@@ -5,6 +5,7 @@ import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
+import 'package:openfield/pages/account/follow_list_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/post_card.dart';
@@ -27,6 +28,7 @@ class _ProfilePageState extends State<ProfilePage> {
   List<Post>? _posts;
   Object? _error;
   bool _isLoading = true;
+  bool _followLoading = false;
 
   @override
   void initState() {
@@ -119,6 +121,17 @@ class _ProfilePageState extends State<ProfilePage> {
               for (final post in _posts!)
                 PostCard(
                   post: post,
+                  token: Provider.of<AuthService>(context, listen: false).accessToken,
+                  onPostChanged: (updated) {
+                    setState(() {
+                      _posts = _posts!.map((p) => p.id == updated.id ? updated : p).toList();
+                    });
+                  },
+                  onUnauthenticated: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(AppLocalizations.of(context)!.loginWithOIDC)),
+                    );
+                  },
                   onTapAuthor: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => ProfilePage(userId: post.userId)),
@@ -136,7 +149,9 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text('@${_user?.username ?? ''}')),
+      appBar: AppBar(
+        title: Text(_user?.displayName ?? ''),
+      ),
       body: body,
     );
   }
@@ -149,8 +164,8 @@ class _ProfilePageState extends State<ProfilePage> {
   ) {
     final hasBanner = user.bannerUrl.isNotEmpty;
     final hasAvatar = user.avatarUrl.isNotEmpty;
-    return Stack(
-      clipBehavior: Clip.none,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
           height: 160,
@@ -165,9 +180,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 )
               : Container(color: theme.colorScheme.primaryContainer),
         ),
-        Positioned(
-          left: 24,
-          bottom: -44,
+        // Centered avatar stacked below banner
+        const SizedBox(height: 16),
+        Center(
           child: Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -183,64 +198,186 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
         ),
-        Positioned(
-          right: 0,
-          left: 0,
-          top: 168,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        const SizedBox(height: 12),
+        // Nickname (falls back to username in displayName)
+        Center(
+          child: VerifiedName(
+            name: user.displayName,
+            verified: user.isVerified,
+            style: theme.textTheme.titleLarge,
+          ),
+        ),
+        if (user.isVerified && user.verifiedBy.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: Chip(
+              avatar: const Icon(Icons.verified, size: 16, color: Colors.lightBlue),
+              label: Text(user.verifiedBy),
+              visualDensity: VisualDensity.compact,
+              backgroundColor: theme.colorScheme.primaryContainer,
+            ),
+          ),
+        ],
+        if (user.isVerified && user.verifiedNote.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              user.verifiedNote,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 2),
+        // Username
+        Center(
+          child: Text(
+            '@${user.username}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Follow counts row
+        _buildFollowCountsRow(theme, user, l10n),
+        const SizedBox(height: 8),
+        _buildFollowButton(theme, user, l10n),
+        if (user.role == 'admin') ...[
+          const SizedBox(height: 8),
+          Center(
+            child: Chip(
+              avatar: const Icon(Icons.admin_panel_settings, size: 16),
+              label: Text(l10n.admin),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFollowCountsRow(ThemeData theme, User user, AppLocalizations l10n) {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    if (auth.accessToken == null) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        InkWell(
+          onTap: () => _openFollowList(FollowListType.followers),
+          child: RichText(
+            text: TextSpan(
+              style: theme.textTheme.bodyMedium,
               children: [
-                 Row(
-                  children: [
-                    Flexible(
-                      child: VerifiedName(
-                        name: user.displayName,
-                        verified: user.isVerified,
-                        style: theme.textTheme.titleLarge,
-                      ),
-                    ),
-                  ],
+                TextSpan(
+                  text: '${user.followerCount}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-                if (user.isVerified && user.verifiedBy.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Chip(
-                    avatar: const Icon(Icons.verified, size: 16, color: Colors.lightBlue),
-                    label: Text(user.verifiedBy),
-                    visualDensity: VisualDensity.compact,
-                    backgroundColor: theme.colorScheme.primaryContainer,
-                  ),
-                ],
-                if (user.isVerified && user.verifiedNote.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    user.verifiedNote,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 2),
-                Text(
-                  '@${user.username}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                TextSpan(
+                  text: ' ${l10n.followers}',
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
                 ),
-                if (user.role == 'admin') ...[
-                  const SizedBox(height: 6),
-                  Chip(
-                    avatar: const Icon(Icons.admin_panel_settings, size: 16),
-                    label: Text(l10n.admin),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 24),
+        InkWell(
+          onTap: () => _openFollowList(FollowListType.following),
+          child: RichText(
+            text: TextSpan(
+              style: theme.textTheme.bodyMedium,
+              children: [
+                TextSpan(
+                  text: '${user.followingCount}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                TextSpan(
+                  text: ' ${l10n.following}',
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
+                ),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFollowButton(ThemeData theme, User user, AppLocalizations l10n) {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    if (auth.accessToken == null) return const SizedBox.shrink();
+    final isSelf = auth.user?.id == user.id;
+    if (isSelf) return const SizedBox.shrink();
+
+    if (user.isFollowing) {
+      return Center(
+        child: OutlinedButton(
+          onPressed: _followLoading ? null : () => _toggleFollow(false),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(140, 36),
+            side: BorderSide(color: theme.colorScheme.outline),
+          ),
+          child: _followLoading
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(l10n.unfollow),
+        ),
+      );
+    }
+
+    return Center(
+      child: FilledButton(
+        onPressed: _followLoading ? null : () => _toggleFollow(true),
+        style: FilledButton.styleFrom(minimumSize: const Size(140, 36)),
+        child: _followLoading
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : Text(l10n.follow),
+      ),
+    );
+  }
+
+  Future<void> _toggleFollow(bool follow) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final token = auth.accessToken;
+    if (token == null) return;
+
+    final followerDelta = follow ? 1 : -1;
+    setState(() {
+      _followLoading = true;
+      _user = _user!.copyWith(
+        isFollowing: follow,
+        followerCount: _user!.followerCount + followerDelta,
+      );
+    });
+
+    try {
+      if (follow) {
+        await _apiService.followUser(widget.userId, token);
+      } else {
+        await _apiService.unfollowUser(widget.userId, token);
+      }
+    } catch (e) {
+      setState(() {
+        _user = _user!.copyWith(
+          isFollowing: !follow,
+          followerCount: _user!.followerCount - followerDelta,
+        );
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _followLoading = false);
+    }
+  }
+
+  void _openFollowList(FollowListType type) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FollowListPage(userId: widget.userId, initialTab: type),
+      ),
     );
   }
 }

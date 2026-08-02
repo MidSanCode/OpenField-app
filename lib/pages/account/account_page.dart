@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/core/widgets/error_dialog.dart';
+import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
@@ -29,7 +31,6 @@ class _AccountPageState extends State<AccountPage> {
   final TextEditingController _tokenController = TextEditingController();
   StreamSubscription<Uri>? _linkSubscription;
   bool _isLoggingIn = false;
-  bool _isBindingOAuth = false;
 
   @override
   void initState() {
@@ -111,25 +112,6 @@ class _AccountPageState extends State<AccountPage> {
       await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const RegisterPage()),
       );
-    }
-  }
-
-  Future<void> _bindOAuth() async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final token = authService.accessToken;
-    if (token == null) return;
-
-    setState(() => _isBindingOAuth = true);
-    try {
-      final authUrl = await _apiService.getOIDCBindUrl(token);
-      final uri = Uri.parse(authUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      if (mounted) await showApiErrorDialog(context, e);
-    } finally {
-      if (mounted) setState(() => _isBindingOAuth = false);
     }
   }
 
@@ -220,6 +202,16 @@ class _AccountPageState extends State<AccountPage> {
               ),
               const SizedBox(height: 12),
               _buildAdvancedLogin(context, l10n),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsPage()),
+                  );
+                },
+                icon: const Icon(Icons.settings_outlined),
+                label: Text(l10n.settings),
+              ),
             ],
           ),
         ),
@@ -297,21 +289,139 @@ class _AccountPageState extends State<AccountPage> {
         : (user?.avatarUrl.isNotEmpty == true ? user!.avatarUrl : null);
     final displayName = user?.displayName ?? authService.username ?? l10n.username;
 
-    final hasOAuth = user?.hasOAuthBinding ?? false;
-    final oauthName = hasOAuth && user != null
-        ? (user.oauth2Username.isNotEmpty ? user.oauth2Username : 'OIDC')
-        : '';
-
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        // ---- Banner with centered avatar + nickname ----
-        Stack(
-          clipBehavior: Clip.none,
+        // ---- Banner with overlapping avatar ----
+        _buildProfileHeader(
+          context,
+          theme,
+          authService,
+          user,
+          bannerUrl: bannerUrl,
+          avatarUrl: avatarUrl,
+          displayName: displayName,
+        ),
+        // ---- Bio ----
+        if (user != null && user.bio.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+            child: MarkdownContent(data: user.bio),
+          ),
+        ],
+
+        // ---- Sections (app settings + account settings) ----
+        _SettingsSection(
+          title: l10n.appSettings,
+          children: [
+            ListTile(
+              minLeadingWidth: 48,
+              leading: const Icon(Icons.settings_outlined),
+              title: Text(l10n.settings),
+              subtitle: Text(
+                l10n.appSettings,
+                style: const TextStyle(fontSize: 12),
+              ),
+              contentPadding: const EdgeInsets.only(left: 24, right: 17),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+                );
+              },
+            ),
+          ],
+        ),
+        if (user != null) ...[
+          _SettingsSection(
+            title: l10n.accountSettings,
+            children: [
+              ListTile(
+                minLeadingWidth: 48,
+                leading: const Icon(Icons.article_outlined),
+                title: Text(l10n.myPosts),
+                subtitle: Text(
+                  l10n.myPostsHint,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => MyPostsPage(userId: user.id),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                minLeadingWidth: 48,
+                leading: const Icon(Icons.attach_file),
+                title: Text(l10n.myAttachments),
+                subtitle: Text(
+                  l10n.manageAttachmentsHint,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AttachmentsPage()),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                minLeadingWidth: 48,
+                leading: const Icon(Icons.badge_outlined),
+                title: Text(l10n.editProfile),
+                contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AccountSettingsPage()),
+                  );
+                  if (mounted) setState(() {});
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                minLeadingWidth: 48,
+                leading: const Icon(Icons.logout),
+                title: Text(l10n.logout),
+                contentPadding: const EdgeInsets.only(left: 24, right: 17),
+                onTap: _logout,
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  /// Banner with the avatar straddling its bottom edge and the identity block
+  /// pulled up tight against it.
+  Widget _buildProfileHeader(
+    BuildContext context,
+    ThemeData theme,
+    AuthService authService,
+    User? user, {
+    required String? bannerUrl,
+    required String? avatarUrl,
+    required String displayName,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    const avatarRadius = 44.0;
+    const bannerHeight = 160.0;
+    return Stack(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
-              height: 180,
-              width: double.infinity,
+              height: bannerHeight,
               child: bannerUrl != null
                   ? Image.network(bannerUrl, fit: BoxFit.cover)
                   : Container(
@@ -325,203 +435,66 @@ class _AccountPageState extends State<AccountPage> {
                       ),
                     ),
             ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: -52,
-              child: Column(
-                children: [
-                  InkWell(
-                    onTap: () {
-                      final currentUser = authService.user;
-                      if (currentUser != null) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => ProfilePage(userId: currentUser.id)),
-                        );
-                      }
-                    },
-                    child: CircleAvatar(
-                      radius: 44,
-                      backgroundColor: theme.colorScheme.surface,
-                      backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                      child: avatarUrl == null ? const Icon(Icons.person, size: 44) : null,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  VerifiedName(
-                    name: displayName,
-                    verified: user?.isVerified ?? false,
-                    style: theme.textTheme.titleLarge,
-                  ),
-                  if (authService.email != null && authService.email!.isNotEmpty)
-                    Text(
-                      authService.email!,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  if (user?.role == 'admin') ...[
-                    const SizedBox(height: 6),
-                    Chip(
-                      avatar: const Icon(Icons.admin_panel_settings, size: 16),
-                      label: Text(l10n.admin),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                  if (user != null && user.storageQuota > 0) ...[
-                    const SizedBox(height: 8),
-                    _StorageChip(used: user.storageUsed, quota: user.storageQuota),
-                  ],
-                ],
+            // Space for the lower half of the overlapping avatar.
+            const SizedBox(height: avatarRadius),
+            Center(
+              child: VerifiedName(
+                name: displayName,
+                verified: user?.isVerified ?? false,
+                style: theme.textTheme.titleLarge,
               ),
             ),
+            if (authService.email != null && authService.email!.isNotEmpty)
+              Center(
+                child: Text(
+                  authService.email!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            if (user?.role == 'admin') ...[
+              const SizedBox(height: 6),
+              Center(
+                child: Chip(
+                  avatar: const Icon(Icons.admin_panel_settings, size: 16),
+                  label: Text(l10n.admin),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+            if (user != null && user.storageQuota > 0) ...[
+              const SizedBox(height: 8),
+              Center(child: _StorageChip(used: user.storageUsed, quota: user.storageQuota)),
+            ],
+            const SizedBox(height: 24),
           ],
         ),
-        const SizedBox(height: 62),
-
-        // ---- Bio ----
-        if (user != null && user.bio.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-            child: MarkdownContent(data: user.bio),
+        Positioned(
+          // Top edge of the avatar sits on the banner's bottom edge so it
+          // overlaps the boundary, with the lower half spilling below.
+          top: bannerHeight - avatarRadius,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: InkWell(
+              onTap: () {
+                final currentUser = authService.user;
+                if (currentUser != null) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => ProfilePage(userId: currentUser.id)),
+                  );
+                }
+              },
+              child: CircleAvatar(
+                radius: avatarRadius,
+                backgroundColor: theme.colorScheme.surface,
+                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl == null ? const Icon(Icons.person, size: 44) : null,
+              ),
+            ),
           ),
-        ],
-
-        // ---- Sections ----
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _SettingsSection(
-              title: l10n.oauthBinding,
-              children: [
-                ListTile(
-                  minLeadingWidth: 48,
-                  leading: const Icon(Icons.link),
-                  title: Text(l10n.oauthBinding),
-                  subtitle: Text(
-                    hasOAuth ? oauthName : l10n.oauthNotBound,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                  trailing: hasOAuth
-                      ? Text(l10n.oauthBound,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.primary,
-                          ))
-                      : TextButton(
-                          onPressed: _isBindingOAuth ? null : _bindOAuth,
-                          child: Text(l10n.bindOAuth),
-                        ),
-                ),
-                if (!hasOAuth) ...[
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
-                    child: Text(
-                      l10n.oauthUnbindAdminOnly,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-
-            _SettingsSection(
-              title: l10n.accountSettings,
-              children: [
-                ListTile(
-                  minLeadingWidth: 48,
-                  leading: const Icon(Icons.article_outlined),
-                  title: Text(l10n.myPosts),
-                  subtitle: Text(
-                    l10n.myPostsHint,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => MyPostsPage(userId: user!.id),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  minLeadingWidth: 48,
-                  leading: const Icon(Icons.attach_file),
-                  title: Text(l10n.myAttachments),
-                  subtitle: Text(
-                    l10n.manageAttachmentsHint,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const AttachmentsPage()),
-                    );
-                  },
-                ),
-              ],
-            ),
-
-            _SettingsSection(
-              title: l10n.settings,
-              children: [
-                ListTile(
-                  minLeadingWidth: 48,
-                  leading: const Icon(Icons.settings_outlined),
-                  title: Text(l10n.settings),
-                  subtitle: Text(
-                    l10n.accountSettings,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SettingsPage()),
-                    );
-                    if (mounted) setState(() {});
-                  },
-                ),
-              ],
-            ),
-
-            _SettingsSection(
-              title: l10n.accountSettings,
-              children: [
-                ListTile(
-                  minLeadingWidth: 48,
-                  leading: const Icon(Icons.badge_outlined),
-                  title: Text(l10n.editProfile),
-                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const EditProfilePage()),
-                    );
-                    if (mounted) setState(() {});
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  minLeadingWidth: 48,
-                  leading: const Icon(Icons.logout),
-                  title: Text(l10n.logout),
-                  contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                  onTap: _logout,
-                ),
-              ],
-            ),
-          ],
         ),
-        const SizedBox(height: 24),
       ],
     );
   }
@@ -589,19 +562,20 @@ class _SettingsSection extends StatelessWidget {
   }
 }
 
-class EditProfilePage extends StatefulWidget {
-  const EditProfilePage({super.key});
+class AccountSettingsPage extends StatefulWidget {
+  const AccountSettingsPage({super.key});
 
   @override
-  State<EditProfilePage> createState() => _EditProfilePageState();
+  State<AccountSettingsPage> createState() => _AccountSettingsPageState();
 }
 
-class _EditProfilePageState extends State<EditProfilePage> {
+class _AccountSettingsPageState extends State<AccountSettingsPage> {
   final ApiService _apiService = ApiService();
   late final TextEditingController _nicknameController;
   late final TextEditingController _usernameController;
   late final TextEditingController _bioController;
   bool _isSaving = false;
+  bool _isBindingOAuth = false;
 
   @override
   void initState() {
@@ -632,7 +606,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
         bio: _bioController.text.trim(),
       );
       await auth.fetchCurrentUser();
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.saved)),
+        );
+      }
     } catch (e) {
       if (mounted) await showApiErrorDialog(context, e);
     } finally {
@@ -640,49 +619,227 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  Future<void> _bindOAuth() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+
+    setState(() => _isBindingOAuth = true);
+    try {
+      final authUrl = await _apiService.getOIDCBindUrl(token);
+      final uri = Uri.parse(authUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    } finally {
+      if (mounted) setState(() => _isBindingOAuth = false);
+    }
+  }
+
+  Future<void> _pickAvatar() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final l10n = AppLocalizations.of(context)!;
+    final picker = ImagePicker();
+    final result = await picker.pickImage(source: ImageSource.gallery);
+    if (result == null) return;
+    try {
+      await _apiService.uploadAvatar(result.path, auth.accessToken!);
+      await auth.fetchCurrentUser();
+      if (mounted) setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.saved)),
+        );
+      }
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    }
+  }
+
+  Future<void> _pickBanner() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final l10n = AppLocalizations.of(context)!;
+    final picker = ImagePicker();
+    final result = await picker.pickImage(source: ImageSource.gallery);
+    if (result == null) return;
+    try {
+      await _apiService.uploadBanner(result.path, auth.accessToken!);
+      await auth.fetchCurrentUser();
+      if (mounted) setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.saved)),
+        );
+      }
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final authService = Provider.of<AuthService>(context);
+    final user = authService.user;
+    final hasOAuth = user?.hasOAuthBinding ?? false;
+    final oauthName = hasOAuth && user != null
+        ? (user.oauth2Username.isNotEmpty ? user.oauth2Username : 'OIDC')
+        : '';
+
     return Scaffold(
       appBar: AppBar(title: Text(l10n.editProfile)),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _usernameController,
-              decoration: InputDecoration(
-                labelText: l10n.username,
-                border: const OutlineInputBorder(),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          // ---- Edit profile fields ----
+          _SectionHeader(title: l10n.nickname),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _usernameController,
+                    decoration: InputDecoration(
+                      labelText: l10n.username,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _nicknameController,
+                    decoration: InputDecoration(
+                      labelText: l10n.nickname,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _bioController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: l10n.bio,
+                      hintText: l10n.bioHint,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: _isSaving ? null : _save,
+                    icon: const Icon(Icons.save),
+                    label: Text(l10n.save),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _nicknameController,
-              decoration: InputDecoration(
-                labelText: l10n.nickname,
-                border: const OutlineInputBorder(),
-              ),
+          ),
+          const SizedBox(height: 16),
+
+          // ---- Avatar & banner ----
+          _SectionHeader(title: l10n.setAvatar),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(l10n.setAvatar),
+                  subtitle: Text(
+                    authService.avatarUrl?.isNotEmpty == true ? l10n.saved : '',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _pickAvatar,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.photo_outlined),
+                  title: Text(l10n.setBanner),
+                  subtitle: Text(
+                    user?.bannerUrl.isNotEmpty == true ? l10n.saved : '',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _pickBanner,
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _bioController,
-              maxLines: 4,
-              decoration: InputDecoration(
-                labelText: l10n.bio,
-                hintText: l10n.bioHint,
-                border: const OutlineInputBorder(),
-              ),
+          ),
+          const SizedBox(height: 16),
+
+          // ---- OAuth binding ----
+          _SectionHeader(title: l10n.oauthBinding),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.link),
+                  title: Text(l10n.oauthBinding),
+                  subtitle: Text(
+                    hasOAuth ? oauthName : l10n.oauthNotBound,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: hasOAuth
+                      ? Text(
+                          l10n.oauthBound,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.primary,
+                          ),
+                        )
+                      : TextButton(
+                          onPressed: _isBindingOAuth ? null : _bindOAuth,
+                          child: Text(l10n.bindOAuth),
+                        ),
+                ),
+                if (!hasOAuth) ...[
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Text(
+                      l10n.oauthUnbindAdminOnly,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _isSaving ? null : _save,
-              icon: const Icon(Icons.save),
-              label: Text(l10n.save),
+          ),
+          const SizedBox(height: 16),
+
+          // ---- Settings ----
+          // Removed: app settings now live on the account page itself so they
+          // are reachable without logging in.
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 16, 4),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w600,
             ),
-          ],
-        ),
       ),
     );
   }

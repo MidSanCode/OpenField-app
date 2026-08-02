@@ -3,6 +3,7 @@ import 'package:openfield/data/models/post.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/markdown_content.dart';
+import 'package:openfield/widgets/post_reaction_bar.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
 class PostCard extends StatefulWidget {
@@ -13,6 +14,9 @@ class PostCard extends StatefulWidget {
   final VoidCallback? onTapReply;
   final VoidCallback? onTapAuthor;
   final bool showReplies;
+  final ValueChanged<Post>? onPostChanged;
+  final String? token;
+  final VoidCallback? onUnauthenticated;
 
   const PostCard({
     super.key,
@@ -23,6 +27,9 @@ class PostCard extends StatefulWidget {
     this.onTapReply,
     this.onTapAuthor,
     this.showReplies = true,
+    this.onPostChanged,
+    this.token,
+    this.onUnauthenticated,
   });
 
   @override
@@ -162,6 +169,14 @@ class _PostCardState extends State<PostCard> {
                           ),
                         ],
                       ),
+                    ),
+                  ),
+                  Expanded(
+                    child: PostReactionBar(
+                      post: post,
+                      token: widget.token,
+                      onChanged: widget.onPostChanged ?? (_) {},
+                      onUnauthenticated: widget.onUnauthenticated,
                     ),
                   ),
                 ],

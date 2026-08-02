@@ -41,48 +41,73 @@ class _ImageGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A single image is shown at a capped, human-friendly size instead of
+    // stretching to fill the whole card/screen width.
+    if (images.length == 1) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: AspectRatio(
+            aspectRatio: 4 / 3,
+            child: _ImageCell(att: images.first),
+          ),
+        ),
+      );
+    }
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: images.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: images.length == 1 ? 1 : 3,
+        crossAxisCount: 3,
         crossAxisSpacing: 4,
         mainAxisSpacing: 4,
         childAspectRatio: 1,
       ),
-      itemBuilder: (context, index) {
-        final att = images[index];
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            onTap: () => _openAttachment(context, att),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.network(
-                  att.url,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(color: Theme.of(context).colorScheme.surfaceContainerHighest);
-                  },
-                  errorBuilder: (context, error, stack) => Container(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    child: const Icon(Icons.broken_image_outlined),
-                  ),
-                ),
-                if (!att.isPublic)
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: _VisibilityBadge(visibility: att.visibility),
-                  ),
-              ],
+      itemBuilder: (context, index) => _ImageCell(att: images[index]),
+    );
+  }
+}
+
+class _ImageCell extends StatelessWidget {
+  final Attachment att;
+
+  const _ImageCell({required this.att});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: () => _openAttachment(context, att),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              att.previewUrl,
+              fit: BoxFit.cover,
+              // Cap the decoded image so preview grids never hold the full
+              // original in memory.
+              cacheWidth: 720,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(color: Theme.of(context).colorScheme.surfaceContainerHighest);
+              },
+              errorBuilder: (context, error, stack) => Container(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: const Icon(Icons.broken_image_outlined),
+              ),
             ),
-          ),
-        );
-      },
+            if (!att.isPublic)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: _VisibilityBadge(visibility: att.visibility),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

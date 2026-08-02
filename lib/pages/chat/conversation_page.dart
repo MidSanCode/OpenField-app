@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +8,8 @@ import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/chat_local_db.dart';
+import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
@@ -36,19 +40,62 @@ class _ConversationPageState extends State<ConversationPage> {
   String? _error;
   int? _replyToId;
   int _myUserId = 0;
+  StreamSubscription<PushEvent>? _realtimeSub;
 
   @override
   void initState() {
     super.initState();
     _myUserId = Provider.of<AuthService>(context, listen: false).user?.id ?? 0;
     _load();
+    _realtimeSub = RealtimeService.instance.events.listen(_onRealtimeEvent);
+    _scrollController.addListener(_onScroll);
+  }
+
+  /// Triggers loading of older messages when the user scrolls near the top.
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.offset <= 120) {
+      _loadOlder();
+    }
   }
 
   @override
   void dispose() {
+    _realtimeSub?.cancel();
+    _scrollController.removeListener(_onScroll);
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Handles realtime push events for this conversation.
+  void _onRealtimeEvent(PushEvent event) {
+    if (event.conversationId != widget.conversationId) return;
+    if (!mounted) return;
+    switch (event.type) {
+      case 'chat.message.created':
+        final msg = ChatMessage.fromJson(event.data);
+        final exists = _messages.any((m) => m.id == msg.id || m.clientId == msg.clientId);
+        if (exists) return;
+        setState(() => _messages = _sorted([..._messages, msg]));
+        ChatLocalDb.instance.upsertMessage(msg);
+        _scrollToBottom();
+        break;
+      case 'chat.message.updated':
+        final msg = ChatMessage.fromJson(event.data);
+        setState(() {
+          _messages = _messages.map((m) => m.id == msg.id ? msg : m).toList();
+        });
+        ChatLocalDb.instance.upsertMessage(msg);
+        break;
+      case 'chat.message.deleted':
+        final msg = ChatMessage.fromJson(event.data);
+        setState(() {
+          _messages = _messages.where((m) => m.id != msg.id).toList();
+        });
+        ChatLocalDb.instance.deleteMessage(widget.conversationId, msg.id);
+        break;
+    }
   }
 
   Future<void> _load() async {
@@ -62,6 +109,43 @@ class _ConversationPageState extends State<ConversationPage> {
       _isLoading = true;
       _error = null;
     });
+
+    // Offline-first: render cached messages immediately if present.
+    final cached = await ChatLocalDb.instance.loadMessages(widget.conversationId, limit: 200);
+    // A message left in "sending" from a previous session can never complete;
+    // surface it as failed so the user can retry.
+    final restored = cached.map((m) {
+      if (m.status == MessageStatus.sending && m.id <= 0) {
+        return ChatMessage(
+          id: m.id,
+          conversationId: m.conversationId,
+          senderId: m.senderId,
+          content: m.content,
+          replyToId: m.replyToId,
+          editedAt: m.editedAt,
+          deletedAt: m.deletedAt,
+          createdAt: m.createdAt,
+          senderName: m.senderName,
+          senderAvatar: m.senderAvatar,
+          senderVerified: m.senderVerified,
+          clientId: m.clientId,
+          status: MessageStatus.failed,
+        );
+      }
+      return m;
+    }).toList();
+    if (restored.isNotEmpty && mounted) {
+      setState(() {
+        _messages = restored;
+        _isLoading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        }
+      });
+    }
+
     try {
       final detail = await _apiService.getConversation(token, widget.conversationId);
       final messages = await _apiService.listMessages(token, widget.conversationId);
@@ -70,14 +154,18 @@ class _ConversationPageState extends State<ConversationPage> {
         _conversation = detail.conversation;
         _members = detail.members;
         _myMembership = detail.myMembership;
-        _messages = messages;
+        _messages = _mergeMessages(_messages, messages);
         _isLoading = false;
+        _hasOlder = messages.length >= 50;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
           _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
         }
       });
+      // Cache the merged result so the next open is instant.
+      await ChatLocalDb.instance.replaceConversation(
+          widget.conversationId, _messages);
       if (messages.isNotEmpty) {
         await _apiService.markConversationRead(
           token,
@@ -86,12 +174,30 @@ class _ConversationPageState extends State<ConversationPage> {
         );
       }
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      // Network failed: keep showing cached messages; only surface the error
+      // when there is nothing cached to show.
+      if (cached.isEmpty && mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      } else if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  /// Merges cached and server messages by id, keeping them sorted oldest first.
+  List<ChatMessage> _mergeMessages(List<ChatMessage> a, List<ChatMessage> b) {
+    final byId = <int, ChatMessage>{};
+    for (final m in [...a, ...b]) {
+      if (m.id > 0) byId[m.id] = m;
+    }
+    final merged = byId.values.toList();
+    // Preserve any local-only (pending/failed) messages from the UI list.
+    final local = [...a, ...b].where((m) => m.id <= 0).toList();
+    merged.addAll(local);
+    return _sorted(merged);
   }
 
   Future<void> _loadOlder() async {
@@ -100,15 +206,36 @@ class _ConversationPageState extends State<ConversationPage> {
     final token = authService.accessToken;
     if (token == null) return;
     setState(() => _loadingOlder = true);
-    try {
-      final before = _messages.first.id;
-      final older = await _apiService.listMessages(token, widget.conversationId, before: before);
+    final before = _messages.first.id;
+
+    // Local first: older messages already cached render without the network.
+    final older = await ChatLocalDb.instance.loadMessages(
+      widget.conversationId,
+      beforeId: before,
+      limit: 50,
+    );
+    if (older.length >= 50) {
       if (!mounted) return;
       setState(() {
-        _hasOlder = older.length >= 50;
+        _hasOlder = true;
         _messages = [...older, ..._messages];
         _loadingOlder = false;
       });
+      return;
+    }
+
+    try {
+      final serverOlder =
+          await _apiService.listMessages(token, widget.conversationId, before: before);
+      if (!mounted) return;
+      // Merge local + server so nothing cached is lost when the cache is small.
+      final merged = _mergeMessages(older, serverOlder);
+      setState(() {
+        _hasOlder = serverOlder.length >= 50;
+        _messages = [...merged, ..._messages];
+        _loadingOlder = false;
+      });
+      await ChatLocalDb.instance.appendMessages(widget.conversationId, merged);
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingOlder = false);
@@ -127,30 +254,95 @@ class _ConversationPageState extends State<ConversationPage> {
       _inputController.clear();
       _replyToId = null;
     });
+
+    // Optimistic send: render the message immediately with a local id +
+    // timestamp, then resolve with the server-confirmed message.
+    final local = ChatMessage(
+      id: -DateTime.now().millisecondsSinceEpoch,
+      conversationId: widget.conversationId,
+      senderId: _myUserId,
+      content: content,
+      replyToId: replyToId,
+      createdAt: DateTime.now(),
+      senderName: authService.user?.nickname ?? authService.username,
+      senderAvatar: authService.user?.avatarUrl ?? authService.avatarUrl,
+      status: MessageStatus.sending,
+    );
+    setState(() => _messages = _sorted([..._messages, local]));
+    _scrollToBottom();
+    _dispatchSend(local, token);
+  }
+
+  /// Sends (or resends) a message, updating the optimistic bubble in place.
+  Future<void> _dispatchSend(ChatMessage local, String token) async {
+    _markStatus(local.clientId, MessageStatus.sending);
     try {
       final msg = await _apiService.sendChatMessage(
         token,
         widget.conversationId,
-        content,
-        replyToId: replyToId,
+        local.content,
+        replyToId: local.replyToId,
       );
       if (!mounted) return;
-      setState(() => _messages = [..._messages, msg]);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
+      setState(() {
+        _messages = _replaceByClientId(local.clientId, msg);
       });
+      ChatLocalDb.instance.upsertMessage(msg);
       await _apiService.markConversationRead(token, widget.conversationId, msg.id);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
+      if (!mounted) return;
+      _markStatus(local.clientId, MessageStatus.failed);
+      _scrollToBottom();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
+  }
+
+  void _markStatus(String clientId, MessageStatus status) {
+    if (!mounted) return;
+    setState(() {
+      _messages = _messages.map((m) {
+        if (m.clientId != clientId) return m;
+        return ChatMessage(
+          id: m.id,
+          conversationId: m.conversationId,
+          senderId: m.senderId,
+          content: m.content,
+          replyToId: m.replyToId,
+          editedAt: m.editedAt,
+          deletedAt: m.deletedAt,
+          createdAt: m.createdAt,
+          senderName: m.senderName,
+          senderAvatar: m.senderAvatar,
+          senderVerified: m.senderVerified,
+          clientId: m.clientId,
+          status: status,
+        );
+      }).toList();
+    });
+  }
+
+  List<ChatMessage> _replaceByClientId(String clientId, ChatMessage replacement) {
+    final resolved = _messages.where((m) => m.clientId != clientId).toList();
+    return _sorted([...resolved, replacement]);
+  }
+
+  /// Sorts messages newest-first by timestamp, falling back to id for ties.
+  List<ChatMessage> _sorted(List<ChatMessage> msgs) {
+    final sorted = [...msgs]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return sorted.reversed.toList();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   Future<void> _pickAndSendAttachment() async {
@@ -160,8 +352,20 @@ class _ConversationPageState extends State<ConversationPage> {
     final result = await FilePicker.platform.pickFiles();
     final file = result?.files.single;
     if (file == null || file.path == null) return;
+    final local = ChatMessage(
+      id: -DateTime.now().millisecondsSinceEpoch,
+      conversationId: widget.conversationId,
+      senderId: _myUserId,
+      content: '',
+      createdAt: DateTime.now(),
+      senderName: authService.user?.nickname ?? authService.username,
+      senderAvatar: authService.user?.avatarUrl ?? authService.avatarUrl,
+      status: MessageStatus.sending,
+    );
+    setState(() => _messages = _sorted([..._messages, local]));
+    _scrollToBottom();
     try {
-      final attachment = await _apiService.uploadAttachment(file.path!, token);
+      final attachment = await _apiService.uploadAttachmentSmart(file.path!, token);
       final msg = await _apiService.sendChatMessage(
         token,
         widget.conversationId,
@@ -169,33 +373,39 @@ class _ConversationPageState extends State<ConversationPage> {
         attachmentIds: [attachment.id],
       );
       if (!mounted) return;
-      setState(() => _messages = [..._messages, msg]);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
+      setState(() {
+        _messages = _replaceByClientId(local.clientId, msg);
       });
+      ChatLocalDb.instance.upsertMessage(msg);
+      _scrollToBottom();
       await _apiService.markConversationRead(token, widget.conversationId, msg.id);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
+      if (!mounted) return;
+      _markStatus(local.clientId, MessageStatus.failed);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
   Future<void> _onMessageLongPress(ChatMessage message) async {
     final l10n = AppLocalizations.of(context)!;
     final isMine = message.senderId == _myUserId;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (message.isFailed && token != null) ...[
+              ListTile(
+                leading: Icon(Icons.refresh, color: Theme.of(ctx).colorScheme.primary),
+                title: Text(l10n.chatResend),
+                onTap: () => Navigator.of(ctx).pop('resend'),
+              ),
+              const Divider(height: 1),
+            ],
             ListTile(
               leading: const Icon(Icons.reply),
               title: Text(l10n.chatQuoteReply),
@@ -220,6 +430,11 @@ class _ConversationPageState extends State<ConversationPage> {
     );
     if (action == null) return;
     switch (action) {
+      case 'resend':
+        if (token != null) {
+          _dispatchSend(message, token);
+        }
+        break;
       case 'reply':
         setState(() => _replyToId = message.id);
         break;
@@ -269,6 +484,7 @@ class _ConversationPageState extends State<ConversationPage> {
       setState(() {
         _messages = _messages.map((m) => m.id == updated.id ? updated : m).toList();
       });
+      ChatLocalDb.instance.upsertMessage(updated);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -300,6 +516,11 @@ class _ConversationPageState extends State<ConversationPage> {
           );
         }).toList();
       });
+      final deleted = _messages.firstWhere(
+        (m) => m.id == message.id,
+        orElse: () => message,
+      );
+      ChatLocalDb.instance.upsertMessage(deleted);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -623,6 +844,9 @@ class _ConversationPageState extends State<ConversationPage> {
       );
     }
 
+    final authToken =
+        Provider.of<AuthService>(context, listen: false).accessToken;
+
     return Column(
       children: [
         Expanded(
@@ -660,6 +884,9 @@ class _ConversationPageState extends State<ConversationPage> {
                 senderAvatar: message.senderAvatar,
                 replyPreview: replyTo,
                 onLongPress: () => _onMessageLongPress(message),
+                onRetry: (message.isFailed && authToken != null)
+                    ? () => _dispatchSend(message, authToken)
+                    : null,
               );
             },
           ),
@@ -727,6 +954,7 @@ class _MessageBubble extends StatelessWidget {
   final String? senderAvatar;
   final ChatMessage? replyPreview;
   final VoidCallback onLongPress;
+  final VoidCallback? onRetry;
 
   const _MessageBubble({
     required this.message,
@@ -735,6 +963,7 @@ class _MessageBubble extends StatelessWidget {
     required this.onLongPress,
     this.senderAvatar,
     this.replyPreview,
+    this.onRetry,
   });
 
   @override
@@ -846,9 +1075,18 @@ class _MessageBubble extends StatelessWidget {
                   ),
                   Padding(
                     padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
-                    child: Text(
-                      _formatTime(message.createdAt),
-                      style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _formatTime(message.createdAt),
+                          style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
+                        ),
+                        if (isMine && !message.isDeleted) ...[
+                          const SizedBox(width: 4),
+                          _SendStatusIndicator(message: message, onRetry: onRetry),
+                        ],
+                      ],
                     ),
                   ),
                 ],
@@ -865,6 +1103,49 @@ class _MessageBubble extends StatelessWidget {
     final h = time.hour.toString().padLeft(2, '0');
     final m = time.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+}
+
+/// Small inline indicator for local send state: a spinner while sending, a
+/// retry button when the send failed.
+class _SendStatusIndicator extends StatelessWidget {
+  final ChatMessage message;
+  final VoidCallback? onRetry;
+
+  const _SendStatusIndicator({required this.message, this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (message.isPending) {
+      return const SizedBox(
+        width: 12,
+        height: 12,
+        child: CircularProgressIndicator(strokeWidth: 1.6),
+      );
+    }
+    if (message.isFailed) {
+      return Tooltip(
+        message: 'Resend',
+        child: InkWell(
+          onTap: onRetry,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(
+              Icons.error_outline,
+              size: 13,
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ),
+      );
+    }
+    return Icon(
+      Icons.check,
+      size: 13,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
   }
 }
 

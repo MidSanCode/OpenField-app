@@ -12,6 +12,10 @@ class Post {
   final bool? isVerified;
   final List<Attachment> attachments;
   final int replyCount;
+  final int viewCount;
+  final int uniqueViews;
+  final Map<String, int> reactions;
+  final String myReaction;
 
   Post({
     required this.id,
@@ -25,11 +29,17 @@ class Post {
     this.isVerified,
     this.attachments = const [],
     this.replyCount = 0,
+    this.viewCount = 0,
+    this.uniqueViews = 0,
+    this.reactions = const {},
+    this.myReaction = '',
   });
 
   String get authorName => (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
 
   bool get authorVerified => isVerified ?? false;
+
+  int get reactionCount => reactions.values.fold(0, (sum, count) => sum + count);
 
   factory Post.fromJson(Map<String, dynamic> json) {
     final rawAttachments = json['attachments'];
@@ -39,6 +49,13 @@ class Post {
           .whereType<Map<String, dynamic>>()
           .map((a) => Attachment.fromJson(a))
           .toList();
+    }
+    final rawReactions = json['reactions'];
+    final reactions = <String, int>{};
+    if (rawReactions is Map) {
+      rawReactions.forEach((key, value) {
+        reactions[key.toString()] = (value as num?)?.toInt() ?? 0;
+      });
     }
     return Post(
       id: json['id'] as int,
@@ -52,6 +69,10 @@ class Post {
       isVerified: json['is_verified'] as bool?,
       attachments: attachments,
       replyCount: json['reply_count'] as int? ?? 0,
+      viewCount: json['view_count'] as int? ?? 0,
+      uniqueViews: json['unique_views'] as int? ?? 0,
+      reactions: reactions,
+      myReaction: json['my_reaction'] as String? ?? '',
     );
   }
 }

@@ -162,7 +162,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saved => '已保存';
 
   @override
-  String get editProfile => '编辑资料';
+  String get editProfile => '账号设置';
 
   @override
   String get localAccountHint => '管理员创建的账号在此登录,暂不支持自助注册。';
@@ -276,6 +276,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatReplying => '回复中...';
 
   @override
+  String get chatResend => '重新发送';
+
+  @override
   String get chatOwnerRole => '群主';
 
   @override
@@ -334,6 +337,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get replyEmpty => '暂无回复';
+
+  @override
+  String replyingToHint(Object name) {
+    return '正在回复 $name';
+  }
+
+  @override
+  String get replyAttachHint => '给回复附加文件';
 
   @override
   String get error => '错误';
