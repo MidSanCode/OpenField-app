@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/consent_request.dart';
@@ -66,6 +67,41 @@ Map<String, dynamic>? _decodeMap(http.Response response) {
     if (data is Map<String, dynamic>) return data;
   } catch (_) {}
   return null;
+}
+
+/// Infers the MIME type for an uploaded file from its extension so attachments
+/// are correctly classified (e.g. images previewed instead of shown as files).
+MediaType _mediaTypeFor(String filePath) {
+  final ext = filePath.split('.').last.toLowerCase();
+  const map = <String, String>{
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'bmp': 'image/bmp',
+    'svg': 'image/svg+xml',
+    'heic': 'image/heic',
+    'mp4': 'video/mp4',
+    'webm': 'video/webm',
+    'mov': 'video/quicktime',
+    'mkv': 'video/x-matroska',
+    'avi': 'video/x-msvideo',
+    'm4v': 'video/x-m4v',
+    'mp3': 'audio/mpeg',
+    'wav': 'audio/wav',
+    'ogg': 'audio/ogg',
+    'aac': 'audio/aac',
+    'm4a': 'audio/mp4',
+    'flac': 'audio/flac',
+    'opus': 'audio/opus',
+    'txt': 'text/plain',
+    'md': 'text/markdown',
+    'csv': 'text/csv',
+    'json': 'application/json',
+    'pdf': 'application/pdf',
+  };
+  return MediaType.parse(map[ext] ?? 'application/octet-stream');
 }
 
 class ApiService {
@@ -275,7 +311,11 @@ class ApiService {
   Future<Attachment> uploadAttachment(String filePath, String accessToken, {String visibility = 'public'}) async {
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/attachments'));
     request.headers['Authorization'] = 'Bearer $accessToken';
-    request.files.add(await http.MultipartFile.fromPath('file', filePath));
+    request.files.add(await http.MultipartFile.fromPath(
+      'file',
+      filePath,
+      contentType: _mediaTypeFor(filePath),
+    ));
     request.fields['visibility'] = visibility;
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);
