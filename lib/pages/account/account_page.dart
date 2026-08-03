@@ -334,10 +334,10 @@ class _AccountPageState extends State<AccountPage> {
             ),
           ],
         ),
-        if (user != null) ...[
-          _SettingsSection(
-            title: 'accountSettings'.tr(),
-            children: [
+        _SettingsSection(
+          title: 'accountSettings'.tr(),
+          children: [
+            if (user != null) ...[
               ListTile(
                 minLeadingWidth: 48,
                 leading: const Icon(Icons.article_outlined),
@@ -388,33 +388,33 @@ class _AccountPageState extends State<AccountPage> {
                 },
               ),
               const Divider(height: 1),
-              ListTile(
-                minLeadingWidth: 48,
-                leading: const Icon(Icons.account_balance_wallet_outlined),
-                title: Text('wallet'.tr()),
-                subtitle: Text(
-                  'walletHint'.tr(),
-                  style: const TextStyle(fontSize: 12),
-                ),
-                contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const WalletPage()),
-                  );
-                },
-              ),
-              const Divider(height: 1),
-              ListTile(
-                minLeadingWidth: 48,
-                leading: const Icon(Icons.logout),
-                title: Text('logout'.tr()),
-                contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                onTap: _logout,
-              ),
             ],
-          ),
-        ],
+            ListTile(
+              minLeadingWidth: 48,
+              leading: const Icon(Icons.account_balance_wallet_outlined),
+              title: Text('wallet'.tr()),
+              subtitle: Text(
+                'walletHint'.tr(),
+                style: const TextStyle(fontSize: 12),
+              ),
+              contentPadding: const EdgeInsets.only(left: 24, right: 17),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const WalletPage()),
+                );
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
+              minLeadingWidth: 48,
+              leading: const Icon(Icons.logout),
+              title: Text('logout'.tr()),
+              contentPadding: const EdgeInsets.only(left: 24, right: 17),
+              onTap: _logout,
+            ),
+          ],
+        ),
         const SizedBox(height: 24),
       ],
     );

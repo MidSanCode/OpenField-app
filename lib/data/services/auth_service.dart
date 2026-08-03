@@ -59,9 +59,36 @@ class AuthService extends ChangeNotifier {
         // Session resumed with an already-expired access token: try to refresh
         // right away, clearing the session if that is no longer possible.
         await refreshAccessToken();
+      } else if (_refreshToken == null) {
+        // Legacy session saved before the refresh feature shipped: it has no
+        // refresh token and no recorded expiry. Verify it against the server
+        // and clear it if the token is no longer accepted.
+        await _verifySession();
       } else {
         _startRefreshLoop();
       }
+    }
+  }
+
+  /// Validates the stored access token against the server. Used for legacy
+  /// sessions that have no refresh token to fall back on. Tolerates transient
+  /// network errors, but clears the session when the server rejects the token.
+  Future<void> _verifySession() async {
+    final token = _accessToken;
+    if (token == null) return;
+    try {
+      final user = await _api.getCurrentUser(token);
+      _user = user;
+      await setUser(username: user.username, email: user.email, avatarUrl: user.avatarUrl);
+      _startRefreshLoop();
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        await clearTokens();
+      } else {
+        _startRefreshLoop();
+      }
+    } catch (_) {
+      _startRefreshLoop();
     }
   }
 
@@ -207,9 +234,13 @@ class AuthService extends ChangeNotifier {
     _refreshTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
       final exp = _accessExpiresAt;
       if (exp == null) return;
-      // Refresh when within 5 minutes of expiry (or already past it).
+      // Refresh when within 5 minutes of expiry (or already past it). If the
+      // refresh is not possible or fails, the session is over: clear it so the
+      // user can log in again instead of being stuck with a dead token.
       if (exp.difference(DateTime.now()) < const Duration(minutes: 5)) {
-        await refreshAccessToken();
+        if (!await refreshAccessToken()) {
+          await clearTokens();
+        }
       }
     });
   }
