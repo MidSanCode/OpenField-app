@@ -4,7 +4,7 @@ import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/chat/conversation_page.dart';
 import 'package:openfield/pages/chat/consent_requests_page.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
@@ -85,7 +85,6 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _createGroup() async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -93,24 +92,24 @@ class _ChatPageState extends State<ChatPage> {
     final title = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.chatGroupCreate),
+        title: Text('chatGroupCreate'.tr()),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 100,
           decoration: InputDecoration(
-            labelText: l10n.groupTitle,
-            hintText: l10n.groupTitleHint,
+            labelText: 'groupTitle'.tr(),
+            hintText: 'groupTitleHint'.tr(),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(l10n.cancel),
+            child: Text('cancel'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: Text(l10n.confirm),
+            child: Text('confirm'.tr()),
           ),
         ],
       ),
@@ -134,14 +133,13 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.chat),
+        title: Text('chat'.tr()),
         actions: [
           IconButton(
             onPressed: _openRequests,
-            tooltip: l10n.chatRequests,
+            tooltip: 'chatRequests'.tr(),
             icon: Stack(
               clipBehavior: Clip.none,
               children: [
@@ -173,7 +171,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
           IconButton(
             onPressed: _openStartChat,
-            tooltip: l10n.chatStartPrivate,
+            tooltip: 'chatStartPrivate'.tr(),
             icon: const Icon(Icons.chat_bubble_outline),
           ),
           PopupMenuButton<String>(
@@ -182,17 +180,17 @@ class _ChatPageState extends State<ChatPage> {
               if (value == 'private') _openStartChat();
             },
             itemBuilder: (context) => [
-              PopupMenuItem(value: 'private', child: Text(l10n.chatStartPrivate)),
-              PopupMenuItem(value: 'group', child: Text(l10n.chatNewGroup)),
+              PopupMenuItem(value: 'private', child: Text('chatStartPrivate'.tr())),
+              PopupMenuItem(value: 'group', child: Text('chatNewGroup'.tr())),
             ],
           ),
         ],
       ),
-      body: _buildBody(l10n),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildBody(AppLocalizations l10n) {
+  Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -201,9 +199,9 @@ class _ChatPageState extends State<ChatPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(l10n.loadFailed),
+            Text('loadFailed'.tr()),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _load, child: Text(l10n.retry)),
+            ElevatedButton(onPressed: _load, child: Text('retry'.tr())),
           ],
         ),
       );
@@ -216,12 +214,12 @@ class _ChatPageState extends State<ChatPage> {
             Icon(Icons.chat_bubble_outline,
                 size: 48, color: Theme.of(context).colorScheme.outline),
             const SizedBox(height: 12),
-            Text(l10n.chatEmpty),
+            Text('chatEmpty'.tr()),
             const SizedBox(height: 16),
             FilledButton.tonalIcon(
               onPressed: _openStartChat,
               icon: const Icon(Icons.add),
-              label: Text(l10n.chatStartPrivate),
+              label: Text('chatStartPrivate'.tr()),
             ),
           ],
         ),
@@ -253,10 +251,9 @@ class _ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final l10n = AppLocalizations.of(context)!;
     final last = conversation.lastMessage;
     final time = last != null ? _formatTime(last.createdAt) : '';
-    final preview = _buildPreview(context, l10n, last);
+    final preview = _buildPreview(context, last);
 
     return InkWell(
       onTap: onTap,
@@ -331,12 +328,12 @@ class _ConversationTile extends StatelessWidget {
     );
   }
 
-  Widget _buildPreview(BuildContext context, AppLocalizations l10n, ChatMessage? last) {
+  Widget _buildPreview(BuildContext context, ChatMessage? last) {
     final theme = Theme.of(context);
     if (last == null) return const SizedBox.shrink();
     String text;
     if (last.isDeleted) {
-      text = l10n.messageDeleted;
+      text = 'messageDeleted'.tr();
     } else if (conversation.isGroup && last.displayName.isNotEmpty) {
       text = '${last.displayName}: ${last.content}';
     } else {

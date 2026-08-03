@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 /// Lets the user search for another user to start a private chat with, or
 /// (when [inviteToGroup] is set) invite them into a group conversation.
@@ -77,13 +77,12 @@ class _StartChatPageState extends State<StartChatPage> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
-    final l10n = AppLocalizations.of(context)!;
     try {
       if (widget.inviteToGroup != null) {
         await _apiService.inviteToGroup(token, widget.inviteToGroup!, user.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.chatInviteSent)),
+            SnackBar(content: Text('chatInviteSent'.tr())),
           );
           Navigator.of(context).pop();
         }
@@ -91,7 +90,7 @@ class _StartChatPageState extends State<StartChatPage> {
         await _apiService.startPrivateChat(token, user.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.chatRequestSent)),
+            SnackBar(content: Text('chatRequestSent'.tr())),
           );
           Navigator.of(context).pop();
         }
@@ -105,9 +104,8 @@ class _StartChatPageState extends State<StartChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.chatSearchUsers)),
+      appBar: AppBar(title: Text('chatSearchUsers'.tr())),
       body: Column(
         children: [
           Padding(
@@ -116,7 +114,7 @@ class _StartChatPageState extends State<StartChatPage> {
               controller: _queryController,
               autofocus: true,
               decoration: InputDecoration(
-                hintText: l10n.chatSearchHint,
+                hintText: 'chatSearchHint'.tr(),
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _queryController.text.isNotEmpty
                     ? IconButton(
@@ -138,24 +136,24 @@ class _StartChatPageState extends State<StartChatPage> {
               onChanged: _onQueryChanged,
             ),
           ),
-          Expanded(child: _buildResults(l10n)),
+          Expanded(child: _buildResults()),
         ],
       ),
     );
   }
 
-  Widget _buildResults(AppLocalizations l10n) {
+  Widget _buildResults() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(l10n.loadFailed),
+            Text('loadFailed'.tr()),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => _search(_queryController.text),
-              child: Text(l10n.retry),
+              child: Text('retry'.tr()),
             ),
           ],
         ),
@@ -164,7 +162,7 @@ class _StartChatPageState extends State<StartChatPage> {
     if (!_searched) {
       return Center(
         child: Text(
-          l10n.chatSearchHint,
+          'chatSearchHint'.tr(),
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -172,7 +170,7 @@ class _StartChatPageState extends State<StartChatPage> {
       );
     }
     if (_users.isEmpty) {
-      return Center(child: Text(l10n.chatNoUsers));
+      return Center(child: Text('chatNoUsers'.tr()));
     }
     return ListView.separated(
       itemCount: _users.length,

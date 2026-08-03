@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -31,7 +31,6 @@ class _RegisterPageState extends State<RegisterPage> {
     if (username.isEmpty || nickname.isEmpty) return;
 
     setState(() => _isSubmitting = true);
-    final l10n = AppLocalizations.of(context)!;
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       await authService.register(username, nickname, bio: bio);
@@ -39,7 +38,7 @@ class _RegisterPageState extends State<RegisterPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().contains('taken') ? l10n.usernameTaken : l10n.registrationFailed)),
+          SnackBar(content: Text(e.toString().contains('taken') ? 'usernameTaken'.tr() : 'registrationFailed'.tr())),
         );
       }
     } finally {
@@ -49,23 +48,22 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.completeRegistration)),
+      appBar: AppBar(title: Text('completeRegistration'.tr())),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 16),
-            Text(l10n.registerHint, style: theme.textTheme.bodyMedium),
+            Text('registerHint'.tr(), style: theme.textTheme.bodyMedium),
             const SizedBox(height: 24),
             TextField(
               controller: _usernameController,
               decoration: InputDecoration(
-                labelText: l10n.username,
+                labelText: 'username'.tr(),
                 border: const OutlineInputBorder(),
               ),
             ),
@@ -73,7 +71,7 @@ class _RegisterPageState extends State<RegisterPage> {
              TextField(
                controller: _nicknameController,
                decoration: InputDecoration(
-                 labelText: l10n.nickname,
+                 labelText: 'nickname'.tr(),
                  border: const OutlineInputBorder(),
                ),
              ),
@@ -81,8 +79,8 @@ class _RegisterPageState extends State<RegisterPage> {
              TextField(
                controller: _bioController,
                decoration: InputDecoration(
-                 labelText: l10n.bio,
-                 hintText: l10n.bioHint,
+                 labelText: 'bio'.tr(),
+                 hintText: 'bioHint'.tr(),
                  border: const OutlineInputBorder(),
                ),
                maxLines: 3,
@@ -93,7 +91,7 @@ class _RegisterPageState extends State<RegisterPage> {
               icon: _isSubmitting
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.check),
-              label: Text(l10n.register),
+              label: Text('register'.tr()),
             ),
           ],
         ),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.navigationShell});
@@ -46,7 +46,6 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return NavigationRail(
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected,
@@ -54,7 +53,7 @@ class _Sidebar extends StatelessWidget {
       leading: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Text(
-          l10n.appTitle,
+          'appTitle'.tr(),
           style: Theme.of(context).textTheme.titleMedium,
           textAlign: TextAlign.center,
         ),
@@ -63,17 +62,17 @@ class _Sidebar extends StatelessWidget {
         NavigationRailDestination(
           icon: const Icon(Icons.home_outlined),
           selectedIcon: const Icon(Icons.home),
-          label: Text(l10n.posts),
+          label: Text('posts'.tr()),
         ),
         NavigationRailDestination(
           icon: const Icon(Icons.chat_outlined),
           selectedIcon: const Icon(Icons.chat),
-          label: Text(l10n.chat),
+          label: Text('chat'.tr()),
         ),
         NavigationRailDestination(
           icon: _AccountAvatarIcon(size: 24),
           selectedIcon: _AccountAvatarIcon(size: 24, selected: true),
-          label: Text(l10n.account),
+          label: Text('account'.tr()),
         ),
       ],
     );
@@ -115,7 +114,6 @@ class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return NavigationBar(
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected,
@@ -123,17 +121,17 @@ class _BottomBar extends StatelessWidget {
         NavigationDestination(
           icon: const Icon(Icons.home_outlined),
           selectedIcon: const Icon(Icons.home),
-          label: l10n.posts,
+          label: 'posts'.tr(),
         ),
         NavigationDestination(
           icon: const Icon(Icons.chat_outlined),
           selectedIcon: const Icon(Icons.chat),
-          label: l10n.chat,
+          label: 'chat'.tr(),
         ),
         NavigationDestination(
           icon: const _AccountAvatarIcon(size: 24),
           selectedIcon: const _AccountAvatarIcon(size: 24, selected: true),
-          label: l10n.account,
+          label: 'account'.tr(),
         ),
       ],
     );

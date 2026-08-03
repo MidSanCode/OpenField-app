@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logging/logging.dart';
 import 'package:media_kit/media_kit.dart';
@@ -16,7 +16,6 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
 import 'package:openfield/core/theme/app_theme.dart';
 
 void main() {
@@ -62,7 +61,9 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     _router = createRouter(_authService, appNavigatorKey);
     _setupDeepLinks();
     _authService.addListener(_syncRealtimeConnection);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncRealtimeConnection());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _syncRealtimeConnection(),
+    );
   }
 
   /// Connects the realtime WebSocket while authenticated, disconnecting it
@@ -145,50 +146,58 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
       }
     });
   }
+
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: _authService),
-        ChangeNotifierProvider.value(value: _settingsService),
-      ],
-      child: Consumer<SettingsService>(
-        builder: (context, settings, _) {
-          return MaterialApp.router(
-            title: 'OpenField',
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
-            themeMode: settings.themeMode,
-            locale: settings.locale != null ? Locale(settings.locale!) : null,
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
+    return FutureBuilder<void>(
+      future: _settingsService.ready,
+      builder: (context, snapshot) {
+        final savedLocale = _settingsService.locale;
+        return EasyLocalization(
+          supportedLocales: const [Locale('en'), Locale('zh')],
+          path: 'assets/translations',
+          fallbackLocale: const Locale('en'),
+          startLocale: savedLocale != null ? Locale(savedLocale) : null,
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: _authService),
+              ChangeNotifierProvider.value(value: _settingsService),
             ],
-            supportedLocales: AppLocalizations.supportedLocales,
-            routerDelegate: _router.routerDelegate,
-            routeInformationParser: _router.routeInformationParser,
-            routeInformationProvider: _router.routeInformationProvider,
-            builder: (context, child) {
-              final bgPath = settings.backgroundImagePath;
-              if (bgPath == null) return child!;
-              return Stack(
-                children: [
-                  Positioned.fill(
-                    child: Image.file(
-                      File(bgPath),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                    ),
-                  ),
-                  child!,
-                ],
-              );
-            },
-          );
-        },
-      ),
+            child: Consumer<SettingsService>(
+              builder: (context, settings, _) {
+                return MaterialApp.router(
+                  title: 'OpenField',
+                  theme: AppTheme.light,
+                  darkTheme: AppTheme.dark,
+                  themeMode: settings.themeMode,
+                  locale: context.locale,
+                  localizationsDelegates: context.localizationDelegates,
+                  supportedLocales: context.supportedLocales,
+                  routerDelegate: _router.routerDelegate,
+                  routeInformationParser: _router.routeInformationParser,
+                  routeInformationProvider: _router.routeInformationProvider,
+                  builder: (context, child) {
+                    final bgPath = settings.backgroundImagePath;
+                    if (bgPath == null) return child!;
+                    return Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Image.file(
+                            File(bgPath),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                          ),
+                        ),
+                        child!,
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }

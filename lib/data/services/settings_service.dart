@@ -24,8 +24,12 @@ class SettingsService extends ChangeNotifier {
   String? get backgroundImagePath => _backgroundImagePath;
 
   SettingsService() {
-    _load();
+    ready = _load();
   }
+
+  /// Completes once [SharedPreferences] has been read. The app awaits this
+  /// before building so the persisted locale is applied on startup.
+  late final Future<void> ready;
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();

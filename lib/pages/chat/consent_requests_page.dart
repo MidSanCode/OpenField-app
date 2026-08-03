@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/data/models/consent_request.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 class ConsentRequestsPage extends StatefulWidget {
   const ConsentRequestsPage({super.key});
@@ -87,23 +87,22 @@ class _ConsentRequestsPageState extends State<ConsentRequestsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.chatRequests)),
-      body: _buildBody(l10n),
+      appBar: AppBar(title: Text('chatRequests'.tr())),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildBody(AppLocalizations l10n) {
+  Widget _buildBody() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(l10n.loadFailed),
+            Text('loadFailed'.tr()),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _load, child: Text(l10n.retry)),
+            ElevatedButton(onPressed: _load, child: Text('retry'.tr())),
           ],
         ),
       );
@@ -116,7 +115,7 @@ class _ConsentRequestsPageState extends State<ConsentRequestsPage> {
             Icon(Icons.mark_email_read_outlined,
                 size: 48, color: Theme.of(context).colorScheme.outline),
             const SizedBox(height: 12),
-            Text(l10n.chatRequestsEmpty),
+            Text('chatRequestsEmpty'.tr()),
           ],
         ),
       );
@@ -142,8 +141,8 @@ class _ConsentRequestsPageState extends State<ConsentRequestsPage> {
             title: Text(request.requesterDisplay),
             subtitle: Text(
               request.isGroupInvite
-                  ? '${l10n.chatRequestTypeGroup}: ${request.groupTitle ?? ''}'
-                  : l10n.chatRequestTypePrivate,
+                  ? '${'chatRequestTypeGroup'.tr()}}: ${request.groupTitle ?? ''}'
+                  : 'chatRequestTypePrivate'.tr(),
             ),
             isThreeLine: false,
             trailing: Row(
@@ -151,11 +150,11 @@ class _ConsentRequestsPageState extends State<ConsentRequestsPage> {
               children: [
                 TextButton(
                   onPressed: () => _decline(request),
-                  child: Text(l10n.chatRequestDecline),
+                  child: Text('chatRequestDecline'.tr()),
                 ),
                 FilledButton(
                   onPressed: () => _accept(request),
-                  child: Text(l10n.chatRequestAccept),
+                  child: Text('chatRequestAccept'.tr()),
                 ),
               ],
             ),

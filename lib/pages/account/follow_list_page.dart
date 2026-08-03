@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
@@ -80,29 +80,28 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_tabController.animation?.value == 0.0 ? l10n.followers : l10n.following),
+        title: Text(_tabController.animation?.value == 0.0 ? 'followers'.tr() : 'following'.tr()),
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            Tab(text: l10n.followers),
-            Tab(text: l10n.following),
+            Tab(text: 'followers'.tr()),
+            Tab(text: 'following'.tr()),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildUserList(_followers, l10n),
-          _buildUserList(_following, l10n),
+          _buildUserList(_followers),
+          _buildUserList(_following),
         ],
       ),
     );
   }
 
-  Widget _buildUserList(List<User> users, AppLocalizations l10n) {
+  Widget _buildUserList(List<User> users) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -111,16 +110,16 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(l10n.loadFailed, textAlign: TextAlign.center),
+            Text('loadFailed'.tr(), textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            FilledButton(onPressed: _loadCurrentTab, child: Text(l10n.retry)),
+            FilledButton(onPressed: _loadCurrentTab, child: Text('retry'.tr())),
           ],
         ),
       );
     }
     if (users.isEmpty) {
       return Center(
-        child: Text(l10n.noPosts),
+        child: Text('noPosts'.tr()),
       );
     }
     return ListView.builder(

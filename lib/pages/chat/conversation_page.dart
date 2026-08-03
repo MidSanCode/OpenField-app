@@ -10,7 +10,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/chat_local_db.dart';
 import 'package:openfield/data/services/realtime_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/markdown_content.dart';
@@ -388,7 +388,6 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   Future<void> _onMessageLongPress(ChatMessage message) async {
-    final l10n = AppLocalizations.of(context)!;
     final isMine = message.senderId == _myUserId;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
@@ -401,26 +400,26 @@ class _ConversationPageState extends State<ConversationPage> {
             if (message.isFailed && token != null) ...[
               ListTile(
                 leading: Icon(Icons.refresh, color: Theme.of(ctx).colorScheme.primary),
-                title: Text(l10n.chatResend),
+                title: Text('chatResend'.tr()),
                 onTap: () => Navigator.of(ctx).pop('resend'),
               ),
               const Divider(height: 1),
             ],
             ListTile(
               leading: const Icon(Icons.reply),
-              title: Text(l10n.chatQuoteReply),
+              title: Text('chatQuoteReply'.tr()),
               onTap: () => Navigator.of(ctx).pop('reply'),
             ),
             if (isMine && !message.isDeleted) ...[
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
-                title: Text(l10n.edit),
+                title: Text('edit'.tr()),
                 onTap: () => Navigator.of(ctx).pop('edit'),
               ),
               ListTile(
                 leading: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error),
-                title: Text(l10n.delete, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                title: Text('delete'.tr(), style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
                 onTap: () => Navigator.of(ctx).pop('delete'),
               ),
             ],
@@ -448,7 +447,6 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   Future<void> _editMessage(ChatMessage message) async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -456,18 +454,18 @@ class _ConversationPageState extends State<ConversationPage> {
     final content = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.edit),
+        title: Text('edit'.tr()),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 5000,
-          decoration: InputDecoration(hintText: l10n.message),
+          decoration: InputDecoration(hintText: 'message'.tr()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(l10n.cancel)),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('cancel'.tr())),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: Text(l10n.save),
+            child: Text('save'.tr()),
           ),
         ],
       ),
@@ -529,7 +527,6 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   Future<void> _editNote() async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -537,18 +534,18 @@ class _ConversationPageState extends State<ConversationPage> {
     final note = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.chatNote),
+        title: Text('chatNote'.tr()),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 100,
-          decoration: InputDecoration(hintText: l10n.chatNote),
+          decoration: InputDecoration(hintText: 'chatNote'.tr()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(l10n.cancel)),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('cancel'.tr())),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: Text(l10n.save),
+            child: Text('save'.tr()),
           ),
         ],
       ),
@@ -582,7 +579,6 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   Future<void> _editGroupNickname() async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -590,18 +586,18 @@ class _ConversationPageState extends State<ConversationPage> {
     final nickname = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.chatGroupNickname),
+        title: Text('chatGroupNickname'.tr()),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 100,
-          decoration: InputDecoration(hintText: l10n.chatGroupNickname),
+          decoration: InputDecoration(hintText: 'chatGroupNickname'.tr()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(l10n.cancel)),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('cancel'.tr())),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: Text(l10n.save),
+            child: Text('save'.tr()),
           ),
         ],
       ),
@@ -635,7 +631,6 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   Future<void> _showMembers() async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -657,14 +652,14 @@ class _ConversationPageState extends State<ConversationPage> {
                   child: Row(
                     children: [
                       Text(
-                        l10n.chatGroupMembers,
+                        'chatGroupMembers'.tr(),
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const Spacer(),
                       if (canManage)
                         IconButton(
                           icon: const Icon(Icons.person_add_alt_outlined),
-                          tooltip: l10n.chatGroupInvite,
+                          tooltip: 'chatGroupInvite'.tr(),
                           onPressed: () async {
                             Navigator.of(ctx).pop();
                             await Navigator.of(context).push(
@@ -696,12 +691,12 @@ class _ConversationPageState extends State<ConversationPage> {
                               : null,
                         ),
                         title: Text(m.displayName),
-                        subtitle: Text(_roleLabel(l10n, m.role)),
+                        subtitle: Text(_roleLabel(m.role)),
                         trailing: canManage && m.role != 'owner'
                             ? IconButton(
                                 icon: Icon(Icons.person_remove_outlined,
                                     color: Theme.of(context).colorScheme.error),
-                                tooltip: l10n.delete,
+                                tooltip: 'delete'.tr(),
                                 onPressed: () async {
                                   await _removeMember(m.userId);
                                 },
@@ -719,14 +714,14 @@ class _ConversationPageState extends State<ConversationPage> {
     );
   }
 
-  String _roleLabel(AppLocalizations l10n, String role) {
+  String _roleLabel(String role) {
     switch (role) {
       case 'owner':
         return 'Owner';
       case 'admin':
         return 'Admin';
       default:
-        return l10n.normalUser;
+        return 'normalUser'.tr();
     }
   }
 
@@ -748,19 +743,18 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   Future<void> _leaveGroup() async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.chatGroupLeaveConfirm),
+        title: Text('chatGroupLeaveConfirm'.tr()),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.cancel)),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('cancel'.tr())),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.confirm),
+            child: Text('confirm'.tr()),
           ),
         ],
       ),
@@ -778,7 +772,6 @@ class _ConversationPageState extends State<ConversationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final conv = _conversation;
     final isGroup = conv?.isGroup ?? false;
 
@@ -789,7 +782,7 @@ class _ConversationPageState extends State<ConversationPage> {
           if (isGroup)
             IconButton(
               icon: const Icon(Icons.group_outlined),
-              tooltip: l10n.chatGroupMembers,
+              tooltip: 'chatGroupMembers'.tr(),
               onPressed: _showMembers,
             ),
           PopupMenuButton<String>(
@@ -808,14 +801,14 @@ class _ConversationPageState extends State<ConversationPage> {
             },
             itemBuilder: (context) => [
               if (!isGroup)
-                PopupMenuItem(value: 'note', child: Text(l10n.chatNote)),
+                PopupMenuItem(value: 'note', child: Text('chatNote'.tr())),
               if (isGroup)
-                PopupMenuItem(value: 'nickname', child: Text(l10n.chatGroupNickname)),
+                PopupMenuItem(value: 'nickname', child: Text('chatGroupNickname'.tr())),
               if (isGroup)
                 PopupMenuItem(
                   value: 'leave',
                   child: Text(
-                    l10n.chatGroupLeave,
+                    'chatGroupLeave'.tr(),
                     style: TextStyle(color: Theme.of(context).colorScheme.error),
                   ),
                 ),
@@ -823,11 +816,11 @@ class _ConversationPageState extends State<ConversationPage> {
           ),
         ],
       ),
-      body: _buildBody(l10n),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildBody(AppLocalizations l10n) {
+  Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -836,9 +829,9 @@ class _ConversationPageState extends State<ConversationPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(l10n.loadFailed),
+            Text('loadFailed'.tr()),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _load, child: Text(l10n.retry)),
+            ElevatedButton(onPressed: _load, child: Text('retry'.tr())),
           ],
         ),
       );
@@ -896,12 +889,12 @@ class _ConversationPageState extends State<ConversationPage> {
             message: _messages.where((m) => m.id == _replyToId).firstOrNull,
             onCancel: () => setState(() => _replyToId = null),
           ),
-        _buildInputBar(l10n),
+        _buildInputBar(),
       ],
     );
   }
 
-  Widget _buildInputBar(AppLocalizations l10n) {
+  Widget _buildInputBar() {
     return SafeArea(
       top: false,
       child: Container(
@@ -912,7 +905,7 @@ class _ConversationPageState extends State<ConversationPage> {
             IconButton(
               onPressed: _pickAndSendAttachment,
               icon: const Icon(Icons.attach_file),
-              tooltip: l10n.attachFile,
+              tooltip: 'attachFile'.tr(),
             ),
             Expanded(
               child: TextField(
@@ -921,7 +914,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 maxLines: 5,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
-                  hintText: l10n.message,
+                  hintText: 'message'.tr(),
                   isDense: true,
                   filled: true,
                   fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -938,7 +931,7 @@ class _ConversationPageState extends State<ConversationPage> {
             IconButton.filled(
               onPressed: _send,
               icon: const Icon(Icons.send),
-              tooltip: l10n.send,
+              tooltip: 'send'.tr(),
             ),
           ],
         ),
@@ -969,7 +962,6 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final l10n = AppLocalizations.of(context)!;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1050,7 +1042,7 @@ class _MessageBubble extends StatelessWidget {
                         ],
                         if (message.isDeleted)
                           Text(
-                            l10n.messageDeleted,
+                            'messageDeleted'.tr(),
                             style: theme.textTheme.bodyMedium?.copyWith(
                               fontStyle: FontStyle.italic,
                               color: theme.colorScheme.onSurfaceVariant,
@@ -1067,7 +1059,7 @@ class _MessageBubble extends StatelessWidget {
                         ],
                         if (message.isEdited)
                           Text(
-                            l10n.chatEdited,
+                            'chatEdited'.tr(),
                             style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
                           ),
                       ],

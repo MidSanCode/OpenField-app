@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/media/media_preview_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 
@@ -49,21 +49,20 @@ class _AttachmentsPageState extends State<AttachmentsPage> {
   }
 
   Future<void> _delete(Attachment att) async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.deleteAttachmentConfirm),
+        title: Text('deleteAttachmentConfirm'.tr()),
         content: Text(att.originalName),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l10n.cancel),
+            child: Text('cancel'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.delete),
+            child: Text('delete'.tr()),
           ),
         ],
       ),
@@ -83,15 +82,14 @@ class _AttachmentsPageState extends State<AttachmentsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.myAttachments)),
-      body: _buildBody(l10n),
+      appBar: AppBar(title: Text('myAttachments'.tr())),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildBody(AppLocalizations l10n) {
+  Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -100,15 +98,15 @@ class _AttachmentsPageState extends State<AttachmentsPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(l10n.loadFailed),
+            Text('loadFailed'.tr()),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _load, child: Text(l10n.retry)),
+            ElevatedButton(onPressed: _load, child: Text('retry'.tr())),
           ],
         ),
       );
     }
     if (_attachments.isEmpty) {
-      return Center(child: Text(l10n.noAttachments));
+      return Center(child: Text('noAttachments'.tr()));
     }
     return RefreshIndicator(
       onRefresh: _load,

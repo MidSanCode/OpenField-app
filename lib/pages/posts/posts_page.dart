@@ -8,7 +8,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/draft_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
@@ -99,11 +99,10 @@ class _PostsPageState extends State<PostsPage> {
   }
 
   void _openComposer() {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     if (!authService.isAuthenticated) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.loginWithOIDC)),
+        SnackBar(content: Text('loginWithOIDC'.tr())),
       );
       return;
     }
@@ -174,20 +173,19 @@ class _PostsPageState extends State<PostsPage> {
   }
 
   Future<bool> _deletePost(Post post) async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.deletePostConfirm),
+        title: Text('deletePostConfirm'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l10n.cancel),
+            child: Text('cancel'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.delete),
+            child: Text('delete'.tr()),
           ),
         ],
       ),
@@ -209,21 +207,20 @@ class _PostsPageState extends State<PostsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final currentUserId = Provider.of<AuthService>(context).user?.id;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.appTitle)),
+      appBar: AppBar(title: Text('appTitle'.tr())),
       floatingActionButton: FloatingActionButton(
         onPressed: _openComposer,
-        tooltip: l10n.createPost,
+        tooltip: 'createPost'.tr(),
         child: const Icon(Icons.edit),
       ),
-      body: _buildBody(l10n, currentUserId),
+      body: _buildBody(currentUserId),
     );
   }
 
-  Widget _buildBody(AppLocalizations l10n, int? currentUserId) {
+  Widget _buildBody(int? currentUserId) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -233,16 +230,16 @@ class _PostsPageState extends State<PostsPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(l10n.loadFailed),
+            Text('loadFailed'.tr()),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadPosts, child: Text(l10n.retry)),
+            ElevatedButton(onPressed: _loadPosts, child: Text('retry'.tr())),
           ],
         ),
       );
     }
 
     if (_posts.isEmpty) {
-      return Center(child: Text(l10n.noPosts));
+      return Center(child: Text('noPosts'.tr()));
     }
 
     return RefreshIndicator(
@@ -272,7 +269,7 @@ class _PostsPageState extends State<PostsPage> {
             },
             onUnauthenticated: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(AppLocalizations.of(context)!.loginWithOIDC)),
+                SnackBar(content: Text('loginWithOIDC'.tr())),
               );
             },
           );
@@ -333,7 +330,6 @@ class _ComposerDialogState extends State<_ComposerDialog> {
   }
 
   Future<void> _saveDraft() async {
-    final l10n = AppLocalizations.of(context)!;
     final localPaths = _media
         .where((m) => m.localPath != null)
         .map((m) => m.localPath!)
@@ -341,26 +337,25 @@ class _ComposerDialogState extends State<_ComposerDialog> {
     await _draftService.save(_controller.text, localPaths);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.draftSaved)),
+        SnackBar(content: Text('draftSaved'.tr())),
       );
     }
   }
 
   /// Loads a previously saved draft into the composer, or offers to discard it.
   Future<void> _openDrafts() async {
-    final l10n = AppLocalizations.of(context)!;
     final draft = await _draftService.load();
     if (!mounted) return;
     if (draft == null || (draft.content.isEmpty && draft.images.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.noDraft)),
+        SnackBar(content: Text('noDraft'.tr())),
       );
       return;
     }
     final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.drafts),
+        title: Text('drafts'.tr()),
         content: Text(
           draft.content.isEmpty ? '${draft.images.length} image(s)' : draft.content,
           maxLines: 4,
@@ -369,11 +364,11 @@ class _ComposerDialogState extends State<_ComposerDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop('discard'),
-            child: Text(l10n.discardDraft),
+            child: Text('discardDraft'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop('load'),
-            child: Text(l10n.loadDraft),
+            child: Text('loadDraft'.tr()),
           ),
         ],
       ),
@@ -412,7 +407,6 @@ class _ComposerDialogState extends State<_ComposerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final isBusy = _isSubmitting || widget.isPosting;
 
@@ -429,19 +423,19 @@ class _ComposerDialogState extends State<_ComposerDialog> {
               Row(
                 children: [
                   Text(
-                    widget.isEditing ? l10n.editPost : l10n.createPost,
+                    widget.isEditing ? 'editPost'.tr() : 'createPost'.tr(),
                     style: theme.textTheme.titleLarge,
                   ),
                   const Spacer(),
                   TextButton(
                     onPressed: isBusy ? null : _close,
-                    child: Text(l10n.cancel),
+                    child: Text('cancel'.tr()),
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
                     onPressed: isBusy ? null : _submit,
                     icon: const Icon(Icons.send, size: 18),
-                    label: Text(widget.isEditing ? l10n.save : l10n.post),
+                    label: Text(widget.isEditing ? 'save'.tr() : 'post'.tr()),
                   ),
                 ],
               ),
@@ -455,7 +449,7 @@ class _ComposerDialogState extends State<_ComposerDialog> {
                   autofocus: !widget.isEditing,
                   textAlignVertical: TextAlignVertical.top,
                   decoration: InputDecoration(
-                    hintText: l10n.postContent,
+                    hintText: 'postContent'.tr(),
                     border: const OutlineInputBorder(),
                     alignLabelWithHint: true,
                   ),
@@ -504,18 +498,18 @@ class _ComposerDialogState extends State<_ComposerDialog> {
                   IconButton(
                     onPressed: isBusy ? null : _pickImages,
                     icon: const Icon(Icons.attach_file),
-                    tooltip: l10n.addImages,
+                    tooltip: 'addImages'.tr(),
                   ),
                   IconButton(
                     onPressed: isBusy ? null : _saveDraft,
                     icon: const Icon(Icons.save_outlined),
-                    tooltip: l10n.save,
+                    tooltip: 'save'.tr(),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: isBusy ? null : _openDrafts,
                     icon: const Icon(Icons.drafts_outlined),
-                    tooltip: l10n.drafts,
+                    tooltip: 'drafts'.tr(),
                   ),
                   if (isBusy)
                     const Padding(

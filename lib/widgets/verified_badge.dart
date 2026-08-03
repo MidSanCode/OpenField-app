@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 /// A small blue verified badge shown next to verified usernames.
 class VerifiedBadge extends StatelessWidget {
@@ -9,11 +9,9 @@ class VerifiedBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
     final icon = Icon(Icons.verified, size: size, color: Colors.lightBlue);
-    if (l10n == null) return icon;
     return Tooltip(
-      message: l10n.verifiedAccount,
+      message: 'verifiedAccount'.tr(),
       child: icon,
     );
   }

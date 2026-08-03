@@ -1,5 +1,4 @@
 {
-  "@@locale": "zh",
   "appTitle": "旷野",
   "posts": "帖子",
   "chat": "聊天",
@@ -137,5 +136,8 @@
   "follow": "关注",
   "unfollow": "取消关注",
   "followers": "粉丝",
-  "following": "正在关注"
+  "following": "正在关注",
+  "chatResend": "重新发送",
+  "replyingToHint": "正在回复 {name}",
+  "replyAttachHint": "给回复附加文件"
 }

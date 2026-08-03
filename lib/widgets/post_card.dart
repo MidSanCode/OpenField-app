@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:openfield/data/models/post.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/post_reaction_bar.dart';
@@ -108,12 +108,12 @@ class _PostCardState extends State<PostCard> {
                     itemBuilder: (context) => [
                       PopupMenuItem(
                         value: 'edit',
-                        child: Text(AppLocalizations.of(context)!.edit),
+                        child: Text('edit'.tr()),
                       ),
                       PopupMenuItem(
                         value: 'delete',
                         child: Text(
-                          AppLocalizations.of(context)!.delete,
+                          'delete'.tr(),
                           style: TextStyle(color: Theme.of(context).colorScheme.error),
                         ),
                       ),
@@ -131,7 +131,7 @@ class _PostCardState extends State<PostCard> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Text(
-                    AppLocalizations.of(context)!.showMore,
+                    'showMore'.tr(),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w600,
@@ -162,7 +162,7 @@ class _PostCardState extends State<PostCard> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            post.replyCount > 0 ? '${post.replyCount}' : AppLocalizations.of(context)!.reply,
+                            post.replyCount > 0 ? '${post.replyCount}' : 'reply'.tr(),
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),

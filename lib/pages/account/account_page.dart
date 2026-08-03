@@ -8,7 +8,7 @@ import 'package:openfield/core/widgets/error_dialog.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
 import 'package:openfield/pages/account/my_posts_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
@@ -79,16 +79,15 @@ class _AccountPageState extends State<AccountPage> {
     // OAuth account-binding callback (no access_token is issued).
     final bindResult = uri.queryParameters['bind'];
     if (bindResult != null) {
-      final l10n = AppLocalizations.of(context)!;
       await authService.fetchCurrentUser();
       if (mounted) {
         final success = bindResult == 'success';
         final name = uri.queryParameters['name'];
         final msg = success
             ? (name != null && name.isNotEmpty
-                ? '${l10n.oauthBindSuccess} ($name)'
-                : l10n.oauthBindSuccess)
-            : l10n.oauthBindFailed;
+                ? '${'oauthBindSuccess'.tr()}} ($name)'
+                : 'oauthBindSuccess'.tr())
+            : 'oauthBindFailed'.tr();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
         );
@@ -172,18 +171,17 @@ class _AccountPageState extends State<AccountPage> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
-    final l10n = AppLocalizations.of(context)!;
     final isAuthenticated = authService.isAuthenticated;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.account)),
+      appBar: AppBar(title: Text('account'.tr())),
       body: isAuthenticated
-          ? _buildProfile(context, authService, l10n)
-          : _buildLogin(context, authService, l10n),
+          ? _buildProfile(context, authService)
+          : _buildLogin(context, authService),
     );
   }
 
-  Widget _buildLogin(BuildContext context, AuthService authService, AppLocalizations l10n) {
+  Widget _buildLogin(BuildContext context, AuthService authService) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -198,10 +196,10 @@ class _AccountPageState extends State<AccountPage> {
               ElevatedButton.icon(
                 onPressed: _isLoggingIn ? null : _loginWithOIDC,
                 icon: const Icon(Icons.login),
-                label: Text(l10n.loginWithOIDC),
+                label: Text('loginWithOIDC'.tr()),
               ),
               const SizedBox(height: 12),
-              _buildAdvancedLogin(context, l10n),
+              _buildAdvancedLogin(context),
               const SizedBox(height: 24),
               OutlinedButton.icon(
                 onPressed: () {
@@ -210,7 +208,7 @@ class _AccountPageState extends State<AccountPage> {
                   );
                 },
                 icon: const Icon(Icons.settings_outlined),
-                label: Text(l10n.settings),
+                label: Text('settings'.tr()),
               ),
             ],
           ),
@@ -219,7 +217,7 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
-  Widget _buildAdvancedLogin(BuildContext context, AppLocalizations l10n) {
+  Widget _buildAdvancedLogin(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
       margin: EdgeInsets.zero,
@@ -228,15 +226,15 @@ class _AccountPageState extends State<AccountPage> {
         shape: const Border(),
         collapsedShape: const Border(),
         leading: const Icon(Icons.keyboard_arrow_down),
-        title: Text(l10n.advancedLogin),
-        subtitle: Text(l10n.advancedLoginHint, style: const TextStyle(fontSize: 12)),
+        title: Text('advancedLogin'.tr()),
+        subtitle: Text('advancedLoginHint'.tr(), style: const TextStyle(fontSize: 12)),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TextField(
             controller: _loginUsernameController,
             decoration: InputDecoration(
-              labelText: l10n.username,
+              labelText: 'username'.tr(),
               border: const OutlineInputBorder(),
             ),
           ),
@@ -245,49 +243,49 @@ class _AccountPageState extends State<AccountPage> {
             controller: _passwordController,
             obscureText: true,
             decoration: InputDecoration(
-              labelText: l10n.password,
+              labelText: 'password'.tr(),
               border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 8),
-          Text(l10n.localAccountHint, style: theme.textTheme.bodySmall),
+          Text('localAccountHint'.tr(), style: theme.textTheme.bodySmall),
           const SizedBox(height: 12),
           ElevatedButton.icon(
             onPressed: _isLoggingIn ? null : _loginWithPassword,
             icon: const Icon(Icons.login),
-            label: Text(l10n.loginWithPassword),
+            label: Text('loginWithPassword'.tr()),
           ),
           const Divider(height: 32),
           TextField(
             controller: _tokenController,
             maxLines: 3,
             decoration: InputDecoration(
-              labelText: l10n.tokenLogin,
-              hintText: l10n.tokenPlaceholder,
+              labelText: 'tokenLogin'.tr(),
+              hintText: 'tokenPlaceholder'.tr(),
               border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 8),
-          Text(l10n.tokenLoginHint, style: theme.textTheme.bodySmall),
+          Text('tokenLoginHint'.tr(), style: theme.textTheme.bodySmall),
           const SizedBox(height: 12),
           ElevatedButton.icon(
             onPressed: _isLoggingIn ? null : _loginWithToken,
             icon: const Icon(Icons.vpn_key),
-            label: Text(l10n.tokenLogin),
+            label: Text('tokenLogin'.tr()),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildProfile(BuildContext context, AuthService authService, AppLocalizations l10n) {
+  Widget _buildProfile(BuildContext context, AuthService authService) {
     final theme = Theme.of(context);
     final user = authService.user;
     final bannerUrl = user?.bannerUrl.isNotEmpty == true ? user!.bannerUrl : null;
     final avatarUrl = authService.avatarUrl != null && authService.avatarUrl!.isNotEmpty
         ? authService.avatarUrl!
         : (user?.avatarUrl.isNotEmpty == true ? user!.avatarUrl : null);
-    final displayName = user?.displayName ?? authService.username ?? l10n.username;
+    final displayName = user?.displayName ?? authService.username ?? 'username'.tr();
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -312,14 +310,14 @@ class _AccountPageState extends State<AccountPage> {
 
         // ---- Sections (app settings + account settings) ----
         _SettingsSection(
-          title: l10n.appSettings,
+          title: 'appSettings'.tr(),
           children: [
             ListTile(
               minLeadingWidth: 48,
               leading: const Icon(Icons.settings_outlined),
-              title: Text(l10n.settings),
+              title: Text('settings'.tr()),
               subtitle: Text(
-                l10n.appSettings,
+                'appSettings'.tr(),
                 style: const TextStyle(fontSize: 12),
               ),
               contentPadding: const EdgeInsets.only(left: 24, right: 17),
@@ -334,14 +332,14 @@ class _AccountPageState extends State<AccountPage> {
         ),
         if (user != null) ...[
           _SettingsSection(
-            title: l10n.accountSettings,
+            title: 'accountSettings'.tr(),
             children: [
               ListTile(
                 minLeadingWidth: 48,
                 leading: const Icon(Icons.article_outlined),
-                title: Text(l10n.myPosts),
+                title: Text('myPosts'.tr()),
                 subtitle: Text(
-                  l10n.myPostsHint,
+                  'myPostsHint'.tr(),
                   style: const TextStyle(fontSize: 12),
                 ),
                 contentPadding: const EdgeInsets.only(left: 24, right: 17),
@@ -358,9 +356,9 @@ class _AccountPageState extends State<AccountPage> {
               ListTile(
                 minLeadingWidth: 48,
                 leading: const Icon(Icons.attach_file),
-                title: Text(l10n.myAttachments),
+                title: Text('myAttachments'.tr()),
                 subtitle: Text(
-                  l10n.manageAttachmentsHint,
+                  'manageAttachmentsHint'.tr(),
                   style: const TextStyle(fontSize: 12),
                 ),
                 contentPadding: const EdgeInsets.only(left: 24, right: 17),
@@ -375,7 +373,7 @@ class _AccountPageState extends State<AccountPage> {
               ListTile(
                 minLeadingWidth: 48,
                 leading: const Icon(Icons.badge_outlined),
-                title: Text(l10n.editProfile),
+                title: Text('editProfile'.tr()),
                 contentPadding: const EdgeInsets.only(left: 24, right: 17),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
@@ -389,7 +387,7 @@ class _AccountPageState extends State<AccountPage> {
               ListTile(
                 minLeadingWidth: 48,
                 leading: const Icon(Icons.logout),
-                title: Text(l10n.logout),
+                title: Text('logout'.tr()),
                 contentPadding: const EdgeInsets.only(left: 24, right: 17),
                 onTap: _logout,
               ),
@@ -412,7 +410,6 @@ class _AccountPageState extends State<AccountPage> {
     required String? avatarUrl,
     required String displayName,
   }) {
-    final l10n = AppLocalizations.of(context)!;
     const avatarRadius = 44.0;
     const bannerHeight = 160.0;
     return Stack(
@@ -458,7 +455,7 @@ class _AccountPageState extends State<AccountPage> {
               Center(
                 child: Chip(
                   avatar: const Icon(Icons.admin_panel_settings, size: 16),
-                  label: Text(l10n.admin),
+                  label: Text('admin'.tr()),
                   visualDensity: VisualDensity.compact,
                 ),
               ),
@@ -609,7 +606,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       if (mounted) setState(() {});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.saved)),
+          SnackBar(content: Text('saved'.tr())),
         );
       }
     } catch (e) {
@@ -640,7 +637,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
 
   Future<void> _pickAvatar() async {
     final auth = Provider.of<AuthService>(context, listen: false);
-    final l10n = AppLocalizations.of(context)!;
     final picker = ImagePicker();
     final result = await picker.pickImage(source: ImageSource.gallery);
     if (result == null) return;
@@ -650,7 +646,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       if (mounted) setState(() {});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.saved)),
+          SnackBar(content: Text('saved'.tr())),
         );
       }
     } catch (e) {
@@ -660,7 +656,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
 
   Future<void> _pickBanner() async {
     final auth = Provider.of<AuthService>(context, listen: false);
-    final l10n = AppLocalizations.of(context)!;
     final picker = ImagePicker();
     final result = await picker.pickImage(source: ImageSource.gallery);
     if (result == null) return;
@@ -670,7 +665,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       if (mounted) setState(() {});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.saved)),
+          SnackBar(content: Text('saved'.tr())),
         );
       }
     } catch (e) {
@@ -680,7 +675,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final authService = Provider.of<AuthService>(context);
     final user = authService.user;
@@ -690,12 +684,12 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         : '';
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.editProfile)),
+      appBar: AppBar(title: Text('editProfile'.tr())),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
           // ---- Edit profile fields ----
-          _SectionHeader(title: l10n.nickname),
+          _SectionHeader(title: 'nickname'.tr()),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Padding(
@@ -706,7 +700,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   TextField(
                     controller: _usernameController,
                     decoration: InputDecoration(
-                      labelText: l10n.username,
+                      labelText: 'username'.tr(),
                       border: const OutlineInputBorder(),
                     ),
                   ),
@@ -714,7 +708,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   TextField(
                     controller: _nicknameController,
                     decoration: InputDecoration(
-                      labelText: l10n.nickname,
+                      labelText: 'nickname'.tr(),
                       border: const OutlineInputBorder(),
                     ),
                   ),
@@ -723,8 +717,8 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                     controller: _bioController,
                     maxLines: 4,
                     decoration: InputDecoration(
-                      labelText: l10n.bio,
-                      hintText: l10n.bioHint,
+                      labelText: 'bio'.tr(),
+                      hintText: 'bioHint'.tr(),
                       border: const OutlineInputBorder(),
                     ),
                   ),
@@ -732,7 +726,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   ElevatedButton.icon(
                     onPressed: _isSaving ? null : _save,
                     icon: const Icon(Icons.save),
-                    label: Text(l10n.save),
+                    label: Text('save'.tr()),
                   ),
                 ],
               ),
@@ -741,16 +735,16 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           const SizedBox(height: 16),
 
           // ---- Avatar & banner ----
-          _SectionHeader(title: l10n.setAvatar),
+          _SectionHeader(title: 'setAvatar'.tr()),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Column(
               children: [
                 ListTile(
                   leading: const Icon(Icons.person_outline),
-                  title: Text(l10n.setAvatar),
+                  title: Text('setAvatar'.tr()),
                   subtitle: Text(
-                    authService.avatarUrl?.isNotEmpty == true ? l10n.saved : '',
+                    authService.avatarUrl?.isNotEmpty == true ? 'saved'.tr() : '',
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.chevron_right),
@@ -759,9 +753,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.photo_outlined),
-                  title: Text(l10n.setBanner),
+                  title: Text('setBanner'.tr()),
                   subtitle: Text(
-                    user?.bannerUrl.isNotEmpty == true ? l10n.saved : '',
+                    user?.bannerUrl.isNotEmpty == true ? 'saved'.tr() : '',
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.chevron_right),
@@ -773,21 +767,21 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           const SizedBox(height: 16),
 
           // ---- OAuth binding ----
-          _SectionHeader(title: l10n.oauthBinding),
+          _SectionHeader(title: 'oauthBinding'.tr()),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Column(
               children: [
                 ListTile(
                   leading: const Icon(Icons.link),
-                  title: Text(l10n.oauthBinding),
+                  title: Text('oauthBinding'.tr()),
                   subtitle: Text(
-                    hasOAuth ? oauthName : l10n.oauthNotBound,
+                    hasOAuth ? oauthName : 'oauthNotBound'.tr(),
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: hasOAuth
                       ? Text(
-                          l10n.oauthBound,
+                          'oauthBound'.tr(),
                           style: TextStyle(
                             fontSize: 12,
                             color: theme.colorScheme.primary,
@@ -795,7 +789,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                         )
                       : TextButton(
                           onPressed: _isBindingOAuth ? null : _bindOAuth,
-                          child: Text(l10n.bindOAuth),
+                          child: Text('bindOAuth'.tr()),
                         ),
                 ),
                 if (!hasOAuth) ...[
@@ -803,7 +797,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                     child: Text(
-                      l10n.oauthUnbindAdminOnly,
+                      'oauthUnbindAdminOnly'.tr(),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),

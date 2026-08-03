@@ -4,7 +4,7 @@ import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/follow_list_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/markdown_content.dart';
@@ -67,7 +67,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
 
     Widget body;
@@ -78,10 +77,10 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$l10n.loadFailed (${_error?.toString() ?? 'not found'})',
+            Text('${'loadFailed'.tr()} (${_error?.toString() ?? 'not found'})',
                 textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            FilledButton(onPressed: _load, child: Text(l10n.retry)),
+            FilledButton(onPressed: _load, child: Text('retry'.tr())),
           ],
         ),
       );
@@ -91,7 +90,7 @@ class _ProfilePageState extends State<ProfilePage> {
         onRefresh: _load,
         child: ListView(
           children: [
-            _buildHeader(context, theme, user, l10n),
+            _buildHeader(context, theme, user),
             if (user.bio.isNotEmpty) ...[
               const Divider(height: 24),
               Padding(
@@ -103,7 +102,7 @@ class _ProfilePageState extends State<ProfilePage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
               child: Text(
-                l10n.posts,
+                'posts'.tr(),
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w600,
@@ -114,7 +113,7 @@ class _ProfilePageState extends State<ProfilePage> {
               Padding(
                 padding: const EdgeInsets.all(32),
                 child: Center(
-                  child: Text(l10n.noPosts, style: theme.textTheme.bodyMedium),
+                  child: Text('noPosts'.tr(), style: theme.textTheme.bodyMedium),
                 ),
               )
             else
@@ -129,7 +128,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   },
                   onUnauthenticated: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(AppLocalizations.of(context)!.loginWithOIDC)),
+                      SnackBar(content: Text('loginWithOIDC'.tr())),
                     );
                   },
                   onTapAuthor: () {
@@ -160,7 +159,6 @@ class _ProfilePageState extends State<ProfilePage> {
     BuildContext context,
     ThemeData theme,
     User user,
-    AppLocalizations l10n,
   ) {
     final hasBanner = user.bannerUrl.isNotEmpty;
     final hasAvatar = user.avatarUrl.isNotEmpty;
@@ -241,15 +239,15 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         const SizedBox(height: 12),
         // Follow counts row
-        _buildFollowCountsRow(theme, user, l10n),
+        _buildFollowCountsRow(theme, user),
         const SizedBox(height: 8),
-        _buildFollowButton(theme, user, l10n),
+        _buildFollowButton(theme, user),
         if (user.role == 'admin') ...[
           const SizedBox(height: 8),
           Center(
             child: Chip(
               avatar: const Icon(Icons.admin_panel_settings, size: 16),
-              label: Text(l10n.admin),
+              label: Text('admin'.tr()),
               visualDensity: VisualDensity.compact,
             ),
           ),
@@ -258,7 +256,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildFollowCountsRow(ThemeData theme, User user, AppLocalizations l10n) {
+  Widget _buildFollowCountsRow(ThemeData theme, User user) {
     final auth = Provider.of<AuthService>(context, listen: false);
     if (auth.accessToken == null) return const SizedBox.shrink();
 
@@ -276,7 +274,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 TextSpan(
-                  text: ' ${l10n.followers}',
+                  text: ' ${'followers'.tr()}',
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
                 ),
               ],
@@ -295,7 +293,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 TextSpan(
-                  text: ' ${l10n.following}',
+                  text: ' ${'following'.tr()}',
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
                 ),
               ],
@@ -306,7 +304,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildFollowButton(ThemeData theme, User user, AppLocalizations l10n) {
+  Widget _buildFollowButton(ThemeData theme, User user) {
     final auth = Provider.of<AuthService>(context, listen: false);
     if (auth.accessToken == null) return const SizedBox.shrink();
     final isSelf = auth.user?.id == user.id;
@@ -322,7 +320,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           child: _followLoading
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : Text(l10n.unfollow),
+              : Text('unfollow'.tr()),
         ),
       );
     }
@@ -333,7 +331,7 @@ class _ProfilePageState extends State<ProfilePage> {
         style: FilledButton.styleFrom(minimumSize: const Size(140, 36)),
         child: _followLoading
             ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : Text(l10n.follow),
+            : Text('follow'.tr()),
       ),
     );
   }

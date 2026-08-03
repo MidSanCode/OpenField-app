@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
@@ -61,20 +61,19 @@ class _MyPostsPageState extends State<MyPostsPage> {
   }
 
   Future<bool> _deletePost(Post post) async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.deletePostConfirm),
+        title: Text('deletePostConfirm'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l10n.cancel),
+            child: Text('cancel'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.delete),
+            child: Text('delete'.tr()),
           ),
         ],
       ),
@@ -96,7 +95,6 @@ class _MyPostsPageState extends State<MyPostsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
 
     Widget body;
@@ -107,16 +105,16 @@ class _MyPostsPageState extends State<MyPostsPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$l10n.loadFailed (${_error.toString()})',
+            Text('${'loadFailed'.tr()} (${_error.toString()})',
                 textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            FilledButton(onPressed: _load, child: Text(l10n.retry)),
+            FilledButton(onPressed: _load, child: Text('retry'.tr())),
           ],
         ),
       );
     } else if (_posts == null || _posts!.isEmpty) {
       body = Center(
-        child: Text(l10n.noPosts, style: theme.textTheme.bodyMedium),
+        child: Text('noPosts'.tr(), style: theme.textTheme.bodyMedium),
       );
     } else {
       body = ListView.builder(
@@ -143,7 +141,7 @@ class _MyPostsPageState extends State<MyPostsPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.myPosts)),
+      appBar: AppBar(title: Text('myPosts'.tr())),
       body: RefreshIndicator(
         onRefresh: _load,
         child: body,

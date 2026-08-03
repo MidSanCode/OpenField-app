@@ -6,7 +6,7 @@ import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/models/post_reply.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/l10n/app_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/posts/reply_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
@@ -147,7 +147,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
   }
 
   Future<void> _onReplyLongPress(PostReply reply) async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -161,18 +160,18 @@ class _PostDetailPageState extends State<PostDetailPage> {
           children: [
             ListTile(
               leading: const Icon(Icons.reply_outlined),
-              title: Text(l10n.reply),
+              title: Text('reply'.tr()),
               onTap: () => Navigator.of(ctx).pop('reply'),
             ),
             if (isMine) ...[
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
-                title: Text(l10n.edit),
+                title: Text('edit'.tr()),
                 onTap: () => Navigator.of(ctx).pop('edit'),
               ),
               ListTile(
                 leading: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error),
-                title: Text(l10n.delete, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                title: Text('delete'.tr(), style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
                 onTap: () => Navigator.of(ctx).pop('delete'),
               ),
             ],
@@ -191,7 +190,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
   }
 
   Future<void> _editReply(PostReply reply) async {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -199,19 +197,19 @@ class _PostDetailPageState extends State<PostDetailPage> {
     final content = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.edit),
+        title: Text('edit'.tr()),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLines: 3,
           maxLength: 5000,
-          decoration: InputDecoration(hintText: l10n.replyContent),
+          decoration: InputDecoration(hintText: 'replyContent'.tr()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(l10n.cancel)),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('cancel'.tr())),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: Text(l10n.save),
+            child: Text('save'.tr()),
           ),
         ],
       ),
@@ -306,12 +304,11 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final authService = Provider.of<AuthService>(context);
     final currentUserId = authService.user?.id;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.replies)),
+      appBar: AppBar(title: Text('replies'.tr())),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null && _replies.isEmpty
@@ -319,9 +316,9 @@ class _PostDetailPageState extends State<PostDetailPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(l10n.loadFailed),
+                      Text('loadFailed'.tr()),
                       const SizedBox(height: 16),
-                      ElevatedButton(onPressed: _load, child: Text(l10n.retry)),
+                      ElevatedButton(onPressed: _load, child: Text('retry'.tr())),
                     ],
                   ),
                 )
@@ -344,27 +341,27 @@ class _PostDetailPageState extends State<PostDetailPage> {
                           if (_replies.isEmpty)
                             Padding(
                               padding: const EdgeInsets.all(32),
-                              child: Center(child: Text(l10n.replyEmpty)),
+                              child: Center(child: Text('replyEmpty'.tr())),
                             )
                           else
                             ..._buildReplyTree(_replies),
                         ],
                       ),
                     ),
-                    _buildReplyBar(l10n),
+                    _buildReplyBar(),
                   ],
                 ),
     );
   }
 
-  Widget _buildReplyBar(AppLocalizations l10n) {
+  Widget _buildReplyBar() {
     final authService = Provider.of<AuthService>(context);
     if (!authService.isAuthenticated) {
       return SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Center(child: Text(l10n.loginWithOIDC)),
+          child: Center(child: Text('loginWithOIDC'.tr())),
         ),
       );
     }
@@ -389,7 +386,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        l10n.replyingToHint(_replyingTo!.authorName),
+                        'replyingToHint'.tr(namedArgs: {'name': _replyingTo!.authorName}),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
@@ -432,7 +429,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                 IconButton(
                   onPressed: _isSending ? null : _pickAttachment,
                   icon: const Icon(Icons.attach_file),
-                  tooltip: l10n.replyAttachHint,
+                  tooltip: 'replyAttachHint'.tr(),
                 ),
                 Expanded(
                   child: TextField(
@@ -441,7 +438,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                     maxLines: 4,
                     textCapitalization: TextCapitalization.sentences,
                     decoration: InputDecoration(
-                      hintText: l10n.replyContent,
+                      hintText: 'replyContent'.tr(),
                       isDense: true,
                       filled: true,
                       fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -464,7 +461,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.send),
-                  tooltip: l10n.send,
+                  tooltip: 'send'.tr(),
                 ),
               ],
             ),

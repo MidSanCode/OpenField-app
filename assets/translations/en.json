@@ -1,5 +1,4 @@
 {
-  "@@locale": "en",
   "appTitle": "OpenField",
   "posts": "Posts",
   "chat": "Chat",
@@ -34,7 +33,6 @@
   "password": "Password",
   "register": "Register",
   "completeRegistration": "Complete Registration",
-  "registerHint": "Please set your username and nickname to continue",
   "nickname": "Nickname",
   "setNickname": "Set Nickname",
   "setAvatar": "Set Avatar",
@@ -52,7 +50,6 @@
   "save": "Save",
   "saved": "Saved",
   "editProfile": "Edit Profile",
-  "localAccountHint": "Admin-created accounts sign in here. Self-registration is not available.",
   "draft": "Draft",
   "draftSaved": "Draft saved",
   "drafts": "Drafts",
@@ -115,7 +112,6 @@
   "oauthNotBound": "Not bound",
   "oauthBound": "Bound",
   "bindOAuth": "Bind",
-  "oauthUnbindAdminOnly": "OAuth accounts can only be unbound in the admin panel.",
   "oauthBindSuccess": "OAuth account bound successfully",
   "oauthBindFailed": "Failed to bind OAuth account",
   "myPosts": "My Posts",
@@ -132,10 +128,12 @@
   "advancedLogin": "Advanced Login",
   "advancedLoginHint": "For special cases",
   "tokenLogin": "Token Login",
-  "tokenLoginHint": "Paste the token copied from the browser login page",
   "tokenPlaceholder": "Paste access token",
   "follow": "Follow",
   "unfollow": "Unfollow",
   "followers": "Followers",
-  "following": "Following"
+  "following": "Following",
+  "chatResend": "Resend",
+  "replyingToHint": "Replying to {name}",
+  "replyAttachHint": "Attach a file to your reply"
 }
