@@ -120,7 +120,10 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     final accessToken = uri.queryParameters['access_token'];
     if (accessToken == null) return;
 
-    _authService.setTokens(accessToken);
+    _authService.setTokens(
+      accessToken,
+      refreshToken: uri.queryParameters['refresh_token'],
+    );
     _authService.setUser(
       username: uri.queryParameters['username'],
       email: uri.queryParameters['email'],

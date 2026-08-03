@@ -11,6 +11,7 @@ import '../models/conversation.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/user.dart';
+import '../models/wallet.dart';
 
 /// Error raised when an API request fails, carrying the HTTP status code when
 /// the server responded, or null for network/parse failures.
@@ -198,6 +199,22 @@ class ApiService {
     }
     throw ApiException(
         response.statusCode, _decodeError(response, 'Login failed'));
+  }
+
+  /// Exchanges a refresh token for a fresh access token. The refresh token is
+  /// rotated server-side, so the response carries a new one.
+  Future<Map<String, dynamic>> refreshAccessToken(String refreshToken) async {
+    final response = await _client.post(
+      Uri.parse('$baseUrl/auth/refresh'),
+      headers: _headers(),
+      body: jsonEncode({'refresh_token': refreshToken}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Token refresh failed'));
   }
 
   Future<User> register(String username, String nickname, String accessToken, {String bio = ''}) async {
@@ -720,6 +737,47 @@ class ApiService {
     }
     throw ApiException(
         response.statusCode, _decodeError(response, 'Failed to load following'));
+  }
+
+  // ---- Wallet ----
+
+  /// Returns the current user's wallet balance and recent transactions.
+  Future<Wallet> getWallet(String accessToken, {int page = 1, int limit = 20}) async {
+    final response = await _client.get(
+      Uri.parse('$baseUrl/wallet?page=$page&limit=$limit'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Wallet.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load wallet'));
+  }
+
+  /// Adjusts a user's wallet balance. Positive amounts recharge, negative
+  /// amounts deduct. Requires the wallet.manage permission.
+  Future<Wallet> adjustWallet(
+    String accessToken, {
+    required int userId,
+    required int amount,
+    String? type,
+    String? description,
+  }) async {
+    final body = <String, dynamic>{'user_id': userId, 'amount': amount};
+    if (type != null && type.isNotEmpty) body['type'] = type;
+    if (description != null && description.isNotEmpty) body['description'] = description;
+    final response = await _client.post(
+      Uri.parse('$baseUrl/wallet/adjust'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode(body),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Wallet.fromJson({'balance': data['balance']});
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to adjust wallet'));
   }
 
   // ---- Chat: consent requests ----

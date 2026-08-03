@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:openfield/data/models/user.dart';
@@ -5,6 +6,8 @@ import 'package:openfield/data/services/api_service.dart';
 
 class AuthService extends ChangeNotifier {
   static const _keyAccessToken = 'access_token';
+  static const _keyRefreshToken = 'refresh_token';
+  static const _keyAccessExpiresAt = 'access_expires_at';
   static const _keyUsername = 'username';
   static const _keyEmail = 'email';
   static const _keyAvatarUrl = 'avatar_url';
@@ -12,19 +15,28 @@ class AuthService extends ChangeNotifier {
   final ApiService _api = ApiService();
 
   String? _accessToken;
+  String? _refreshToken;
+  DateTime? _accessExpiresAt;
   String? _username;
   String? _email;
   String? _avatarUrl;
   User? _user;
   bool _isLoading = true;
+  Timer? _refreshTimer;
 
   bool get isAuthenticated => _accessToken != null;
   bool get isLoading => _isLoading;
   String? get accessToken => _accessToken;
+  String? get refreshToken => _refreshToken;
+  DateTime? get accessExpiresAt => _accessExpiresAt;
   String? get username => _username;
   String? get email => _email;
   String? get avatarUrl => _avatarUrl;
   User? get user => _user;
+
+  /// True when the stored access token has expired and can no longer be used.
+  bool get isAccessTokenExpired =>
+      _accessExpiresAt != null && _accessExpiresAt!.isBefore(DateTime.now());
 
   AuthService() {
     _load();
@@ -33,17 +45,48 @@ class AuthService extends ChangeNotifier {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     _accessToken = prefs.getString(_keyAccessToken);
+    _refreshToken = prefs.getString(_keyRefreshToken);
+    final expMs = prefs.getInt(_keyAccessExpiresAt);
+    _accessExpiresAt =
+        expMs != null ? DateTime.fromMillisecondsSinceEpoch(expMs) : null;
     _username = prefs.getString(_keyUsername);
     _email = prefs.getString(_keyEmail);
     _avatarUrl = prefs.getString(_keyAvatarUrl);
     _isLoading = false;
     notifyListeners();
+    if (_accessToken != null) {
+      if (isAccessTokenExpired) {
+        // Session resumed with an already-expired access token: try to refresh
+        // right away, clearing the session if that is no longer possible.
+        await refreshAccessToken();
+      } else {
+        _startRefreshLoop();
+      }
+    }
   }
 
-  Future<void> setTokens(String accessToken) async {
+  /// Stores a session and starts the auto-refresh loop. [expiresIn] is the
+  /// access token lifetime in seconds; [refreshExpiresIn] the refresh token
+  /// lifetime (used to decide when a refresh is no longer possible).
+  Future<void> setTokens(
+    String accessToken, {
+    String? refreshToken,
+    int? expiresIn,
+    int? refreshExpiresIn,
+  }) async {
     _accessToken = accessToken;
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      _refreshToken = refreshToken;
+    }
+    _accessExpiresAt =
+        DateTime.now().add(Duration(seconds: expiresIn ?? (24 * 60 * 60)));
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAccessToken, accessToken);
+    if (_refreshToken != null) {
+      await prefs.setString(_keyRefreshToken, _refreshToken!);
+    }
+    await prefs.setInt(_keyAccessExpiresAt, _accessExpiresAt!.millisecondsSinceEpoch);
+    _startRefreshLoop();
     notifyListeners();
   }
 
@@ -71,7 +114,12 @@ class AuthService extends ChangeNotifier {
     if (token is! String || token.isEmpty) {
       throw Exception('Invalid login response');
     }
-    await setTokens(token);
+    await setTokens(
+      token,
+      refreshToken: result['refresh_token'] as String?,
+      expiresIn: (result['expires_in'] as num?)?.toInt(),
+      refreshExpiresIn: (result['refresh_expires_in'] as num?)?.toInt(),
+    );
     final userData = result['user'];
     if (userData is Map<String, dynamic>) {
       final user = User.fromJson(userData);
@@ -92,6 +140,8 @@ class AuthService extends ChangeNotifier {
     final trimmed = token.trim();
     if (trimmed.isEmpty) throw Exception('Invalid token');
     final user = await _api.getCurrentUser(trimmed);
+    // A pasted access token has no refresh token, so the session ends when the
+    // access token expires.
     await setTokens(trimmed);
     _user = user;
     await setUser(username: user.username, email: user.email, avatarUrl: user.avatarUrl);
@@ -120,17 +170,77 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Exchanges the refresh token for a fresh access token. On success the new
+  /// tokens are persisted and the auto-refresh loop is rescheduled. On failure
+  /// (expired or revoked refresh token) the session is cleared and the user
+  /// must log in again.
+  Future<bool> refreshAccessToken() async {
+    final refresh = _refreshToken;
+    if (refresh == null || refresh.isEmpty) return false;
+    try {
+      final result = await _api.refreshAccessToken(refresh);
+      final token = result['access_token'];
+      if (token is! String || token.isEmpty) {
+        await clearTokens();
+        return false;
+      }
+      await setTokens(
+        token,
+        refreshToken: result['refresh_token'] as String?,
+        expiresIn: (result['expires_in'] as num?)?.toInt(),
+        refreshExpiresIn: (result['refresh_expires_in'] as num?)?.toInt(),
+      );
+      return true;
+    } catch (_) {
+      // Refresh token invalid/expired or server unreachable: force re-login.
+      await clearTokens();
+      return false;
+    }
+  }
+
+  /// Kicks off a periodic timer that refreshes the access token shortly before
+  /// it expires, keeping the session alive while the user is active. When the
+  /// refresh fails the session is cleared (auto logout).
+  void _startRefreshLoop() {
+    _refreshTimer?.cancel();
+    // Poll every minute and refresh when the access token is close to expiry.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
+      final exp = _accessExpiresAt;
+      if (exp == null) return;
+      // Refresh when within 5 minutes of expiry (or already past it).
+      if (exp.difference(DateTime.now()) < const Duration(minutes: 5)) {
+        await refreshAccessToken();
+      }
+    });
+  }
+
+  void _stopRefreshLoop() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
+
   Future<void> clearTokens() async {
+    _stopRefreshLoop();
     _accessToken = null;
+    _refreshToken = null;
+    _accessExpiresAt = null;
     _username = null;
     _email = null;
     _avatarUrl = null;
     _user = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyAccessToken);
+    await prefs.remove(_keyRefreshToken);
+    await prefs.remove(_keyAccessExpiresAt);
     await prefs.remove(_keyUsername);
     await prefs.remove(_keyEmail);
     await prefs.remove(_keyAvatarUrl);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _stopRefreshLoop();
+    super.dispose();
   }
 }
