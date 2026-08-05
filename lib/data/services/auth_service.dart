@@ -161,15 +161,21 @@ class AuthService extends ChangeNotifier {
     return _user!;
   }
 
-  /// Logs in with a pre-issued access token (e.g. copied from the browser's
-  /// OIDC login result page when deep-link login is unavailable).
+  /// Logs in with a pre-issued token pair (e.g. copied from the browser's
+  /// OIDC login result page when deep-link login is unavailable). Paste the
+  /// access token and the refresh token (any whitespace/newline separated).
+  /// Without a refresh token the session ends when the access token expires.
   Future<User> loginWithToken(String token) async {
-    final trimmed = token.trim();
-    if (trimmed.isEmpty) throw Exception('Invalid token');
-    final user = await _api.getCurrentUser(trimmed);
-    // A pasted access token has no refresh token, so the session ends when the
-    // access token expires.
-    await setTokens(trimmed);
+    final parts = token
+        .trim()
+        .split(RegExp(r'[\s,;]+'))
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final access = parts.isNotEmpty ? parts.first : '';
+    if (access.isEmpty) throw Exception('Invalid token');
+    final refresh = parts.length > 1 ? parts[1] : null;
+    final user = await _api.getCurrentUser(access);
+    await setTokens(access, refreshToken: refresh);
     _user = user;
     await setUser(username: user.username, email: user.email, avatarUrl: user.avatarUrl);
     return user;

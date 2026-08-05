@@ -18,9 +18,10 @@ import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/core/theme/app_theme.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  await EasyLocalization.ensureInitialized();
   if (!kIsWeb && Platform.isWindows) {
     ensureOpenFieldProtocol();
   }
@@ -123,6 +124,7 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     _authService.setTokens(
       accessToken,
       refreshToken: uri.queryParameters['refresh_token'],
+      expiresIn: int.tryParse(uri.queryParameters['expires_in'] ?? ''),
     );
     _authService.setUser(
       username: uri.queryParameters['username'],

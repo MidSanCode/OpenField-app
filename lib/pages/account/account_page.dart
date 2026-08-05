@@ -106,6 +106,7 @@ class _AccountPageState extends State<AccountPage> {
     await authService.setTokens(
       accessToken,
       refreshToken: uri.queryParameters['refresh_token'],
+      expiresIn: int.tryParse(uri.queryParameters['expires_in'] ?? ''),
     );
     if (username != null) authService.setUsername(username);
     if (email != null) authService.setEmail(email);
