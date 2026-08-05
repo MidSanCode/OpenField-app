@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+
 import 'package:openfield/data/services/api_service.dart';
 
 /// A single push event delivered over the realtime WebSocket connection.
@@ -48,14 +49,20 @@ class PushEvent {
 
 /// Maintains a persistent WebSocket connection to the push service and exposes
 /// a broadcast stream of [PushEvent]s. Automatically reconnects with backoff.
+///
+/// Uses [WebSocketChannel] from `web_socket_channel`, which works on both
+/// native and web. Browsers cannot set custom headers on WebSocket connections,
+/// so the access token is passed as a `token` query parameter instead; the
+/// gateway validates it before forwarding the upgrade.
 class RealtimeService {
   static final RealtimeService instance = RealtimeService();
 
   final _controller = StreamController<PushEvent>.broadcast();
 
-  WebSocket? _socket;
+  WebSocketChannel? _channel;
   bool _shouldRun = false;
   bool _disposed = false;
+  bool _connected = false;
   Timer? _reconnectTimer;
   int _retryCount = 0;
   String? _token;
@@ -65,7 +72,7 @@ class RealtimeService {
   Stream<PushEvent> get events => _controller.stream;
 
   /// True when a live WebSocket connection is established.
-  bool get isConnected => _socket != null;
+  bool get isConnected => _connected;
 
   /// Connects (or reconnects) to the push service using the current token.
   void connect(String token) {
@@ -82,16 +89,12 @@ class RealtimeService {
     _token = null;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    _closeSocket();
+    _closeChannel();
   }
 
   void _open() {
     if (!_shouldRun || _disposed || _token == null) return;
-    final socket = _socket;
-    if (socket != null && (socket.readyState == WebSocket.open)) {
-      return;
-    }
-    _closeSocket();
+    if (_connected) return;
     _scheduleReconnect();
   }
 
@@ -108,21 +111,21 @@ class RealtimeService {
     final token = _token;
     if (token == null) return;
     try {
-      final wsUri = _wsUri();
-      final socket = await WebSocket.connect(
-        wsUri,
-        headers: {'Authorization': 'Bearer $token'},
-      );
+      final wsUri = _wsUri(token);
+      final channel = WebSocketChannel.connect(wsUri);
+      await channel.ready;
       if (!_shouldRun || _disposed) {
-        socket.close();
+        channel.sink.close();
         return;
       }
-      _socket = socket;
+      _channel = channel;
+      _connected = true;
       _retryCount = 0;
-      _listen(socket);
+      _listen(channel);
     } catch (e) {
       debugPrint('[WS] connect failed: $e');
-      _socket = null;
+      _channel = null;
+      _connected = false;
       if (_shouldRun && !_disposed) {
         _retryCount++;
         final delay = Duration(seconds: (2 * _retryCount).clamp(1, 30));
@@ -131,8 +134,8 @@ class RealtimeService {
     }
   }
 
-  void _listen(WebSocket socket) {
-    socket.listen(
+  void _listen(WebSocketChannel channel) {
+    channel.stream.listen(
       (message) {
         if (message is String) {
           try {
@@ -146,9 +149,10 @@ class RealtimeService {
         }
       },
       onDone: () {
-        if (identical(_socket, socket)) {
-          _socket = null;
+        if (identical(_channel, channel)) {
+          _channel = null;
         }
+        _connected = false;
         if (_shouldRun && !_disposed) {
           _retryCount++;
           final delay = Duration(seconds: (2 * _retryCount).clamp(1, 30));
@@ -157,28 +161,30 @@ class RealtimeService {
       },
       onError: (Object e) {
         debugPrint('[WS] error: $e');
-        if (identical(_socket, socket)) {
-          _socket = null;
+        if (identical(_channel, channel)) {
+          _channel = null;
         }
+        _connected = false;
       },
       cancelOnError: false,
     );
   }
 
-  void _closeSocket() {
-    final socket = _socket;
-    _socket = null;
-    if (socket != null) {
-      socket.close();
+  void _closeChannel() {
+    final channel = _channel;
+    _channel = null;
+    _connected = false;
+    if (channel != null) {
+      channel.sink.close();
     }
   }
 
-  static String _wsUri() {
+  static Uri _wsUri(String token) {
     final base = ApiService.baseUrl;
     final host = base.replaceFirst('http://', '').replaceFirst('https://', '');
     final path = host.contains('/') ? host.substring(host.indexOf('/')) : '/';
     final authority = host.contains('/') ? host.substring(0, host.indexOf('/')) : host;
     final scheme = base.startsWith('https') ? 'wss' : 'ws';
-    return '$scheme://$authority$path/ws';
+    return Uri.parse('$scheme://$authority$path/ws?token=$token');
   }
 }

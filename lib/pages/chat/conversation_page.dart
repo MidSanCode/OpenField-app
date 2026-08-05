@@ -19,7 +19,11 @@ import 'package:openfield/widgets/verified_badge.dart';
 class ConversationPage extends StatefulWidget {
   final int conversationId;
 
-  const ConversationPage({super.key, required this.conversationId});
+  /// When set, the page is embedded in a split view (landscape chat page) and
+  /// this callback is invoked instead of popping the navigator.
+  final VoidCallback? onBack;
+
+  const ConversationPage({super.key, required this.conversationId, this.onBack});
 
   @override
   State<ConversationPage> createState() => _ConversationPageState();
@@ -41,6 +45,9 @@ class _ConversationPageState extends State<ConversationPage> {
   int? _replyToId;
   int _myUserId = 0;
   StreamSubscription<PushEvent>? _realtimeSub;
+  final Map<int, Timer> _typingTimers = {};
+  String? _typingUserId;
+  Timer? _typingSendTimer;
 
   @override
   void initState() {
@@ -63,6 +70,11 @@ class _ConversationPageState extends State<ConversationPage> {
   void dispose() {
     _realtimeSub?.cancel();
     _scrollController.removeListener(_onScroll);
+    _typingSendTimer?.cancel();
+    for (final t in _typingTimers.values) {
+      t.cancel();
+    }
+    _typingTimers.clear();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -77,6 +89,22 @@ class _ConversationPageState extends State<ConversationPage> {
         final msg = ChatMessage.fromJson(event.data);
         final exists = _messages.any((m) => m.id == msg.id || m.clientId == msg.clientId);
         if (exists) return;
+        // Race guard: this is our own optimistic message echoed back over WS
+        // before the HTTP response resolved it. Match by content + sender +
+        // near-identical timestamp and resolve it in place.
+        final pending = _messages
+            .where((m) =>
+                m.id <= 0 &&
+                m.isPending &&
+                m.senderId == msg.senderId &&
+                m.content == msg.content &&
+                m.createdAt.difference(msg.createdAt).abs().inSeconds <= 10)
+            .firstOrNull;
+        if (pending != null) {
+          setState(() => _messages = _replaceByClientId(pending.clientId, msg));
+          ChatLocalDb.instance.upsertMessage(msg);
+          return;
+        }
         setState(() => _messages = _sorted([..._messages, msg]));
         ChatLocalDb.instance.upsertMessage(msg);
         _scrollToBottom();
@@ -95,7 +123,39 @@ class _ConversationPageState extends State<ConversationPage> {
         });
         ChatLocalDb.instance.deleteMessage(widget.conversationId, msg.id);
         break;
+      case 'chat.typing':
+        final userId = event.userId;
+        if (userId == null || userId == _myUserId) break;
+        final existing = _typingTimers.remove(userId);
+        existing?.cancel();
+        setState(() => _typingUserId = userId.toString());
+        _typingTimers[userId] = Timer(const Duration(seconds: 4), () {
+          _typingTimers.remove(userId);
+          if (mounted) setState(() => _typingUserId = null);
+        });
+        break;
     }
+  }
+
+  /// Debounced sender-side signal so we don't spam the server on every keystroke.
+  void _onTypingChanged(String _) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    _typingSendTimer?.cancel();
+    _typingSendTimer = Timer(const Duration(milliseconds: 800), () {
+      _apiService.sendTyping(token, widget.conversationId).catchError((_) {});
+    });
+  }
+
+  /// Resolves a typing user's display name from known members, falling back to
+  /// the member id so the indicator stays useful even before members load.
+  String _typingUserName(String userId) {
+    final member = _members.where((m) => m.userId.toString() == userId).firstOrNull;
+    if (member != null && member.displayName.isNotEmpty) {
+      return member.displayName;
+    }
+    return 'typingSomeone'.tr();
   }
 
   Future<void> _load() async {
@@ -266,6 +326,7 @@ class _ConversationPageState extends State<ConversationPage> {
       createdAt: DateTime.now(),
       senderName: authService.user?.nickname ?? authService.username,
       senderAvatar: authService.user?.avatarUrl ?? authService.avatarUrl,
+      clientId: generateClientId(),
       status: MessageStatus.sending,
     );
     setState(() => _messages = _sorted([..._messages, local]));
@@ -360,6 +421,7 @@ class _ConversationPageState extends State<ConversationPage> {
       createdAt: DateTime.now(),
       senderName: authService.user?.nickname ?? authService.username,
       senderAvatar: authService.user?.avatarUrl ?? authService.avatarUrl,
+      clientId: generateClientId(),
       status: MessageStatus.sending,
     );
     setState(() => _messages = _sorted([..._messages, local]));
@@ -762,7 +824,12 @@ class _ConversationPageState extends State<ConversationPage> {
     if (confirmed != true) return;
     try {
       await _apiService.leaveGroup(token, widget.conversationId);
-      if (mounted) Navigator.of(context).pop();
+      if (!mounted) return;
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -777,6 +844,13 @@ class _ConversationPageState extends State<ConversationPage> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: widget.onBack != null
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'back'.tr(),
+                onPressed: widget.onBack,
+              )
+            : null,
         title: Text(conv?.title ?? ''),
         actions: [
           if (isGroup)
@@ -889,6 +963,15 @@ class _ConversationPageState extends State<ConversationPage> {
             message: _messages.where((m) => m.id == _replyToId).firstOrNull,
             onCancel: () => setState(() => _replyToId = null),
           ),
+        if (_typingUserId != null)
+          _TypingIndicator(
+            name: _typingUserName(_typingUserId!),
+            verified: _members
+                    .where((m) => m.userId.toString() == _typingUserId)
+                    .firstOrNull
+                    ?.isVerified ??
+                false,
+          ),
         _buildInputBar(),
       ],
     );
@@ -913,6 +996,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 minLines: 1,
                 maxLines: 5,
                 textCapitalization: TextCapitalization.sentences,
+                onChanged: _onTypingChanged,
                 decoration: InputDecoration(
                   hintText: 'message'.tr(),
                   isDense: true,
@@ -1085,7 +1169,21 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          if (isMine) const SizedBox(width: 8),
+          if (isMine) ...[
+            const SizedBox(width: 8),
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: theme.colorScheme.primaryContainer,
+              backgroundImage: (senderAvatar != null && senderAvatar!.isNotEmpty)
+                  ? NetworkImage(senderAvatar!)
+                  : null,
+              child: (senderAvatar == null || senderAvatar!.isEmpty)
+                  ? Text(message.displayName.isEmpty
+                      ? '?'
+                      : message.displayName.substring(0, 1).toUpperCase())
+                  : null,
+            ),
+          ],
         ],
       ),
     );
@@ -1095,6 +1193,111 @@ class _MessageBubble extends StatelessWidget {
     final h = time.hour.toString().padLeft(2, '0');
     final m = time.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+}
+
+/// Animated "someone is typing…" pill shown above the input bar.
+class _TypingIndicator extends StatelessWidget {
+  final String name;
+  final bool verified;
+
+  const _TypingIndicator({required this.name, this.verified = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _TypingDots(),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (verified) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.verified, size: 14, color: theme.colorScheme.primary),
+          ],
+          Text(
+            'typing'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Three bouncing dots used by the typing indicator.
+class _TypingDots extends StatefulWidget {
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.primary;
+    return SizedBox(
+      width: 22,
+      height: 10,
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (var i = 0; i < 3; i++)
+                AnimatedOpacity(
+                  opacity: 0.2 + (0.8 * ((_animation.value + (i * 0.33)) % 1.0)),
+                  duration: const Duration(milliseconds: 150),
+                  child: Container(
+                    width: 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }
 

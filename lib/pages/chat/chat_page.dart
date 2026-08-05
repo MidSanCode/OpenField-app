@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/realtime_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/chat/conversation_page.dart';
 import 'package:openfield/pages/chat/consent_requests_page.dart';
@@ -22,11 +25,58 @@ class _ChatPageState extends State<ChatPage> {
   List<dynamic> _requests = [];
   bool _isLoading = true;
   String? _error;
+  StreamSubscription<PushEvent>? _realtimeSub;
+  int? _selectedConversationId;
+
+  /// Wide (landscape / tablet) layouts show the conversation list and the open
+  /// conversation side by side instead of pushing a separate route.
+  bool get _isWide =>
+      MediaQuery.of(context).orientation == Orientation.landscape ||
+      MediaQuery.sizeOf(context).width >= 640;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _realtimeSub = RealtimeService.instance.events.listen(_onRealtimeEvent);
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
+  }
+
+  /// Refresh the conversation list in place when a realtime chat event arrives,
+  /// so new messages/edits appear without leaving the page.
+  void _onRealtimeEvent(PushEvent event) {
+    switch (event.type) {
+      case 'chat.message.created':
+      case 'chat.message.updated':
+      case 'chat.message.deleted':
+      case 'chat.conversation.updated':
+        _reloadSilently();
+        break;
+    }
+  }
+
+  /// Same as [_load] but without toggling the full-screen spinner, so realtime
+  /// refreshes don't flicker the UI.
+  Future<void> _reloadSilently() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    try {
+      final conversations = await _apiService.listConversations(token);
+      final requests = await _apiService.listConsentRequests(token);
+      if (!mounted) return;
+      setState(() {
+        _conversations = conversations;
+        _requests = requests;
+      });
+    } catch (_) {
+      // Ignore transient failures on background refreshes.
+    }
   }
 
   Future<void> _load() async {
@@ -62,6 +112,10 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _openConversation(Conversation conv) async {
+    if (_isWide) {
+      setState(() => _selectedConversationId = conv.id);
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ConversationPage(conversationId: conv.id),
@@ -186,7 +240,49 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       ),
-      body: _buildBody(),
+      body: _isWide ? _buildSplitBody() : _buildBody(),
+    );
+  }
+
+  /// Wide (landscape) layout: conversation list on the left, the open
+  /// conversation on the right.
+  Widget _buildSplitBody() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: 340,
+          child: _buildBody(),
+        ),
+        VerticalDivider(width: 1, thickness: 1),
+        Expanded(
+          child: _selectedConversationId == null
+              ? _buildEmptyPane()
+              : ConversationPage(
+                  key: ValueKey(_selectedConversationId),
+                  conversationId: _selectedConversationId!,
+                  onBack: () => setState(() => _selectedConversationId = null),
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// Placeholder shown in the detail pane before a conversation is selected.
+  Widget _buildEmptyPane() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 48,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+          const SizedBox(height: 12),
+          Text('chatSelectConversation'.tr()),
+        ],
+      ),
     );
   }
 

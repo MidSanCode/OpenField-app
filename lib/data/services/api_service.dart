@@ -1021,4 +1021,12 @@ class ApiService {
           response.statusCode, _decodeError(response, 'Failed to delete message'));
     }
   }
+
+  /// Announces that the current user is typing in a conversation. Fire-and-forget.
+  Future<void> sendTyping(String accessToken, int conversationId) async {
+    await _client.post(
+      Uri.parse('$baseUrl/conversations/$conversationId/typing'),
+      headers: _headers(token: accessToken, json: false),
+    );
+  }
 }
