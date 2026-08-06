@@ -482,10 +482,6 @@ class _AccountPageState extends State<AccountPage> {
                 ),
               ),
             ],
-            if (user != null && user.storageQuota > 0) ...[
-              const SizedBox(height: 8),
-              Center(child: _StorageChip(used: user.storageUsed, quota: user.storageQuota)),
-            ],
             const SizedBox(height: 24),
           ],
         ),
@@ -515,39 +511,6 @@ class _AccountPageState extends State<AccountPage> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StorageChip extends StatelessWidget {
-  final int used;
-  final int quota;
-
-  const _StorageChip({required this.used, required this.quota});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final usedMb = used / (1024 * 1024);
-    final quotaMb = quota / (1024 * 1024);
-    final ratio = quota > 0 ? used / quota : 0.0;
-
-    return Tooltip(
-      message: '${usedMb.toStringAsFixed(1)} MB / ${quotaMb.toStringAsFixed(1)} MB',
-      child: Column(
-        children: [
-          Text('${usedMb.toStringAsFixed(1)} MB', style: theme.textTheme.bodySmall),
-          SizedBox(
-            width: 80,
-            child: LinearProgressIndicator(
-              value: ratio.clamp(0.0, 1.0),
-              minHeight: 6,
-              borderRadius: BorderRadius.circular(3),
-              color: ratio > 0.9 ? theme.colorScheme.error : null,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
