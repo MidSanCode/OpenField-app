@@ -39,10 +39,13 @@ class PostsPage extends StatefulWidget {
 class _PostsPageState extends State<PostsPage> {
   final ApiService _apiService = ApiService();
   final DraftService _draftService = DraftService();
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
   List<Post> _posts = [];
   bool _isLoading = true;
   bool _isPosting = false;
   String? _error;
+  String _query = '';
   StreamSubscription<PushEvent>? _realtimeSub;
 
   @override
@@ -55,12 +58,24 @@ class _PostsPageState extends State<PostsPage> {
   @override
   void dispose() {
     _realtimeSub?.cancel();
+    _searchDebounce?.cancel();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() => _query = value.trim());
+      _loadPosts();
+    });
   }
 
   /// Prepends freshly created posts (broadcast by the push service) to the feed.
   void _onRealtimeEvent(PushEvent event) {
     if (event.type != 'post.created' || !mounted) return;
+    if (_query.isNotEmpty) return;
     final post = Post.fromJson(event.data);
     final exists = _posts.any((p) => p.id == post.id);
     if (exists) return;
@@ -77,7 +92,7 @@ class _PostsPageState extends State<PostsPage> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final posts = await _apiService.getPosts(token: authService.accessToken);
+      final posts = await _apiService.getPosts(token: authService.accessToken, query: _query);
       if (!mounted) return;
       setState(() {
         _posts = posts;
@@ -221,6 +236,43 @@ class _PostsPageState extends State<PostsPage> {
   }
 
   Widget _buildBody(int? currentUserId) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: TextField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'searchPosts'.tr(),
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                    ),
+              isDense: true,
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+          ),
+        ),
+        Expanded(child: _buildFeed(currentUserId)),
+      ],
+    );
+  }
+
+  Widget _buildFeed(int? currentUserId) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -239,7 +291,9 @@ class _PostsPageState extends State<PostsPage> {
     }
 
     if (_posts.isEmpty) {
-      return Center(child: Text('noPosts'.tr()));
+      return Center(
+        child: Text(_query.isNotEmpty ? 'noSearchResults'.tr() : 'noPosts'.tr()),
+      );
     }
 
     return RefreshIndicator(

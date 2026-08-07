@@ -506,11 +506,11 @@ class ApiService {
 
   // ---- Posts ----
 
-  Future<List<Post>> getPosts({int page = 1, int limit = 20, String? token}) async {
-    final response = await _client.get(
-      Uri.parse('$baseUrl/posts?page=$page&limit=$limit'),
-      headers: _headers(token: token, json: false),
-    );
+  Future<List<Post>> getPosts({int page = 1, int limit = 20, String? token, String? query}) async {
+    final uri = query != null && query.trim().isNotEmpty
+        ? Uri.parse('$baseUrl/posts?page=$page&limit=$limit&q=${Uri.encodeQueryComponent(query.trim())}')
+        : Uri.parse('$baseUrl/posts?page=$page&limit=$limit');
+    final response = await _client.get(uri, headers: _headers(token: token, json: false));
     if (response.statusCode == 200) {
       final data = _decodeMap(response);
       final postsList = data?['posts'];
@@ -950,6 +950,17 @@ class ApiService {
     if (response.statusCode != 204) {
       throw ApiException(
           response.statusCode, _decodeError(response, 'Failed to remove member'));
+    }
+  }
+
+  Future<void> deleteConversation(String accessToken, int conversationId) async {
+    final response = await _client.delete(
+      Uri.parse('$baseUrl/conversations/$conversationId'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode != 204) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to delete conversation'));
     }
   }
 

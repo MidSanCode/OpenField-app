@@ -192,6 +192,15 @@ class ChatLocalDb {
         where: 'conversation_id = ? AND message_id = ?', whereArgs: [conversationId, messageId]);
   }
 
+  /// Removes all cached messages for a conversation (used after deletion).
+  Future<void> deleteConversation(int conversationId) async {
+    final db = await _open();
+    if (db == null) return;
+    await db.delete('messages', where: 'conversation_id = ?', whereArgs: [conversationId]);
+    await db.delete('message_attachments',
+        where: 'conversation_id = ?', whereArgs: [conversationId]);
+  }
+
   Future<void> _insert(
     DatabaseExecutor txn,
     ChatMessage m,

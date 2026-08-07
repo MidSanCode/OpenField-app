@@ -11,6 +11,8 @@ class ChatMessage {
   final int senderId;
   final String content;
   final int? replyToId;
+  final String? replyToName;
+  final String? replyToContent;
   final DateTime? editedAt;
   final DateTime? deletedAt;
   final DateTime createdAt;
@@ -33,6 +35,8 @@ class ChatMessage {
     required this.content,
     required this.createdAt,
     this.replyToId,
+    this.replyToName,
+    this.replyToContent,
     this.editedAt,
     this.deletedAt,
     this.senderName,
@@ -68,6 +72,8 @@ class ChatMessage {
       senderId: senderId,
       content: content,
       replyToId: replyToId,
+      replyToName: replyToName,
+      replyToContent: replyToContent,
       editedAt: editedAt,
       deletedAt: deletedAt,
       createdAt: createdAt,
@@ -95,6 +101,8 @@ class ChatMessage {
       senderId: json['sender_id'] as int,
       content: json['content'] as String? ?? '',
       replyToId: json['reply_to_id'] as int?,
+      replyToName: json['reply_to_name'] as String?,
+      replyToContent: json['reply_to_content'] as String?,
       editedAt: json['edited_at'] != null ? DateTime.parse(json['edited_at'] as String) : null,
       deletedAt: json['deleted_at'] != null ? DateTime.parse(json['deleted_at'] as String) : null,
       createdAt: DateTime.parse(json['created_at'] as String),

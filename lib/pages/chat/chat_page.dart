@@ -55,6 +55,7 @@ class _ChatPageState extends State<ChatPage> {
       case 'chat.message.updated':
       case 'chat.message.deleted':
       case 'chat.conversation.updated':
+      case 'chat.consent.requested':
         _reloadSilently();
         break;
     }
@@ -261,7 +262,10 @@ class _ChatPageState extends State<ChatPage> {
               : ConversationPage(
                   key: ValueKey(_selectedConversationId),
                   conversationId: _selectedConversationId!,
-                  onBack: () => setState(() => _selectedConversationId = null),
+                  onBack: () {
+                    setState(() => _selectedConversationId = null);
+                    _reloadSilently();
+                  },
                 ),
         ),
       ],

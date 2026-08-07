@@ -118,10 +118,36 @@ class _ConversationPageState extends State<ConversationPage> {
         break;
       case 'chat.message.deleted':
         final msg = ChatMessage.fromJson(event.data);
+        ChatMessage? tombstone;
         setState(() {
-          _messages = _messages.where((m) => m.id != msg.id).toList();
+          _messages = _messages.map((m) {
+            if (m.id != msg.id) return m;
+            final deleted = ChatMessage(
+              id: m.id,
+              conversationId: m.conversationId,
+              senderId: m.senderId,
+              content: m.content,
+              replyToId: m.replyToId,
+              replyToName: m.replyToName,
+              replyToContent: m.replyToContent,
+              editedAt: m.editedAt,
+              deletedAt: msg.deletedAt ?? DateTime.now(),
+              createdAt: m.createdAt,
+              senderName: m.senderName,
+              senderAvatar: m.senderAvatar,
+              senderVerified: m.senderVerified,
+              attachments: m.attachments,
+              clientId: m.clientId,
+              status: m.status,
+            );
+            tombstone = deleted;
+            return deleted;
+          }).toList();
         });
-        ChatLocalDb.instance.deleteMessage(widget.conversationId, msg.id);
+        final t = tombstone;
+        if (t != null) {
+          ChatLocalDb.instance.upsertMessage(t);
+        }
         break;
       case 'chat.typing':
         final userId = event.userId;
@@ -779,9 +805,9 @@ class _ConversationPageState extends State<ConversationPage> {
   String _roleLabel(String role) {
     switch (role) {
       case 'owner':
-        return 'Owner';
+        return 'chatOwnerRole'.tr();
       case 'admin':
-        return 'Admin';
+        return 'chatAdminRole'.tr();
       default:
         return 'normalUser'.tr();
     }
@@ -837,6 +863,41 @@ class _ConversationPageState extends State<ConversationPage> {
     }
   }
 
+  Future<void> _deleteConversation() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    final isGroup = _conversation?.isGroup ?? false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isGroup ? 'chatGroupDeleteConfirm'.tr() : 'chatDeleteConfirm'.tr()),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('cancel'.tr())),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('delete'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _apiService.deleteConversation(token, widget.conversationId);
+      ChatLocalDb.instance.deleteConversation(widget.conversationId);
+      if (!mounted) return;
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final conv = _conversation;
@@ -871,6 +932,9 @@ class _ConversationPageState extends State<ConversationPage> {
                 case 'leave':
                   _leaveGroup();
                   break;
+                case 'delete':
+                  _deleteConversation();
+                  break;
               }
             },
             itemBuilder: (context) => [
@@ -878,11 +942,19 @@ class _ConversationPageState extends State<ConversationPage> {
                 PopupMenuItem(value: 'note', child: Text('chatNote'.tr())),
               if (isGroup)
                 PopupMenuItem(value: 'nickname', child: Text('chatGroupNickname'.tr())),
-              if (isGroup)
+              if (isGroup && _myMembership?.role != 'owner')
                 PopupMenuItem(
                   value: 'leave',
                   child: Text(
                     'chatGroupLeave'.tr(),
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
+              if (!isGroup || _myMembership?.role == 'owner')
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text(
+                    isGroup ? 'chatGroupDelete'.tr() : 'chatDelete'.tr(),
                     style: TextStyle(color: Theme.of(context).colorScheme.error),
                   ),
                 ),
@@ -934,7 +1006,7 @@ class _ConversationPageState extends State<ConversationPage> {
                           )
                         : TextButton(
                             onPressed: _loadOlder,
-                            child: const Text('Load earlier'),
+                            child: Text('chatLoadEarlier'.tr()),
                           ),
                   ),
                 );
@@ -1046,6 +1118,7 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final replyPreviewText = _replyPreviewText();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1104,7 +1177,7 @@ class _MessageBubble extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (replyPreview != null && !replyPreview!.isDeleted) ...[
+                        if (replyPreviewText != null) ...[
                           Container(
                             width: double.infinity,
                             margin: const EdgeInsets.only(bottom: 6),
@@ -1114,7 +1187,7 @@ class _MessageBubble extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              '${replyPreview!.displayName}: ${replyPreview!.content}',
+                              replyPreviewText,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodySmall?.copyWith(
@@ -1193,6 +1266,22 @@ class _MessageBubble extends StatelessWidget {
     final h = time.hour.toString().padLeft(2, '0');
     final m = time.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  /// Quote preview: prefers the in-thread message (fresh edits/deletes), then
+  /// falls back to the server-provided [ChatMessage.replyToName]/replyToContent
+  /// so quotes still render when the referenced message isn't loaded.
+  String? _replyPreviewText() {
+    final rp = replyPreview;
+    if (rp != null && !rp.isDeleted && rp.content.isNotEmpty) {
+      return '${rp.displayName}: ${rp.content}';
+    }
+    if (message.replyToName != null && message.replyToName!.isNotEmpty) {
+      final content = message.replyToContent ?? '';
+      if (content.isEmpty) return null;
+      return '${message.replyToName}: $content';
+    }
+    return null;
   }
 }
 
@@ -1321,7 +1410,7 @@ class _SendStatusIndicator extends StatelessWidget {
     }
     if (message.isFailed) {
       return Tooltip(
-        message: 'Resend',
+        message: 'chatResend'.tr(),
         child: InkWell(
           onTap: onRetry,
           borderRadius: BorderRadius.circular(10),
@@ -1360,7 +1449,7 @@ class _ReplyBar extends StatelessWidget {
           Expanded(
             child: Text(
               message == null
-                  ? 'Replying...'
+                  ? 'chatReplying'.tr()
                   : '${message!.displayName}: ${message!.content}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
