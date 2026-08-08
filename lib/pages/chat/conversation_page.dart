@@ -53,9 +53,23 @@ class _ConversationPageState extends State<ConversationPage> {
   void initState() {
     super.initState();
     _myUserId = Provider.of<AuthService>(context, listen: false).user?.id ?? 0;
+    if (_myUserId == 0) {
+      _loadMyUserId();
+    }
     _load();
     _realtimeSub = RealtimeService.instance.events.listen(_onRealtimeEvent);
     _scrollController.addListener(_onScroll);
+  }
+
+  /// After a page refresh the current profile may not be loaded yet, leaving
+  /// [_myUserId] at 0 (which would mis-align every bubble to the left). Fetch
+  /// the profile so own messages render on the right.
+  Future<void> _loadMyUserId() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final user = await auth.fetchCurrentUser();
+    if (mounted && user != null) {
+      setState(() => _myUserId = user.id);
+    }
   }
 
   /// Triggers loading of older messages when the user scrolls near the top.
@@ -236,6 +250,11 @@ class _ConversationPageState extends State<ConversationPage> {
       final detail = await _apiService.getConversation(token, widget.conversationId);
       final messages = await _apiService.listMessages(token, widget.conversationId);
       if (!mounted) return;
+      // The membership record is the server-authoritative identity of the
+      // current user in this conversation; prefer it over the local profile.
+      if (detail.myMembership != null) {
+        _myUserId = detail.myMembership!.userId;
+      }
       setState(() {
         _conversation = detail.conversation;
         _members = detail.members;

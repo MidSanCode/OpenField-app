@@ -60,11 +60,6 @@ class _Sidebar extends StatelessWidget {
       ),
       destinations: [
         NavigationRailDestination(
-          icon: const Icon(Icons.home_outlined),
-          selectedIcon: const Icon(Icons.home),
-          label: Text('posts'.tr()),
-        ),
-        NavigationRailDestination(
           icon: const Icon(Icons.chat_outlined),
           selectedIcon: const Icon(Icons.chat),
           label: Text('chat'.tr()),
@@ -118,11 +113,6 @@ class _BottomBar extends StatelessWidget {
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected,
       destinations: [
-        NavigationDestination(
-          icon: const Icon(Icons.home_outlined),
-          selectedIcon: const Icon(Icons.home),
-          label: 'posts'.tr(),
-        ),
         NavigationDestination(
           icon: const Icon(Icons.chat_outlined),
           selectedIcon: const Icon(Icons.chat),

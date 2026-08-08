@@ -10,7 +10,6 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
-import 'package:openfield/pages/account/my_posts_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/account/wallet_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
@@ -339,25 +338,6 @@ class _AccountPageState extends State<AccountPage> {
           title: 'accountSettings'.tr(),
           children: [
             if (user != null) ...[
-              ListTile(
-                minLeadingWidth: 48,
-                leading: const Icon(Icons.article_outlined),
-                title: Text('myPosts'.tr()),
-                subtitle: Text(
-                  'myPostsHint'.tr(),
-                  style: const TextStyle(fontSize: 12),
-                ),
-                contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => MyPostsPage(userId: user.id),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1),
               ListTile(
                 minLeadingWidth: 48,
                 leading: const Icon(Icons.attach_file),

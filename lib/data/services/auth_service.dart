@@ -58,15 +58,15 @@ class AuthService extends ChangeNotifier {
       if (isAccessTokenExpired) {
         // Session resumed with an already-expired access token: try to refresh
         // right away, clearing the session if that is no longer possible.
-        await refreshAccessToken();
-      } else if (_refreshToken == null) {
-        // Legacy session saved before the refresh feature shipped: it has no
-        // refresh token and no recorded expiry. Verify it against the server
-        // and clear it if the token is no longer accepted.
-        await _verifySession();
-      } else {
-        _startRefreshLoop();
+        if (!await refreshAccessToken()) {
+          return;
+        }
       }
+      // Always load the full profile on startup so the user id is available
+      // immediately (chat bubble alignment, author attribution, avatar, ...)
+      // even after a page refresh. Also validates the session and starts the
+      // auto-refresh loop.
+      await _verifySession();
     }
   }
 

@@ -1,18 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/follow_list_page.dart';
-import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/markdown_content.dart';
-import 'package:openfield/widgets/post_card.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
 /// Public profile of any user: banner, avatar, nickname, @username, bio,
-/// verified badge, and their posts.
+/// and verified badge.
 class ProfilePage extends StatefulWidget {
   final int userId;
 
@@ -25,7 +22,6 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final ApiService _apiService = ApiService();
   User? _user;
-  List<Post>? _posts;
   Object? _error;
   bool _isLoading = true;
   bool _followLoading = false;
@@ -47,11 +43,9 @@ class _ProfilePageState extends State<ProfilePage> {
       final auth = Provider.of<AuthService>(context, listen: false);
       final token = auth.accessToken;
       final user = await _apiService.getUser(widget.userId, token: token);
-      final posts = await _apiService.getPostsByUser(widget.userId, token: token);
       if (mounted) {
         setState(() {
           _user = user;
-          _posts = posts;
           _isLoading = false;
         });
       }
@@ -98,50 +92,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: MarkdownContent(data: user.bio),
               ),
             ],
-            const Divider(height: 24),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-              child: Text(
-                'posts'.tr(),
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (_posts == null || _posts!.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: Center(
-                  child: Text('noPosts'.tr(), style: theme.textTheme.bodyMedium),
-                ),
-              )
-            else
-              for (final post in _posts!)
-                PostCard(
-                  post: post,
-                  token: Provider.of<AuthService>(context, listen: false).accessToken,
-                  onPostChanged: (updated) {
-                    setState(() {
-                      _posts = _posts!.map((p) => p.id == updated.id ? updated : p).toList();
-                    });
-                  },
-                  onUnauthenticated: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('loginWithOIDC'.tr())),
-                    );
-                  },
-                  onTapAuthor: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => ProfilePage(userId: post.userId)),
-                    );
-                  },
-                  onTapReply: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
-                    );
-                  },
-                ),
           ],
         ),
       );
