@@ -40,7 +40,7 @@ class ChatLocalDb {
     final path = p.join(dir.path, 'openfield_chat.db');
     final db = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE messages (
@@ -48,6 +48,7 @@ class ChatLocalDb {
             conversation_id INTEGER NOT NULL,
             sender_id INTEGER NOT NULL,
             content TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'text',
             reply_to_id INTEGER,
             edited_at TEXT,
             deleted_at TEXT,
@@ -78,6 +79,10 @@ class ChatLocalDb {
           await db.execute('ALTER TABLE messages ADD COLUMN client_id TEXT');
           await db.execute(
               'ALTER TABLE messages ADD COLUMN status INTEGER NOT NULL DEFAULT 2');
+        }
+        if (oldVersion < 3) {
+          await db.execute(
+              "ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'");
         }
       },
     );
@@ -208,13 +213,14 @@ class ChatLocalDb {
     bool ignore = false,
   }) async {
     final insert = ignore
-        ? 'INSERT OR IGNORE INTO messages (id, conversation_id, sender_id, content, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
-        : 'INSERT INTO messages (id, conversation_id, sender_id, content, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)';
+        ? 'INSERT OR IGNORE INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        : 'INSERT INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
     await txn.rawInsert(insert, [
       m.id,
       conversationId,
       m.senderId,
       m.content,
+      m.kind,
       m.replyToId,
       m.editedAt?.toIso8601String(),
       m.deletedAt?.toIso8601String(),
@@ -265,6 +271,7 @@ class ChatLocalDb {
         conversationId: m.conversationId,
         senderId: m.senderId,
         content: m.content,
+        kind: m.kind,
         replyToId: m.replyToId,
         editedAt: m.editedAt,
         deletedAt: m.deletedAt,
@@ -296,6 +303,7 @@ class ChatLocalDb {
       conversationId: r['conversation_id'] as int,
       senderId: r['sender_id'] as int,
       content: r['content'] as String? ?? '',
+      kind: r['kind'] as String? ?? 'text',
       replyToId: r['reply_to_id'] as int?,
       editedAt: _parseTime(r['edited_at']),
       deletedAt: _parseTime(r['deleted_at']),

@@ -964,6 +964,107 @@ class ApiService {
     }
   }
 
+  Future<List<Conversation>> fetchPublicGroups(String accessToken, {String query = ''}) async {
+    final response = await _client.get(
+      Uri.parse('$baseUrl/conversations/public${query.isNotEmpty ? '?q=${Uri.encodeQueryComponent(query)}' : ''}'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['groups'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((c) => Conversation.fromJson(c)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load public groups'));
+  }
+
+  Future<Conversation> joinGroup(String accessToken, int conversationId) async {
+    final response = await _client.post(
+      Uri.parse('$baseUrl/conversations/$conversationId/join'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Conversation.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to join group'));
+  }
+
+  Future<void> updateGroupSettings(String accessToken, int conversationId,
+      {required bool isPublic, required bool allowJoin}) async {
+    final response = await _client.put(
+      Uri.parse('$baseUrl/conversations/$conversationId/settings'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'is_public': isPublic, 'allow_join': allowJoin}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to update group settings'));
+    }
+  }
+
+  Future<void> setMemberRole(String accessToken, int conversationId, int userId, String role) async {
+    final response = await _client.put(
+      Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/role'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'role': role}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to update member role'));
+    }
+  }
+
+  Future<void> muteMember(String accessToken, int conversationId, int userId, int durationMinutes) async {
+    final response = await _client.post(
+      Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/mute'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'duration_minutes': durationMinutes}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to mute member'));
+    }
+  }
+
+  Future<void> unmuteMember(String accessToken, int conversationId, int userId) async {
+    final response = await _client.delete(
+      Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/mute'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to unmute member'));
+    }
+  }
+
+  Future<void> muteAllMembers(String accessToken, int conversationId, int durationMinutes) async {
+    final response = await _client.post(
+      Uri.parse('$baseUrl/conversations/$conversationId/mute-all'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'duration_minutes': durationMinutes}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to mute group'));
+    }
+  }
+
+  Future<void> unmuteAllMembers(String accessToken, int conversationId) async {
+    final response = await _client.delete(
+      Uri.parse('$baseUrl/conversations/$conversationId/mute-all'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to unmute group'));
+    }
+  }
+
   // ---- Chat: messages ----
 
   Future<List<ChatMessage>> listMessages(

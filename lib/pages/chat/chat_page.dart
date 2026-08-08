@@ -10,6 +10,7 @@ import 'package:openfield/data/services/realtime_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/chat/conversation_page.dart';
 import 'package:openfield/pages/chat/consent_requests_page.dart';
+import 'package:openfield/pages/chat/discover_groups_page.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
 
 class ChatPage extends StatefulWidget {
@@ -139,6 +140,13 @@ class _ChatPageState extends State<ChatPage> {
     if (mounted) _load();
   }
 
+  Future<void> _openDiscover() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DiscoverGroupsPage()),
+    );
+    if (mounted) _load();
+  }
+
   Future<void> _createGroup() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
@@ -192,6 +200,11 @@ class _ChatPageState extends State<ChatPage> {
       appBar: AppBar(
         title: Text('chat'.tr()),
         actions: [
+          IconButton(
+            onPressed: _openDiscover,
+            tooltip: 'chatGroupDiscover'.tr(),
+            icon: const Icon(Icons.explore_outlined),
+          ),
           IconButton(
             onPressed: _openRequests,
             tooltip: 'chatRequests'.tr(),
@@ -434,6 +447,32 @@ class _ConversationTile extends StatelessWidget {
     String text;
     if (last.isDeleted) {
       text = 'messageDeleted'.tr();
+    } else if (last.isSystem) {
+      final name = last.displayName.isEmpty
+          ? 'chatGroupSomeone'.tr()
+          : last.displayName;
+      switch (last.kind) {
+        case 'system.join':
+          text = 'chatGroupJoinedGroup'.tr(args: [name]);
+          break;
+        case 'system.leave':
+          text = 'chatGroupLeftGroup'.tr(args: [name]);
+          break;
+        case 'system.mute':
+          text = 'chatGroupMemberMuted'.tr(args: [name]);
+          break;
+        case 'system.unmute':
+          text = 'chatGroupMemberUnmuted'.tr(args: [name]);
+          break;
+        case 'system.mute.all':
+          text = 'chatGroupMutedAll'.tr();
+          break;
+        case 'system.unmute.all':
+          text = 'chatGroupUnmutedAll'.tr();
+          break;
+        default:
+          text = last.content;
+      }
     } else if (conversation.isGroup && last.displayName.isNotEmpty) {
       text = '${last.displayName}: ${last.content}';
     } else {

@@ -10,6 +10,11 @@ class ChatMessage {
   final int conversationId;
   final int senderId;
   final String content;
+
+  /// Server-side message kind: 'text' or system kinds such as
+  /// 'system.join' / 'system.leave' / 'system.mute' / 'system.unmute' /
+  /// 'system.mute.all' / 'system.unmute.all'.
+  final String kind;
   final int? replyToId;
   final String? replyToName;
   final String? replyToContent;
@@ -33,6 +38,7 @@ class ChatMessage {
     required this.conversationId,
     required this.senderId,
     required this.content,
+    this.kind = 'text',
     required this.createdAt,
     this.replyToId,
     this.replyToName,
@@ -49,6 +55,9 @@ class ChatMessage {
 
   bool get isDeleted => deletedAt != null;
   bool get isEdited => editedAt != null;
+  bool get isSystem => kind.startsWith('system.');
+  bool get isJoin => kind == 'system.join';
+  bool get isLeave => kind == 'system.leave';
   bool get isLocal => id <= 0;
   bool get isPending => status == MessageStatus.sending;
   bool get isFailed => status == MessageStatus.failed;
@@ -71,6 +80,7 @@ class ChatMessage {
       conversationId: conversationId,
       senderId: senderId,
       content: content,
+      kind: kind,
       replyToId: replyToId,
       replyToName: replyToName,
       replyToContent: replyToContent,
@@ -100,6 +110,7 @@ class ChatMessage {
       conversationId: json['conversation_id'] as int,
       senderId: json['sender_id'] as int,
       content: json['content'] as String? ?? '',
+      kind: json['kind'] as String? ?? 'text',
       replyToId: json['reply_to_id'] as int?,
       replyToName: json['reply_to_name'] as String?,
       replyToContent: json['reply_to_content'] as String?,

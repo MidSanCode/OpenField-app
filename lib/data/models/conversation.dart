@@ -9,6 +9,11 @@ class Conversation {
   final int ownerId;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final bool isPublic;
+  final bool allowJoin;
+  final DateTime? muteAllUntil;
+  final int memberCount;
+  final bool isMember;
   final ChatMessage? lastMessage;
   final int unread;
 
@@ -20,14 +25,27 @@ class Conversation {
     required this.ownerId,
     required this.createdAt,
     required this.updatedAt,
+    this.isPublic = false,
+    this.allowJoin = false,
+    this.muteAllUntil,
+    this.memberCount = 0,
+    this.isMember = false,
     this.lastMessage,
     this.unread = 0,
   });
 
   bool get isGroup => type == 'group';
 
+  bool get canJoinDirectly => isGroup && isPublic && allowJoin;
+
+  bool get isGroupMuted {
+    final until = muteAllUntil;
+    return until != null && until.isAfter(DateTime.now());
+  }
+
   factory Conversation.fromJson(Map<String, dynamic> json) {
     final last = json['last_message'];
+    final muteAll = json['mute_all_until'];
     return Conversation(
       id: json['id'] as int,
       type: json['type'] as String? ?? 'private',
@@ -36,6 +54,11 @@ class Conversation {
       ownerId: json['owner_id'] as int? ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      isPublic: json['is_public'] as bool? ?? false,
+      allowJoin: json['allow_join'] as bool? ?? false,
+      muteAllUntil: muteAll != null ? DateTime.parse(muteAll as String) : null,
+      memberCount: json['member_count'] as int? ?? 0,
+      isMember: json['is_member'] as bool? ?? false,
       lastMessage: last is Map<String, dynamic> ? ChatMessage.fromJson(last) : null,
       unread: json['unread'] as int? ?? 0,
     );

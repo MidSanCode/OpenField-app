@@ -11,6 +11,7 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/chat_local_db.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:openfield/pages/chat/group_settings_page.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/markdown_content.dart';
@@ -141,6 +142,7 @@ class _ConversationPageState extends State<ConversationPage> {
               conversationId: m.conversationId,
               senderId: m.senderId,
               content: m.content,
+              kind: m.kind,
               replyToId: m.replyToId,
               replyToName: m.replyToName,
               replyToContent: m.replyToContent,
@@ -173,6 +175,9 @@ class _ConversationPageState extends State<ConversationPage> {
           _typingTimers.remove(userId);
           if (mounted) setState(() => _typingUserId = null);
         });
+        break;
+      case 'chat.conversation.updated':
+        _refreshConversation();
         break;
     }
   }
@@ -221,6 +226,7 @@ class _ConversationPageState extends State<ConversationPage> {
           conversationId: m.conversationId,
           senderId: m.senderId,
           content: m.content,
+          kind: m.kind,
           replyToId: m.replyToId,
           editedAt: m.editedAt,
           deletedAt: m.deletedAt,
@@ -347,7 +353,101 @@ class _ConversationPageState extends State<ConversationPage> {
     }
   }
 
+  /// Whether the current user is blocked from sending because of a personal
+  /// mute or an active group-wide mute (owner/admin are exempt from the latter).
+  bool get _isMuted {
+    final membership = _myMembership;
+    if (membership == null) return false;
+    if (membership.isMuted) return true;
+    final conv = _conversation;
+    if (conv != null &&
+        conv.isGroupMuted &&
+        membership.role != 'owner' &&
+        membership.role != 'admin') {
+      return true;
+    }
+    return false;
+  }
+
+  DateTime? get _muteUntil {
+    final membership = _myMembership;
+    if (membership != null && membership.isMuted) return membership.mutedUntil;
+    final conv = _conversation;
+    if (conv != null && conv.isGroupMuted) return conv.muteAllUntil;
+    return null;
+  }
+
+  bool get _canSend => _myMembership != null && !_isMuted;
+
+  String _muteBannerText() {
+    final until = _muteUntil;
+    if (until == null) return 'chatYouAreMuted'.tr();
+    final t = until.toLocal();
+    final formatted = '${t.year}-${t.month.toString().padLeft(2, '0')}-'
+        '${t.day.toString().padLeft(2, '0')} '
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    return 'chatYouAreMutedUntil'.tr(args: [formatted]);
+  }
+
+  void _showMutedSnackBar() {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(_muteBannerText())));
+  }
+
+  /// Re-fetches the conversation detail (settings + members + my membership)
+  /// without disturbing the loaded messages. Used after settings/role/mute
+  /// changes and on 'conversation.updated' push events.
+  Future<void> _refreshConversation() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    try {
+      final detail = await _apiService.getConversation(token, widget.conversationId);
+      if (!mounted) return;
+      if (detail.myMembership != null) {
+        _myUserId = detail.myMembership!.userId;
+      }
+      setState(() {
+        _conversation = detail.conversation;
+        _members = detail.members;
+        _myMembership = detail.myMembership;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _joinGroup() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    try {
+      final conv = await _apiService.joinGroup(token, widget.conversationId);
+      if (!mounted) return;
+      setState(() {
+        _conversation = conv;
+        _myMembership = ChatMember(
+          conversationId: conv.id,
+          userId: _myUserId,
+          role: 'member',
+          note: '',
+          groupNickname: '',
+          status: 'active',
+          addedBy: conv.ownerId,
+          createdAt: DateTime.now(),
+        );
+      });
+      _refreshConversation();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
   Future<void> _send() async {
+    if (!_canSend) {
+      _showMutedSnackBar();
+      return;
+    }
     final content = _inputController.text.trim();
     if (content.isEmpty) return;
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -414,6 +514,7 @@ class _ConversationPageState extends State<ConversationPage> {
           conversationId: m.conversationId,
           senderId: m.senderId,
           content: m.content,
+          kind: m.kind,
           replyToId: m.replyToId,
           editedAt: m.editedAt,
           deletedAt: m.deletedAt,
@@ -452,6 +553,10 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   Future<void> _pickAndSendAttachment() async {
+    if (!_canSend) {
+      _showMutedSnackBar();
+      return;
+    }
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -612,6 +717,7 @@ class _ConversationPageState extends State<ConversationPage> {
             conversationId: m.conversationId,
             senderId: m.senderId,
             content: '',
+            kind: m.kind,
             createdAt: m.createdAt,
             deletedAt: DateTime.now(),
             replyToId: m.replyToId,
@@ -673,6 +779,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 status: _myMembership!.status,
                 addedBy: _myMembership!.addedBy,
                 createdAt: _myMembership!.createdAt,
+                mutedUntil: _myMembership!.mutedUntil,
                 username: _myMembership!.username,
                 nickname: _myMembership!.nickname,
                 avatarUrl: _myMembership!.avatarUrl,
@@ -725,6 +832,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 status: _myMembership!.status,
                 addedBy: _myMembership!.addedBy,
                 createdAt: _myMembership!.createdAt,
+                mutedUntil: _myMembership!.mutedUntil,
                 username: _myMembership!.username,
                 nickname: _myMembership!.nickname,
                 avatarUrl: _myMembership!.avatarUrl,
@@ -735,6 +843,17 @@ class _ConversationPageState extends State<ConversationPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
+  }
+
+  Future<void> _openGroupSettings() async {
+    final conv = _conversation;
+    if (conv == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GroupSettingsPage(conversation: conv),
+      ),
+    );
+    if (mounted) _refreshConversation();
   }
 
   Future<void> _showMembers() async {
@@ -797,16 +916,23 @@ class _ConversationPageState extends State<ConversationPage> {
                               ? Text(m.displayName.substring(0, 1).toUpperCase())
                               : null,
                         ),
-                        title: Text(m.displayName),
+                        title: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(child: Text(m.displayName, overflow: TextOverflow.ellipsis)),
+                            if (m.isMuted) ...[
+                              const SizedBox(width: 6),
+                              Icon(Icons.volume_off_outlined,
+                                  size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            ],
+                          ],
+                        ),
                         subtitle: Text(_roleLabel(m.role)),
                         trailing: canManage && m.role != 'owner'
                             ? IconButton(
-                                icon: Icon(Icons.person_remove_outlined,
-                                    color: Theme.of(context).colorScheme.error),
-                                tooltip: 'delete'.tr(),
-                                onPressed: () async {
-                                  await _removeMember(m.userId);
-                                },
+                                icon: const Icon(Icons.more_vert),
+                                tooltip: 'chatMemberActions'.tr(),
+                                onPressed: () => _showMemberActions(m),
                               )
                             : null,
                       );
@@ -841,6 +967,225 @@ class _ConversationPageState extends State<ConversationPage> {
       if (!mounted) return;
       setState(() {
         _members = _members.where((m) => m.userId != userId).toList();
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  Future<void> _showMemberActions(ChatMember member) async {
+    final isOwner = _myMembership?.role == 'owner';
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Theme.of(ctx).colorScheme.primaryContainer,
+                backgroundImage: (member.avatarUrl != null && member.avatarUrl!.isNotEmpty)
+                    ? NetworkImage(member.avatarUrl!)
+                    : null,
+                child: (member.avatarUrl == null || member.avatarUrl!.isEmpty)
+                    ? Text(member.displayName.substring(0, 1).toUpperCase())
+                    : null,
+              ),
+              title: Text(member.displayName),
+              subtitle: Text(_roleLabel(member.role)),
+            ),
+            const Divider(height: 1),
+            if (member.isMuted)
+              ListTile(
+                leading: const Icon(Icons.volume_up_outlined),
+                title: Text('chatUnmuteMember'.tr()),
+                onTap: () => Navigator.of(ctx).pop('unmute'),
+              )
+            else
+              ListTile(
+                leading: const Icon(Icons.volume_off_outlined),
+                title: Text('chatMuteMember'.tr()),
+                onTap: () => Navigator.of(ctx).pop('mute'),
+              ),
+            if (isOwner && member.role == 'member')
+              ListTile(
+                leading: const Icon(Icons.admin_panel_settings_outlined),
+                title: Text('chatSetAdmin'.tr()),
+                onTap: () => Navigator.of(ctx).pop('set_admin'),
+              ),
+            if (isOwner && member.role == 'admin')
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: Text('chatRemoveAdmin'.tr()),
+                onTap: () => Navigator.of(ctx).pop('remove_admin'),
+              ),
+            ListTile(
+              leading: Icon(Icons.person_remove_outlined,
+                  color: Theme.of(ctx).colorScheme.error),
+              title: Text('chatRemoveMember'.tr(),
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+              onTap: () => Navigator.of(ctx).pop('remove'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null) return;
+    switch (action) {
+      case 'mute':
+        await _muteMember(member);
+        break;
+      case 'unmute':
+        await _unmuteMember(member);
+        break;
+      case 'set_admin':
+        await _setMemberRole(member, 'admin');
+        break;
+      case 'remove_admin':
+        await _setMemberRole(member, 'member');
+        break;
+      case 'remove':
+        await _removeMember(member.userId);
+        break;
+    }
+  }
+
+  Future<void> _muteMember(ChatMember member) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    final minutes = await _pickMuteDuration();
+    if (minutes == null) return;
+    try {
+      await _apiService.muteMember(token, widget.conversationId, member.userId, minutes);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('chatMemberMutedAction'.tr())));
+      _refreshConversation();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  /// Lets the caller pick a mute duration. Returns null when cancelled.
+  Future<int?> _pickMuteDuration() async {
+    const presets = <String, int>{
+      'chatMute1Hour': 60,
+      'chatMute6Hours': 360,
+      'chatMute12Hours': 720,
+      'chatMute1Day': 1440,
+      'chatMute1Week': 10080,
+      'chatMuteForever': 5256000,
+    };
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  Text('chatMuteMember'.tr(),
+                      style: Theme.of(ctx).textTheme.titleMedium),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            for (final entry in presets.entries)
+              ListTile(
+                title: Text(entry.key.tr()),
+                onTap: () => Navigator.of(ctx).pop(entry.value.toString()),
+              ),
+            ListTile(
+              title: Text('chatMuteCustom'.tr()),
+              onTap: () => Navigator.of(ctx).pop('custom'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null) return null;
+    if (choice != 'custom') return int.parse(choice);
+    if (!mounted) return null;
+    final controller = TextEditingController();
+    final minutes = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('chatMuteCustom'.tr()),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(hintText: 'chatMuteMinutes'.tr()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('cancel'.tr())),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(int.tryParse(controller.text.trim())),
+            child: Text('ok'.tr()),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (minutes == null || minutes <= 0) return null;
+    return minutes;
+  }
+
+  Future<void> _unmuteMember(ChatMember member) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    try {
+      await _apiService.unmuteMember(token, widget.conversationId, member.userId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('chatMemberUnmutedAction'.tr())));
+      _refreshConversation();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  Future<void> _setMemberRole(ChatMember member, String role) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    try {
+      await _apiService.setMemberRole(token, widget.conversationId, member.userId, role);
+      if (!mounted) return;
+      setState(() {
+        _members = _members.map((m) {
+          if (m.userId != member.userId) return m;
+          return ChatMember(
+            conversationId: m.conversationId,
+            userId: m.userId,
+            role: role,
+            note: m.note,
+            groupNickname: m.groupNickname,
+            status: m.status,
+            addedBy: m.addedBy,
+            createdAt: m.createdAt,
+            mutedUntil: m.mutedUntil,
+            username: m.username,
+            nickname: m.nickname,
+            avatarUrl: m.avatarUrl,
+            isVerified: m.isVerified,
+          );
+        }).toList();
       });
     } catch (e) {
       if (mounted) {
@@ -948,6 +1293,9 @@ class _ConversationPageState extends State<ConversationPage> {
                 case 'nickname':
                   _editGroupNickname();
                   break;
+                case 'settings':
+                  _openGroupSettings();
+                  break;
                 case 'leave':
                   _leaveGroup();
                   break;
@@ -961,6 +1309,8 @@ class _ConversationPageState extends State<ConversationPage> {
                 PopupMenuItem(value: 'note', child: Text('chatNote'.tr())),
               if (isGroup)
                 PopupMenuItem(value: 'nickname', child: Text('chatGroupNickname'.tr())),
+              if (isGroup && _myMembership?.role == 'owner')
+                PopupMenuItem(value: 'settings', child: Text('chatGroupSettings'.tr())),
               if (isGroup && _myMembership?.role != 'owner')
                 PopupMenuItem(
                   value: 'leave',
@@ -1032,6 +1382,9 @@ class _ConversationPageState extends State<ConversationPage> {
               }
               final msgIndex = index - (_hasOlder ? 1 : 0);
               final message = _messages[msgIndex];
+              if (message.isSystem) {
+                return _SystemMessage(message: message);
+              }
               final replyTo = message.replyToId != null
                   ? _messages.where((m) => m.id == message.replyToId).firstOrNull
                   : null;
@@ -1063,9 +1416,74 @@ class _ConversationPageState extends State<ConversationPage> {
                     ?.isVerified ??
                 false,
           ),
-        _buildInputBar(),
+        _buildInputArea(),
       ],
     );
+  }
+
+  /// Bottom bar: input when the user is an active (unmuted) member, a mute
+  /// notice when muted, a join button when the group is open to self-joining,
+  /// or a plain notice when the user has no way to participate.
+  Widget _buildInputArea() {
+    final theme = Theme.of(context);
+    final membership = _myMembership;
+    if (membership == null) {
+      final conv = _conversation;
+      if (conv != null && conv.canJoinDirectly) {
+        return SafeArea(
+          top: false,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: FilledButton.icon(
+              onPressed: _joinGroup,
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: Text('chatJoinGroup'.tr()),
+            ),
+          ),
+        );
+      }
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Text(
+            'chatNotMember'.tr(),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
+    if (_isMuted) {
+      return SafeArea(
+        top: false,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.block, size: 18, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _muteBannerText(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return _buildInputBar();
   }
 
   Widget _buildInputBar() {
@@ -1112,6 +1530,59 @@ class _ConversationPageState extends State<ConversationPage> {
         ),
       ),
     );
+  }
+}
+
+/// Centered grey pill rendered for server-generated system messages such as
+/// "joined the chat", "left the chat", "muted" and group-wide mute notices.
+class _SystemMessage extends StatelessWidget {
+  final ChatMessage message;
+
+  const _SystemMessage({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            _label(),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontSize: 12,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _label() {
+    final name = message.displayName.isEmpty ? 'chatSomeone'.tr() : message.displayName;
+    switch (message.kind) {
+      case 'system.join':
+        return 'chatJoinedGroup'.tr(args: [name]);
+      case 'system.leave':
+        return 'chatLeftGroup'.tr(args: [name]);
+      case 'system.mute':
+        return 'chatMemberMuted'.tr(args: [name]);
+      case 'system.unmute':
+        return 'chatMemberUnmuted'.tr(args: [name]);
+      case 'system.mute.all':
+        return 'chatGroupMutedAll'.tr();
+      case 'system.unmute.all':
+        return 'chatGroupUnmutedAll'.tr();
+      default:
+        return message.content;
+    }
   }
 }
 

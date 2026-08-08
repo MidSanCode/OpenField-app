@@ -7,6 +7,7 @@ class ChatMember {
   final String status; // pending | active | declined
   final int addedBy;
   final DateTime createdAt;
+  final DateTime? mutedUntil;
   final String? username;
   final String? nickname;
   final String? avatarUrl;
@@ -21,6 +22,7 @@ class ChatMember {
     required this.status,
     required this.addedBy,
     required this.createdAt,
+    this.mutedUntil,
     this.username,
     this.nickname,
     this.avatarUrl,
@@ -30,7 +32,13 @@ class ChatMember {
   String get displayName =>
       (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
 
+  bool get isMuted {
+    final until = mutedUntil;
+    return until != null && until.isAfter(DateTime.now());
+  }
+
   factory ChatMember.fromJson(Map<String, dynamic> json) {
+    final muted = json['muted_until'];
     return ChatMember(
       conversationId: json['conversation_id'] as int,
       userId: json['user_id'] as int,
@@ -40,6 +48,7 @@ class ChatMember {
       status: json['status'] as String? ?? 'active',
       addedBy: json['added_by'] as int? ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
+      mutedUntil: muted != null ? DateTime.parse(muted as String) : null,
       username: json['username'] as String?,
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
