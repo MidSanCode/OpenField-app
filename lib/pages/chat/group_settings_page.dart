@@ -251,6 +251,16 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                 title: Text('chatGroupRemoveAdmin'.tr()),
                 onTap: () => Navigator.of(ctx).pop('remove_admin'),
               ),
+            if (_canManage && member.role != 'owner')
+              ListTile(
+                leading: const Icon(Icons.workspace_premium_outlined),
+                title: Text('chatGroupSetTitle'.tr()),
+                subtitle: member.title.isNotEmpty
+                    ? Text(member.title,
+                        style: Theme.of(ctx).textTheme.bodySmall)
+                    : null,
+                onTap: () => Navigator.of(ctx).pop('set_title'),
+              ),
             ListTile(
               leading: Icon(Icons.person_remove_outlined,
                   color: Theme.of(ctx).colorScheme.error),
@@ -276,9 +286,77 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
       case 'remove_admin':
         await _setMemberRole(member, 'member');
         break;
+      case 'set_title':
+        await _setMemberTitle(member);
+        break;
       case 'remove':
         await _removeMember(member.userId);
         break;
+    }
+  }
+
+  Future<void> _setMemberTitle(ChatMember member) async {
+    final controller = TextEditingController(text: member.title);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('chatGroupSetTitle'.tr()),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 24,
+          decoration: InputDecoration(
+            hintText: 'chatGroupTitleHint'.tr(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('cancel'.tr()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: Text('save'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    if (!mounted) return;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    try {
+      await _apiService.setMemberTitle(
+          token, widget.conversation.id, member.userId, result);
+      if (!mounted) return;
+      setState(() {
+        _members = _members
+            .map((m) => m.userId == member.userId
+                ? ChatMember(
+                    conversationId: m.conversationId,
+                    userId: m.userId,
+                    role: m.role,
+                    note: m.note,
+                    groupNickname: m.groupNickname,
+                    title: result,
+                    status: m.status,
+                    addedBy: m.addedBy,
+                    createdAt: m.createdAt,
+                    mutedUntil: m.mutedUntil,
+                    username: m.username,
+                    nickname: m.nickname,
+                    avatarUrl: m.avatarUrl,
+                    isVerified: m.isVerified,
+                    e2eePublicKey: m.e2eePublicKey,
+                  )
+                : m)
+            .toList();
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     }
   }
 

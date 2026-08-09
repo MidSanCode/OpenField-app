@@ -1208,6 +1208,11 @@ class _ConversationPageState extends State<ConversationPage> {
                 isEncrypted: _isEncrypted,
                 showSenderName: (_conversation?.isGroup ?? false) && !message.isDeleted,
                 senderAvatar: message.senderAvatar,
+                senderTitle: _members
+                    .where((m) => m.userId == message.senderId)
+                    .firstOrNull
+                    ?.title ??
+                    '',
                 replyPreview: replyTo,
                 onLongPress: () => _onMessageLongPress(message),
                 onRetry: (message.isFailed && authToken != null)
@@ -1437,6 +1442,7 @@ class _MessageBubble extends StatelessWidget {
   final bool isEncrypted;
   final bool showSenderName;
   final String? senderAvatar;
+  final String senderTitle;
   final ChatMessage? replyPreview;
   final VoidCallback onLongPress;
   final VoidCallback? onRetry;
@@ -1448,6 +1454,7 @@ class _MessageBubble extends StatelessWidget {
     required this.showSenderName,
     required this.onLongPress,
     this.senderAvatar,
+    this.senderTitle = '',
     this.replyPreview,
     this.onRetry,
   });
@@ -1487,12 +1494,37 @@ class _MessageBubble extends StatelessWidget {
                   if (showSenderName && message.displayName.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 2),
-                      child: VerifiedName(
-                        name: message.displayName,
-                        verified: message.senderVerified,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          VerifiedName(
+                            name: message.displayName,
+                            verified: message.senderVerified,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          if (senderTitle.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                senderTitle,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   Container(

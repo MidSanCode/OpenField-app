@@ -1217,6 +1217,21 @@ class ApiService {
     }
   }
 
+  /// Sets the owner/admin-controlled title displayed next to a member's
+  /// nickname in the chat. Pass an empty string to clear it.
+  Future<void> setMemberTitle(
+      String accessToken, int conversationId, int userId, String title) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/title'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'title': title}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to update member title'));
+    }
+  }
+
   Future<void> muteMember(String accessToken, int conversationId, int userId, int durationMinutes) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/mute'),

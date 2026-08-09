@@ -4,6 +4,7 @@ class ChatMember {
   final String role; // owner | admin | member
   final String note;
   final String groupNickname;
+  final String title;
   final String status; // pending | active | declined
   final int addedBy;
   final DateTime createdAt;
@@ -23,6 +24,7 @@ class ChatMember {
     required this.status,
     required this.addedBy,
     required this.createdAt,
+    this.title = '',
     this.mutedUntil,
     this.username,
     this.nickname,
@@ -47,6 +49,7 @@ class ChatMember {
       role: json['role'] as String? ?? 'member',
       note: json['note'] as String? ?? '',
       groupNickname: json['group_nickname'] as String? ?? '',
+      title: json['title'] as String? ?? '',
       status: json['status'] as String? ?? 'active',
       addedBy: _asInt(json['added_by']),
       createdAt: _asDate(json['created_at']) ?? DateTime.now(),
