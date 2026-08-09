@@ -193,8 +193,8 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
               builder: (context, settings, _) {
                 return MaterialApp.router(
                   title: 'OpenField',
-                  theme: AppTheme.light,
-                  darkTheme: AppTheme.dark,
+                  theme: AppTheme.light(settings.accentColor),
+                  darkTheme: AppTheme.dark(settings.accentColor),
                   themeMode: settings.themeMode,
                   locale: context.locale,
                   localizationsDelegates: context.localizationDelegates,
@@ -203,7 +203,8 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
                   routeInformationParser: _router.routeInformationParser,
                   routeInformationProvider: _router.routeInformationProvider,
                   builder: (context, child) {
-                    final bgPath = settings.backgroundImagePath;
+                    final bgPath =
+                        settings.backgroundVisible ? settings.backgroundImagePath : null;
                     if (bgPath == null) return child!;
                     return Stack(
                       children: [

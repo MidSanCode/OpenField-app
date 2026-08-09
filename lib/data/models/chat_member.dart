@@ -42,20 +42,39 @@ class ChatMember {
   factory ChatMember.fromJson(Map<String, dynamic> json) {
     final muted = json['muted_until'];
     return ChatMember(
-      conversationId: json['conversation_id'] as int,
-      userId: json['user_id'] as int,
+      conversationId: _asInt(json['conversation_id']),
+      userId: _asInt(json['user_id']),
       role: json['role'] as String? ?? 'member',
       note: json['note'] as String? ?? '',
       groupNickname: json['group_nickname'] as String? ?? '',
       status: json['status'] as String? ?? 'active',
-      addedBy: json['added_by'] as int? ?? 0,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      mutedUntil: muted != null ? DateTime.parse(muted as String) : null,
+      addedBy: _asInt(json['added_by']),
+      createdAt: _asDate(json['created_at']) ?? DateTime.now(),
+      mutedUntil: _asDate(muted),
       username: json['username'] as String?,
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool? ?? false,
       e2eePublicKey: json['e2ee_public_key'] as String?,
     );
+  }
+
+  /// Safely coerces an id field, tolerating strings and missing values so a
+  /// schema change on the server never crashes the client.
+  static int _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static DateTime? _asDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -1,6 +1,7 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
@@ -137,19 +138,105 @@ class ApiService {
   }
 
   String _decodeError(http.Response response, String fallback) {
+    var message = fallback;
+    var jsonBody = false;
+    final body = response.body;
     try {
-      final body = jsonDecode(response.body);
-      if (body is Map && body['error'] is String) {
-        return body['error'] as String;
+      final decoded = jsonDecode(body);
+      jsonBody = true;
+      if (decoded is Map && decoded['error'] is String) {
+        final err = decoded['error'] as String;
+        if (err.isNotEmpty) message = err;
+      } else if (decoded is String && decoded.isNotEmpty) {
+        message = decoded;
       }
-    } catch (_) {}
-    return fallback;
+    } catch (_) {
+      // Non-JSON body (e.g. an HTML error page from a proxy or old server).
+      final trimmed = body.trim();
+      if (trimmed.isNotEmpty && !trimmed.startsWith('<')) {
+        message = trimmed.length > 200 ? '${trimmed.substring(0, 200)}...' : trimmed;
+      }
+    }
+    if (_isUnsupportedFeature(response.statusCode, message, jsonBody)) {
+      return 'unsupportedFeature'.tr();
+    }
+    return message;
+  }
+
+  /// Status codes that indicate the server does not understand or implement
+  /// the request (as opposed to a genuine application-level rejection like a
+  /// validation error or a missing resource that the server knows about).
+  static const Set<int> _unsupportedStatuses = {404, 405, 406, 501, 503};
+
+  /// Maps a generic "route/feature not found or not implemented" response to a
+  /// user-friendly "server does not support this feature" message, while
+  /// keeping application-level errors (e.g. "conversation not found") intact.
+  bool _isUnsupportedFeature(int status, String message, bool jsonBody) {
+    if (!_unsupportedStatuses.contains(status)) return false;
+    // A non-JSON error page almost always comes from a proxy or an old
+    // deployment that does not know the route.
+    if (!jsonBody) return message.isNotEmpty;
+    final m = message.trim().toLowerCase();
+    return m == 'not found' ||
+        m == 'method not allowed' ||
+        m == 'not implemented' ||
+        m == 'route not found' ||
+        m == 'service unavailable';
+  }
+
+  // ---- Guarded HTTP helpers ----
+  //
+  // Every request goes through [_guard] so network-level failures (offline,
+  // DNS, timeouts, TLS) surface as [ApiException] instead of raw exceptions
+  // that pages are not expecting, and nothing crashes the app.
+
+  Future<http.Response> _get(Uri url, {Map<String, String>? headers}) =>
+      _guard(() => _client.get(url, headers: headers));
+
+  Future<http.Response> _post(
+    Uri url, {
+    Map<String, String>? headers,
+    Object? body,
+  }) =>
+      _guard(() => _client.post(url, headers: headers, body: body));
+
+  Future<http.Response> _put(
+    Uri url, {
+    Map<String, String>? headers,
+    Object? body,
+  }) =>
+      _guard(() => _client.put(url, headers: headers, body: body));
+
+  Future<http.Response> _delete(Uri url, {Map<String, String>? headers}) =>
+      _guard(() => _client.delete(url, headers: headers));
+
+  Future<http.Response> _send(http.BaseRequest request) =>
+      _guard(() async => http.Response.fromStream(await _client.send(request)));
+
+  Future<http.Response> _guard(Future<http.Response> Function() run) async {
+    try {
+      return await run();
+    } on ApiException {
+      rethrow;
+    } on SocketException {
+      throw ApiException(null, 'networkError'.tr());
+    } on http.ClientException {
+      throw ApiException(null, 'networkError'.tr());
+    } on TimeoutException {
+      throw ApiException(null, 'requestTimeout'.tr());
+    } on IOException {
+      throw ApiException(null, 'networkError'.tr());
+    } on FormatException {
+      throw ApiException(null, 'requestFailed'.tr());
+    } catch (_) {
+      throw ApiException(null, 'requestFailed'.tr());
+    }
   }
 
   // ---- Auth ----
 
   Future<String> getOIDCLoginUrl() async {
-    final response = await _client.get(Uri.parse('$baseUrl/auth/oidc/login'));
+    final response = await _get(Uri.parse('$baseUrl/auth/oidc/login'));
     final data = _decodeMap(response);
     if (response.statusCode == 200 && data != null) {
       final url = data['auth_url'];
@@ -161,7 +248,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> oidcCallback(String code) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/auth/oidc/callback?code=$code'),
     );
     final data = _decodeMap(response);
@@ -173,7 +260,7 @@ class ApiService {
 
   /// Starts the OIDC account-binding flow for the authenticated user.
   Future<String> getOIDCBindUrl(String accessToken) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/auth/oidc/bind'),
       headers: _headers(token: accessToken),
     );
@@ -188,7 +275,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> login(String username, String password) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/auth/login'),
       headers: _headers(),
       body: jsonEncode({'username': username, 'password': password}),
@@ -204,7 +291,7 @@ class ApiService {
   /// Exchanges a refresh token for a fresh access token. The refresh token is
   /// rotated server-side, so the response carries a new one.
   Future<Map<String, dynamic>> refreshAccessToken(String refreshToken) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/auth/refresh'),
       headers: _headers(),
       body: jsonEncode({'refresh_token': refreshToken}),
@@ -218,7 +305,7 @@ class ApiService {
   }
 
   Future<User> register(String username, String nickname, String accessToken, {String bio = ''}) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/auth/register'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'username': username, 'nickname': nickname, 'bio': bio}),
@@ -237,7 +324,7 @@ class ApiService {
   // ---- Account ----
 
   Future<User> getCurrentUser(String accessToken) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/users/me'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -250,7 +337,7 @@ class ApiService {
   }
 
   Future<User> getUser(int userId, {String? token}) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/users/$userId'),
       headers: _headers(token: token, json: false),
     );
@@ -263,7 +350,7 @@ class ApiService {
   }
 
   Future<List<User>> searchUsers(String accessToken, String query, {int limit = 20}) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/users/search?q=${Uri.encodeQueryComponent(query)}&limit=$limit'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -284,7 +371,7 @@ class ApiService {
 
   /// Returns the current user's effective permission keys and group names.
   Future<Map<String, dynamic>> getMyPermissions(String accessToken) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/users/me/permissions'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -301,7 +388,7 @@ class ApiService {
     if (username != null) body['username'] = username;
     if (nickname != null) body['nickname'] = nickname;
     if (bio != null) body['bio'] = bio;
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/users/me'),
       headers: _headers(token: accessToken),
       body: jsonEncode(body),
@@ -335,8 +422,7 @@ class ApiService {
       contentType: _mediaTypeFor(filePath),
     ));
     request.fields['visibility'] = visibility;
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
+    final response = await _send(request);
     final data = _decodeMap(response);
     if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
       return Attachment.fromJson(data);
@@ -380,7 +466,7 @@ class ApiService {
     final totalChunks = (fileSize / chunkSizeBytes).ceil();
     final mimeType = _mediaTypeFor(file.path);
 
-    final init = await _client.post(
+    final init = await _post(
       Uri.parse('$baseUrl/attachments/chunk/init'),
       headers: _headers(token: accessToken),
       body: jsonEncode({
@@ -399,7 +485,7 @@ class ApiService {
 
     // Resume: query which chunks already landed on the server.
     final uploaded = <int>{};
-    final status = await _client.get(
+    final status = await _get(
       Uri.parse('$baseUrl/attachments/chunk/$uploadId'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -431,8 +517,7 @@ class ApiService {
         );
         request.headers['Authorization'] = 'Bearer $accessToken';
         request.files.add(http.MultipartFile.fromBytes('chunk', chunk));
-        final streamed = await request.send();
-        final response = await http.Response.fromStream(streamed);
+        final response = await _send(request);
         if (response.statusCode != 200) {
           throw ApiException(response.statusCode, _decodeError(response, 'Chunk upload failed'));
         }
@@ -442,7 +527,7 @@ class ApiService {
       raf.close();
     }
 
-    final complete = await _client.post(
+    final complete = await _post(
       Uri.parse('$baseUrl/attachments/chunk/$uploadId/complete'),
       headers: _headers(token: accessToken),
       body: jsonEncode({
@@ -462,7 +547,7 @@ class ApiService {
   }
 
   Future<List<Attachment>> listMyAttachments(String accessToken, {int limit = 100}) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/attachments?limit=$limit'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -479,7 +564,7 @@ class ApiService {
   }
 
   Future<void> deleteAttachment(int attachmentId, String accessToken) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/attachments/$attachmentId'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -493,8 +578,7 @@ class ApiService {
     final request = http.MultipartRequest('POST', Uri.parse(url));
     request.headers['Authorization'] = 'Bearer $accessToken';
     request.files.add(await http.MultipartFile.fromPath('file', filePath));
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
+    final response = await _send(request);
     final data = _decodeMap(response);
     if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
       return data;
@@ -510,7 +594,7 @@ class ApiService {
     final uri = query != null && query.trim().isNotEmpty
         ? Uri.parse('$baseUrl/posts?page=$page&limit=$limit&q=${Uri.encodeQueryComponent(query.trim())}')
         : Uri.parse('$baseUrl/posts?page=$page&limit=$limit');
-    final response = await _client.get(uri, headers: _headers(token: token, json: false));
+    final response = await _get(uri, headers: _headers(token: token, json: false));
     if (response.statusCode == 200) {
       final data = _decodeMap(response);
       final postsList = data?['posts'];
@@ -524,7 +608,7 @@ class ApiService {
   }
 
   Future<Post> getPost(int postId, [String? token]) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/posts/$postId'),
       headers: _headers(token: token, json: false),
     );
@@ -537,7 +621,7 @@ class ApiService {
   }
 
   Future<List<Post>> getPostsByUser(int userId, {String? token, int page = 1, int limit = 20}) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/users/$userId/posts?page=$page&limit=$limit'),
       headers: _headers(token: token, json: false),
     );
@@ -554,7 +638,7 @@ class ApiService {
   }
 
   Future<Post> createPost(String content, String accessToken, {List<int> attachmentIds = const []}) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/posts'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'content': content, 'attachment_ids': attachmentIds}),
@@ -568,7 +652,7 @@ class ApiService {
   }
 
   Future<Post> updatePost(int postId, String content, String accessToken, {List<int> attachmentIds = const []}) async {
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/posts/$postId'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'content': content, 'attachment_ids': attachmentIds}),
@@ -582,7 +666,7 @@ class ApiService {
   }
 
   Future<void> deletePost(int postId, String accessToken) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/posts/$postId'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -595,7 +679,7 @@ class ApiService {
   // ---- Post replies ----
 
   Future<List<PostReply>> listReplies(int postId, {String? token, int page = 1, int limit = 50}) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/posts/$postId/replies?page=$page&limit=$limit'),
       headers: _headers(token: token, json: false),
     );
@@ -613,7 +697,7 @@ class ApiService {
 
   Future<PostReply> createReply(int postId, String content, String accessToken,
       {int? parentId, List<int> attachmentIds = const []}) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/posts/$postId/replies'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'content': content, 'parent_id': parentId, 'attachment_ids': attachmentIds}),
@@ -628,7 +712,7 @@ class ApiService {
 
   Future<PostReply> updateReply(int postId, int replyId, String content, String accessToken,
       {List<int> attachmentIds = const []}) async {
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/posts/$postId/replies/$replyId'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'content': content, 'attachment_ids': attachmentIds}),
@@ -642,7 +726,7 @@ class ApiService {
   }
 
   Future<void> deleteReply(int postId, int replyId, String accessToken) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/posts/$postId/replies/$replyId'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -655,7 +739,7 @@ class ApiService {
   // ---- Post reactions ----
 
   Future<Post> reactToPost(int postId, String reaction, String accessToken) async {
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/posts/$postId/reactions'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'reaction': reaction}),
@@ -669,7 +753,7 @@ class ApiService {
   }
 
   Future<Post> removePostReaction(int postId, String accessToken) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/posts/$postId/reactions'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -684,7 +768,7 @@ class ApiService {
   // ---- Follows ----
 
   Future<void> followUser(int userId, String accessToken) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/users/$userId/follow'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -695,7 +779,7 @@ class ApiService {
   }
 
   Future<void> unfollowUser(int userId, String accessToken) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/users/$userId/follow'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -706,7 +790,7 @@ class ApiService {
   }
 
   Future<List<User>> listFollowers(int userId, {String? token, int page = 1, int limit = 50}) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/users/$userId/followers?page=$page&limit=$limit'),
       headers: _headers(token: token, json: false),
     );
@@ -723,7 +807,7 @@ class ApiService {
   }
 
   Future<List<User>> listFollowing(int userId, {String? token, int page = 1, int limit = 50}) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/users/$userId/following?page=$page&limit=$limit'),
       headers: _headers(token: token, json: false),
     );
@@ -743,7 +827,7 @@ class ApiService {
 
   /// Returns the current user's wallet balance and recent transactions.
   Future<Wallet> getWallet(String accessToken, {int page = 1, int limit = 20}) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/wallet?page=$page&limit=$limit'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -767,7 +851,7 @@ class ApiService {
     final body = <String, dynamic>{'user_id': userId, 'amount': amount};
     if (type != null && type.isNotEmpty) body['type'] = type;
     if (description != null && description.isNotEmpty) body['description'] = description;
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/wallet/adjust'),
       headers: _headers(token: accessToken),
       body: jsonEncode(body),
@@ -783,7 +867,7 @@ class ApiService {
   // ---- Chat: consent requests ----
 
   Future<List<ConsentRequest>> listConsentRequests(String accessToken) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/consent-requests'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -800,7 +884,7 @@ class ApiService {
   }
 
   Future<Conversation?> acceptConsentRequest(String accessToken, int requestId) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/consent-requests/$requestId/accept'),
       headers: _headers(token: accessToken),
     );
@@ -815,7 +899,7 @@ class ApiService {
   }
 
   Future<void> declineConsentRequest(String accessToken, int requestId) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/consent-requests/$requestId/decline'),
       headers: _headers(token: accessToken),
     );
@@ -828,7 +912,7 @@ class ApiService {
   // ---- Chat: conversations ----
 
   Future<List<Conversation>> listConversations(String accessToken) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/conversations'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -845,7 +929,7 @@ class ApiService {
   }
 
   Future<ConversationDetail> getConversation(String accessToken, int conversationId) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/conversations/$conversationId'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -858,7 +942,7 @@ class ApiService {
   }
 
   Future<Conversation> createGroup(String accessToken, String title) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'title': title}),
@@ -872,7 +956,7 @@ class ApiService {
   }
 
   Future<void> startPrivateChat(String accessToken, int userId, {String message = ''}) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations/start'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'user_id': userId, 'message': message}),
@@ -884,7 +968,7 @@ class ApiService {
   }
 
   Future<void> inviteToGroup(String accessToken, int conversationId, int userId, {String message = ''}) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/invite'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'user_id': userId, 'message': message}),
@@ -896,7 +980,7 @@ class ApiService {
   }
 
   Future<void> updateNote(String accessToken, int conversationId, String note) async {
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/conversations/$conversationId/note'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'note': note}),
@@ -908,7 +992,7 @@ class ApiService {
   }
 
   Future<void> updateGroupNickname(String accessToken, int conversationId, String nickname) async {
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/conversations/$conversationId/group-nickname'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'group_nickname': nickname}),
@@ -920,7 +1004,7 @@ class ApiService {
   }
 
   Future<void> markConversationRead(String accessToken, int conversationId, int lastMessageId) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/read'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'last_message_id': lastMessageId}),
@@ -932,7 +1016,7 @@ class ApiService {
   }
 
   Future<void> leaveGroup(String accessToken, int conversationId) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/leave'),
       headers: _headers(token: accessToken),
     );
@@ -943,7 +1027,7 @@ class ApiService {
   }
 
   Future<void> removeGroupMember(String accessToken, int conversationId, int userId) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId/members/$userId'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -954,7 +1038,7 @@ class ApiService {
   }
 
   Future<void> deleteConversation(String accessToken, int conversationId) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -965,7 +1049,7 @@ class ApiService {
   }
 
   Future<List<Conversation>> fetchPublicGroups(String accessToken, {String query = ''}) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/conversations/public${query.isNotEmpty ? '?q=${Uri.encodeQueryComponent(query)}' : ''}'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -982,7 +1066,7 @@ class ApiService {
   }
 
   Future<Conversation> joinGroup(String accessToken, int conversationId) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/join'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -998,7 +1082,7 @@ class ApiService {
       {required bool isPublic, required bool allowJoin, bool? encrypted}) async {
     final body = <String, dynamic>{'is_public': isPublic, 'allow_join': allowJoin};
     if (encrypted != null) body['encrypted'] = encrypted;
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/conversations/$conversationId/settings'),
       headers: _headers(token: accessToken),
       body: jsonEncode(body),
@@ -1009,12 +1093,40 @@ class ApiService {
     }
   }
 
+  /// Renames a group conversation (owner only).
+  Future<void> updateGroupTitle(
+      String accessToken, int conversationId, String title) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/conversations/$conversationId/title'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'title': title}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to update group title'));
+    }
+  }
+
+  /// Sets a group conversation's avatar image URL (owner only).
+  Future<void> updateGroupAvatar(
+      String accessToken, int conversationId, String avatarUrl) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/conversations/$conversationId/avatar'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'avatar_url': avatarUrl}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to update group avatar'));
+    }
+  }
+
   // ---- Chat: E2EE ----
 
   /// Publishes (or clears) the current user's X25519 public key used to seal
   /// group-key envelopes.
   Future<void> updateE2EEKey(String accessToken, String publicKey) async {
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/users/me/e2ee-key'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'public_key': publicKey}),
@@ -1028,7 +1140,7 @@ class ApiService {
   /// Fetches the group-key envelopes stored for a conversation, together with
   /// the current key version.
   Future<Map<String, dynamic>> getE2EEKeys(String accessToken, int conversationId) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/conversations/$conversationId/e2ee-keys'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -1047,7 +1159,7 @@ class ApiService {
     int conversationId,
     Map<int, String> envelopes,
   ) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/e2ee-keys'),
       headers: _headers(token: accessToken),
       body: jsonEncode({
@@ -1064,7 +1176,7 @@ class ApiService {
   }
 
   Future<void> setMemberRole(String accessToken, int conversationId, int userId, String role) async {
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/role'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'role': role}),
@@ -1076,7 +1188,7 @@ class ApiService {
   }
 
   Future<void> muteMember(String accessToken, int conversationId, int userId, int durationMinutes) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/mute'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'duration_minutes': durationMinutes}),
@@ -1088,7 +1200,7 @@ class ApiService {
   }
 
   Future<void> unmuteMember(String accessToken, int conversationId, int userId) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/mute'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -1099,7 +1211,7 @@ class ApiService {
   }
 
   Future<void> muteAllMembers(String accessToken, int conversationId, int durationMinutes) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/mute-all'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'duration_minutes': durationMinutes}),
@@ -1111,7 +1223,7 @@ class ApiService {
   }
 
   Future<void> unmuteAllMembers(String accessToken, int conversationId) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId/mute-all'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -1129,7 +1241,7 @@ class ApiService {
     int before = 0,
     int limit = 50,
   }) async {
-    final response = await _client.get(
+    final response = await _get(
       Uri.parse('$baseUrl/conversations/$conversationId/messages?before=$before&limit=$limit'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -1152,7 +1264,7 @@ class ApiService {
     int? replyToId,
     List<int> attachmentIds = const [],
   }) async {
-    final response = await _client.post(
+    final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/messages'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'content': content, 'reply_to_id': replyToId, 'attachment_ids': attachmentIds}),
@@ -1166,7 +1278,7 @@ class ApiService {
   }
 
   Future<ChatMessage> editChatMessage(String accessToken, int conversationId, int messageId, String content) async {
-    final response = await _client.put(
+    final response = await _put(
       Uri.parse('$baseUrl/conversations/$conversationId/messages/$messageId'),
       headers: _headers(token: accessToken),
       body: jsonEncode({'content': content}),
@@ -1180,7 +1292,7 @@ class ApiService {
   }
 
   Future<void> deleteChatMessage(String accessToken, int conversationId, int messageId) async {
-    final response = await _client.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId/messages/$messageId'),
       headers: _headers(token: accessToken, json: false),
     );
@@ -1192,7 +1304,7 @@ class ApiService {
 
   /// Announces that the current user is typing in a conversation. Fire-and-forget.
   Future<void> sendTyping(String accessToken, int conversationId) async {
-    await _client.post(
+    await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/typing'),
       headers: _headers(token: accessToken, json: false),
     );

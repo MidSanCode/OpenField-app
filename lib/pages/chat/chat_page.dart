@@ -118,7 +118,9 @@ class _ChatPageState extends State<ChatPage> {
       setState(() => _selectedConversationId = conv.id);
       return;
     }
-    await Navigator.of(context).push(
+    // Push on the root navigator so the chat room covers the shell entirely,
+    // including the bottom navigation bar on narrow (portrait) screens.
+    await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (_) => ConversationPage(conversationId: conv.id),
       ),
@@ -127,24 +129,54 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _openStartChat() async {
-    await Navigator.of(context).push(
+    await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(builder: (_) => const StartChatPage()),
     );
     if (mounted) _load();
   }
 
   Future<void> _openRequests() async {
-    await Navigator.of(context).push(
+    await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(builder: (_) => const ConsentRequestsPage()),
     );
     if (mounted) _load();
   }
 
   Future<void> _openDiscover() async {
-    await Navigator.of(context).push(
+    await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(builder: (_) => const DiscoverGroupsPage()),
     );
     if (mounted) _load();
+  }
+
+  /// FAB action: start a new private chat or create a group from one button.
+  Future<void> _showCreateMenu() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.chat_bubble_outline),
+              title: Text('chatStartPrivate'.tr()),
+              onTap: () => Navigator.of(ctx).pop('private'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.group_outlined),
+              title: Text('chatNewGroup'.tr()),
+              onTap: () => Navigator.of(ctx).pop('group'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (choice == 'private') {
+      await _openStartChat();
+    } else if (choice == 'group') {
+      await _createGroup();
+    }
   }
 
   Future<void> _createGroup() async {
@@ -181,7 +213,7 @@ class _ChatPageState extends State<ChatPage> {
     try {
       final conv = await _apiService.createGroup(token, title);
       if (!mounted) return;
-      await Navigator.of(context).push(
+      await Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(
           builder: (_) => StartChatPage(inviteToGroup: conv.id),
         ),
@@ -197,63 +229,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('chat'.tr()),
-        actions: [
-          IconButton(
-            onPressed: _openDiscover,
-            tooltip: 'chatGroupDiscover'.tr(),
-            icon: const Icon(Icons.explore_outlined),
-          ),
-          IconButton(
-            onPressed: _openRequests,
-            tooltip: 'chatRequests'.tr(),
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                const Icon(Icons.person_add_alt_outlined),
-                if (_requests.isNotEmpty)
-                  Positioned(
-                    right: -6,
-                    top: -6,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.error,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                      child: Text(
-                        '${_requests.length}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: _openStartChat,
-            tooltip: 'chatStartPrivate'.tr(),
-            icon: const Icon(Icons.chat_bubble_outline),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'group') _createGroup();
-              if (value == 'private') _openStartChat();
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(value: 'private', child: Text('chatStartPrivate'.tr())),
-              PopupMenuItem(value: 'group', child: Text('chatNewGroup'.tr())),
-            ],
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text('chat'.tr())),
       body: _isWide ? _buildSplitBody() : _buildBody(),
     );
   }
@@ -304,6 +280,88 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _buildBody() {
+    // The conversation list (selection area) is wrapped in a Stack so the
+    // "new chat / group" button floats at its bottom-right while the accept
+    // invitations and discover actions sit above the list.
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Column(
+            children: [
+              if (!_isLoading && _error == null) _buildQuickActions(),
+              Expanded(child: _buildListArea()),
+            ],
+          ),
+        ),
+        if (!_isLoading && _error == null)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton(
+              heroTag: 'chatNewFab',
+              onPressed: _showCreateMenu,
+              tooltip: 'chatNew'.tr(),
+              child: const Icon(Icons.add),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Accept invitations + discover groups, placed above the conversation list.
+  Widget _buildQuickActions() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _openRequests,
+              icon: const Icon(Icons.person_add_alt_outlined, size: 18),
+              label: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Text('chatRequests'.tr()),
+                  if (_requests.isNotEmpty)
+                    Positioned(
+                      right: -10,
+                      top: -8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.error,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                        child: Text(
+                          '${_requests.length}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _openDiscover,
+              icon: const Icon(Icons.explore_outlined, size: 18),
+              label: Text('chatGroupDiscover'.tr()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListArea() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }

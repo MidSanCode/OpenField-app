@@ -41,14 +41,18 @@ class PostReply {
 
   factory PostReply.fromJson(Map<String, dynamic> json) {
     return PostReply(
-      id: json['id'] as int,
-      postId: json['post_id'] as int,
-      userId: json['user_id'] as int,
+      id: _asInt(json['id']),
+      postId: _asInt(json['post_id']),
+      userId: _asInt(json['user_id']),
       content: json['content'] as String? ?? '',
-      parentId: json['parent_id'] as int?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
-      deletedAt: json['deleted_at'] != null ? DateTime.parse(json['deleted_at'] as String) : null,
+      parentId: json['parent_id'] is num
+          ? (json['parent_id'] as num).toInt()
+          : json['parent_id'] is String
+              ? int.tryParse(json['parent_id'] as String)
+              : null,
+      createdAt: _asDate(json['created_at']) ?? DateTime.now(),
+      updatedAt: _asDate(json['updated_at']) ?? DateTime.now(),
+      deletedAt: _asDate(json['deleted_at']),
       username: json['username'] as String?,
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
@@ -61,5 +65,24 @@ class PostReply {
               .toList() ??
           const [],
     );
+  }
+
+  /// Safely coerces an id field, tolerating strings and missing values so a
+  /// schema change on the server never crashes the client.
+  static int _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static DateTime? _asDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (_) {
+      return null;
+    }
   }
 }

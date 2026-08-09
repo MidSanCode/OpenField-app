@@ -18,11 +18,12 @@ class Attachment {
   });
 
   factory Attachment.fromJson(Map<String, dynamic> json) {
+    final id = json['id'];
     return Attachment(
-      id: json['id'] as int,
+      id: id is int ? id : (id is num ? id.toInt() : int.tryParse('$id') ?? 0),
       originalName: json['original_name'] as String? ?? '',
       mimeType: json['mime_type'] as String? ?? '',
-      sizeBytes: json['size_bytes'] as int? ?? 0,
+      sizeBytes: json['size_bytes'] is num ? (json['size_bytes'] as num).toInt() : 0,
       url: json['url'] as String? ?? '',
       thumbUrl: json['thumb_url'] as String? ?? '',
       visibility: json['visibility'] as String? ?? 'public',

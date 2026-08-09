@@ -1,14 +1,18 @@
-import 'package:flutter/material.dart';
+import 'dart:ui' show Color;
+
+import 'package:flutter/material.dart' show ChangeNotifier, ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Persists app-level preferences: language, color theme, server host and
-/// custom background image.
+/// Persists app-level preferences: language, color theme, server host, custom
+/// background image and its visibility.
 class SettingsService extends ChangeNotifier {
   static const _keyLocale = 'settings_locale';
   static const _keyThemeMode = 'settings_theme_mode';
   static const _keyDeveloperMode = 'settings_developer_mode';
   static const _keyServerHost = 'settings_server_host';
   static const _keyBackgroundImagePath = 'settings_background_image_path';
+  static const _keyBackgroundVisible = 'settings_background_image_visible';
+  static const _keyAccentColor = 'settings_accent_color';
   static const String defaultServerHost = 'https://of-api.msc-studio.eu.cc';
 
   String? _locale;
@@ -16,12 +20,21 @@ class SettingsService extends ChangeNotifier {
   bool _developerMode = false;
   String _serverHost = defaultServerHost;
   String? _backgroundImagePath;
+  bool _backgroundVisible = true;
+  Color? _accentColor;
 
   String? get locale => _locale;
   ThemeMode get themeMode => _themeMode;
   bool get developerMode => _developerMode;
   String get serverHost => _serverHost;
   String? get backgroundImagePath => _backgroundImagePath;
+
+  /// Whether the configured background image is currently rendered. Toggling
+  /// this off hides the image without deleting it.
+  bool get backgroundVisible => _backgroundVisible;
+
+  /// The user-selected seed color for the app theme. Null uses the default.
+  Color? get accentColor => _accentColor;
 
   SettingsService() {
     ready = _load();
@@ -39,6 +52,9 @@ class SettingsService extends ChangeNotifier {
     _developerMode = prefs.getBool(_keyDeveloperMode) ?? false;
     _serverHost = prefs.getString(_keyServerHost) ?? defaultServerHost;
     _backgroundImagePath = prefs.getString(_keyBackgroundImagePath);
+    _backgroundVisible = prefs.getBool(_keyBackgroundVisible) ?? true;
+    final accent = prefs.getInt(_keyAccentColor);
+    _accentColor = accent != null ? Color(accent) : null;
     notifyListeners();
   }
 
@@ -82,6 +98,24 @@ class SettingsService extends ChangeNotifier {
       await prefs.remove(_keyBackgroundImagePath);
     } else {
       await prefs.setString(_keyBackgroundImagePath, path);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setBackgroundVisible(bool value) async {
+    _backgroundVisible = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyBackgroundVisible, value);
+    notifyListeners();
+  }
+
+  Future<void> setAccentColor(Color? color) async {
+    _accentColor = color;
+    final prefs = await SharedPreferences.getInstance();
+    if (color == null) {
+      await prefs.remove(_keyAccentColor);
+    } else {
+      await prefs.setInt(_keyAccentColor, color.toARGB32());
     }
     notifyListeners();
   }

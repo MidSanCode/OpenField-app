@@ -1,8 +1,13 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:openfield/core/config/app_config.dart';
 import 'package:openfield/core/log/log_overlay.dart';
+import 'package:openfield/core/theme/app_theme.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/pages/settings/permissions_page.dart';
 
@@ -27,7 +32,11 @@ class SettingsPage extends StatelessWidget {
                 const Divider(height: 1),
                 const _ServerHostTile(),
                 const Divider(height: 1),
+                const _AppColorTile(),
+                const Divider(height: 1),
                 const _BackgroundImageTile(),
+                const Divider(height: 1),
+                const _BackgroundVisibleTile(),
                 const Divider(height: 1),
                 _DeveloperModeTile(),
               ],
@@ -60,7 +69,13 @@ class SettingsPage extends StatelessWidget {
             child: ListTile(
               leading: const Icon(Icons.info_outline),
               title: Text('about'.tr()),
-              subtitle: Text('${'version'.tr()} 1.0.0'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${'version'.tr()} ${AppConfig.versionLabel}'),
+                  Text('aboutDeveloper'.tr()),
+                ],
+              ),
             ),
           ),
         ],
@@ -218,6 +233,175 @@ class _ServerHostTile extends StatelessWidget {
   }
 }
 
+/// App theme color: preset palette, an option to extract a color from the
+/// chosen background image, and a reset back to the default.
+class _AppColorTile extends StatelessWidget {
+  const _AppColorTile();
+
+  static const List<Color> _palette = [
+    Color(0xFF4CAF50), // default green
+    Color(0xFF2196F3), // blue
+    Color(0xFFF44336), // red
+    Color(0xFF9C27B0), // purple
+    Color(0xFFFF9800), // orange
+    Color(0xFF00BCD4), // cyan
+    Color(0xFF3F51B5), // indigo
+    Color(0xFF607D8B), // blue grey
+    Color(0xFF795548), // brown
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsService>(context);
+    final accent = settings.accentColor;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.palette_outlined, size: 24),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('appColor'.tr()),
+                    const SizedBox(height: 2),
+                    Text(
+                      'appColorHint'.tr(),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final color in _palette)
+                _ColorDot(
+                  color: color,
+                  selected: accent == color,
+                  onTap: () => settings.setAccentColor(color),
+                ),
+              Tooltip(
+                message: 'appColorDefault'.tr(),
+                child: _ColorDot(
+                  color: AppTheme.seed,
+                  selected: accent == null,
+                  onTap: () => settings.setAccentColor(null),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: settings.backgroundImagePath == null
+                    ? null
+                    : () => _pickFromBackground(settings),
+                icon: const Icon(Icons.photo_outlined, size: 18),
+                label: Text('pickFromBackground'.tr()),
+              ),
+              const SizedBox(width: 8),
+              if (accent != null)
+                TextButton(
+                  onPressed: () => settings.setAccentColor(null),
+                  child: Text('appColorDefault'.tr()),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickFromBackground(SettingsService settings) async {
+    final path = settings.backgroundImagePath;
+    if (path == null) return;
+    final color = await _averageColorOf(path);
+    if (color != null) {
+      await settings.setAccentColor(color);
+    }
+  }
+
+  /// Samples a grid of pixels and returns their average color, used to derive
+  /// an app theme color from the background image.
+  Future<Color?> _averageColorOf(String path) async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final data = await image.toByteData();
+      image.dispose();
+      if (data == null) return null;
+      final raw = data.buffer.asUint8List();
+      const samples = 8;
+      var r = 0, g = 0, b = 0, count = 0;
+      for (var y = 0; y < samples; y++) {
+        for (var x = 0; x < samples; x++) {
+          final px = (y * image.height ~/ samples) * image.width +
+              (x * image.width ~/ samples);
+          final i = px * 4;
+          if (i + 3 >= raw.length) continue;
+          r += raw[i];
+          g += raw[i + 1];
+          b += raw[i + 2];
+          count++;
+        }
+      }
+      if (count == 0) return null;
+      return Color.fromARGB(255, r ~/ count, g ~/ count, b ~/ count);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class _ColorDot extends StatelessWidget {
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ColorDot({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
+            width: 3,
+          ),
+        ),
+        child: selected
+            ? Icon(Icons.check, size: 16, color: Theme.of(context).colorScheme.onPrimary)
+            : null,
+      ),
+    );
+  }
+}
+
 class _BackgroundImageTile extends StatelessWidget {
   const _BackgroundImageTile();
 
@@ -240,6 +424,24 @@ class _BackgroundImageTile extends StatelessWidget {
         if (result == null) return;
         await settings.setBackgroundImagePath(result.path);
       },
+    );
+  }
+}
+
+/// Temporarily hides the background image without deleting it.
+class _BackgroundVisibleTile extends StatelessWidget {
+  const _BackgroundVisibleTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsService>(context);
+    final hasImage = settings.backgroundImagePath != null;
+    return SwitchListTile(
+      secondary: const Icon(Icons.visibility_outlined),
+      title: Text('backgroundImageVisible'.tr()),
+      subtitle: Text('backgroundImageVisibleHint'.tr()),
+      value: hasImage ? settings.backgroundVisible : true,
+      onChanged: hasImage ? (v) => settings.setBackgroundVisible(v) : null,
     );
   }
 }

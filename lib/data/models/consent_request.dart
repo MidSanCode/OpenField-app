@@ -33,18 +33,41 @@ class ConsentRequest {
 
   factory ConsentRequest.fromJson(Map<String, dynamic> json) {
     return ConsentRequest(
-      id: json['id'] as int,
+      id: _asInt(json['id']),
       type: json['type'] as String? ?? 'private_chat',
-      requesterId: json['requester_id'] as int,
-      targetUserId: json['target_user_id'] as int,
-      conversationId: json['conversation_id'] as int?,
+      requesterId: _asInt(json['requester_id']),
+      targetUserId: _asInt(json['target_user_id']),
+      conversationId: json['conversation_id'] is num
+          ? (json['conversation_id'] as num).toInt()
+          : json['conversation_id'] is String
+              ? int.tryParse(json['conversation_id'] as String)
+              : null,
       message: json['message'] as String? ?? '',
       status: json['status'] as String? ?? 'pending',
-      createdAt: DateTime.parse(json['created_at'] as String),
-      respondedAt: json['responded_at'] != null ? DateTime.parse(json['responded_at'] as String) : null,
+      createdAt: _asDate(json['created_at']) ?? DateTime.now(),
+      respondedAt: _asDate(json['responded_at']),
       requesterName: json['requester_name'] as String?,
       requesterAvatar: json['requester_avatar'] as String?,
       groupTitle: json['group_title'] as String?,
     );
+  }
+
+  /// Safely coerces an id field, tolerating strings and missing values so a
+  /// schema change on the server never crashes the client.
+  static int _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static DateTime? _asDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (_) {
+      return null;
+    }
   }
 }

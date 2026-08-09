@@ -49,22 +49,41 @@ class Conversation {
     final last = json['last_message'];
     final muteAll = json['mute_all_until'];
     return Conversation(
-      id: json['id'] as int,
+      id: _asInt(json['id']),
       type: json['type'] as String? ?? 'private',
       title: json['title'] as String? ?? '',
       avatarUrl: json['avatar_url'] as String? ?? '',
-      ownerId: json['owner_id'] as int? ?? 0,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      ownerId: _asInt(json['owner_id']),
+      createdAt: _asDate(json['created_at']) ?? DateTime.now(),
+      updatedAt: _asDate(json['updated_at']) ?? DateTime.now(),
       isPublic: json['is_public'] as bool? ?? false,
       allowJoin: json['allow_join'] as bool? ?? false,
-      muteAllUntil: muteAll != null ? DateTime.parse(muteAll as String) : null,
+      muteAllUntil: _asDate(muteAll),
       encrypted: json['encrypted'] as bool? ?? false,
-      memberCount: json['member_count'] as int? ?? 0,
+      memberCount: _asInt(json['member_count']),
       isMember: json['is_member'] as bool? ?? false,
       lastMessage: last is Map<String, dynamic> ? ChatMessage.fromJson(last) : null,
-      unread: json['unread'] as int? ?? 0,
+      unread: _asInt(json['unread']),
     );
+  }
+
+  /// Safely coerces an id/count field, tolerating strings and missing values so
+  /// a schema change on the server never crashes the client.
+  static int _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static DateTime? _asDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (_) {
+      return null;
+    }
   }
 }
 

@@ -58,21 +58,40 @@ class Post {
       });
     }
     return Post(
-      id: json['id'] as int,
-      userId: json['user_id'] as int,
-      content: json['content'] as String,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      id: _asInt(json['id']),
+      userId: _asInt(json['user_id']),
+      content: json['content'] as String? ?? '',
+      createdAt: _asDate(json['created_at']) ?? DateTime.now(),
+      updatedAt: _asDate(json['updated_at']) ?? DateTime.now(),
       username: json['username'] as String?,
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool?,
       attachments: attachments,
-      replyCount: json['reply_count'] as int? ?? 0,
-      viewCount: json['view_count'] as int? ?? 0,
-      uniqueViews: json['unique_views'] as int? ?? 0,
+      replyCount: _asInt(json['reply_count']),
+      viewCount: _asInt(json['view_count']),
+      uniqueViews: _asInt(json['unique_views']),
       reactions: reactions,
       myReaction: json['my_reaction'] as String? ?? '',
     );
+  }
+
+  /// Safely coerces an id/count field, tolerating strings and missing values so
+  /// a schema change on the server never crashes the client.
+  static int _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static DateTime? _asDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (_) {
+      return null;
+    }
   }
 }

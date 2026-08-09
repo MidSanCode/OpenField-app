@@ -138,22 +138,41 @@ class ChatMessage {
           .toList();
     }
     return ChatMessage(
-      id: json['id'] as int,
-      conversationId: json['conversation_id'] as int,
-      senderId: json['sender_id'] as int,
+      id: _asInt(json['id']),
+      conversationId: _asInt(json['conversation_id']),
+      senderId: _asInt(json['sender_id']),
       content: json['content'] as String? ?? '',
       kind: json['kind'] as String? ?? 'text',
-      replyToId: json['reply_to_id'] as int?,
+      replyToId: json['reply_to_id'] is num ? (json['reply_to_id'] as num).toInt() : null,
       replyToName: json['reply_to_name'] as String?,
       replyToContent: json['reply_to_content'] as String?,
-      editedAt: json['edited_at'] != null ? DateTime.parse(json['edited_at'] as String) : null,
-      deletedAt: json['deleted_at'] != null ? DateTime.parse(json['deleted_at'] as String) : null,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      editedAt: _asDate(json['edited_at']),
+      deletedAt: _asDate(json['deleted_at']),
+      createdAt: _asDate(json['created_at']) ?? DateTime.now(),
       senderName: json['sender_name'] as String?,
       senderAvatar: json['sender_avatar'] as String?,
       senderVerified: json['sender_verified'] as bool? ?? false,
       attachments: attachments,
     );
+  }
+
+  /// Safely coerces an id field, tolerating strings and missing values so a
+  /// schema change on the server never crashes the client.
+  static int _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static DateTime? _asDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (_) {
+      return null;
+    }
   }
 
   static Object? _tryDecodeJson(String input) {
