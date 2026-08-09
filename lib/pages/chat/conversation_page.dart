@@ -103,7 +103,11 @@ class _ConversationPageState extends State<ConversationPage> {
     switch (event.type) {
       case 'chat.message.created':
         final msg = _decryptMessage(ChatMessage.fromJson(event.data));
-        final exists = _messages.any((m) => m.id == msg.id || m.clientId == msg.clientId);
+        // Dedupe by server id only. clientId is only ever set on locally
+        // generated optimistic messages (never on server-pushed payloads), so
+        // comparing against it would match every cached server message whose
+        // clientId defaulted to '' and silently swallow the new event.
+        final exists = _messages.any((m) => m.id == msg.id);
         if (exists) return;
         // Race guard: this is our own optimistic message echoed back over WS
         // before the HTTP response resolved it. Match by sender + near-identical
@@ -124,6 +128,13 @@ class _ConversationPageState extends State<ConversationPage> {
         setState(() => _messages = _sorted([..._messages, msg]));
         ChatLocalDb.instance.upsertMessage(msg);
         _scrollToBottom();
+        // If the new push arrived as an undecrypted envelope, our cached group
+        // key for this version may be stale (e.g. the sender rotated keys
+        // while we were offline). Pull the latest envelopes and re-decrypt
+        // everything so the bubble renders instead of staying blank.
+        if (_isUndecryptedEnvelope(msg)) {
+          unawaited(_syncE2EEAndRedecrypt());
+        }
         break;
       case 'chat.message.updated':
         final msg = _decryptMessage(ChatMessage.fromJson(event.data));
@@ -503,6 +514,15 @@ class _ConversationPageState extends State<ConversationPage> {
         E2eeService.instance.decryptMessage(widget.conversationId, m.senderId, m.content);
     if (plain == null) return m;
     return _copyWithDecrypted(m, plain);
+  }
+
+  /// Returns true when [m] looks like an E2EE envelope that could not be
+  /// decrypted because the matching group key (or chain state) is missing.
+  bool _isUndecryptedEnvelope(ChatMessage m) {
+    if (!_isEncrypted) return false;
+    if (m.isSystem) return false;
+    if (m.decryptedContent != null) return false;
+    return m.isEnvelope;
   }
 
   List<ChatMessage> _decryptBatch(List<ChatMessage> msgs) =>
