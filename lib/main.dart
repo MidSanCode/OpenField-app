@@ -11,6 +11,8 @@ import 'package:provider/provider.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/log/log_recorder.dart';
 import 'package:openfield/core/router/app_router.dart';
+import 'package:openfield/core/web/history_stub.dart'
+    if (dart.library.html) 'package:openfield/core/web/history_web.dart';
 import 'package:openfield/core/windows/protocol_registration.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
@@ -105,6 +107,19 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
       }
     }
 
+    // Web fallback: an OIDC redirect to the app's own URL may carry the
+    // tokens in the query string. app_links does not always deliver the
+    // initial link on web, so inspect Uri.base directly and then strip the
+    // credentials from the browser URL.
+    if (kIsWeb) {
+      final base = Uri.base;
+      if (base.queryParameters.containsKey('access_token') ||
+          base.queryParameters.containsKey('bind')) {
+        _handleDeepLink(base);
+        clearUrlQueryParams();
+      }
+    }
+
     final appLinks = AppLinks();
     final initial = await appLinks.getInitialLink();
     if (initial != null) {
@@ -114,7 +129,13 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   }
 
   void _handleDeepLink(Uri uri) {
-    if (uri.host != 'oauth' && !uri.path.startsWith('/oauth')) return;
+    // Accept the OAuth scheme (openfield://oauth/...), an explicit /oauth path
+    // (app hosted under a /oauth path), or any URL carrying the access_token /
+    // bind query params (browser OIDC redirect back to the app).
+    final isOAuthUri = uri.host == 'oauth' || uri.path.startsWith('/oauth');
+    final hasOAuthParams = uri.queryParameters.containsKey('access_token') ||
+        uri.queryParameters.containsKey('bind');
+    if (!isOAuthUri && !hasOAuthParams) return;
     if (_deepLinkHandled) return;
     _deepLinkHandled = true;
 

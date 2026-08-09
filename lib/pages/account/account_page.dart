@@ -67,7 +67,10 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   Future<void> _handleDeepLink(Uri uri) async {
-    if (uri.host != 'oauth' && !uri.path.startsWith('/oauth')) return;
+    final isOAuthUri = uri.host == 'oauth' || uri.path.startsWith('/oauth');
+    final hasOAuthParams = uri.queryParameters.containsKey('access_token') ||
+        uri.queryParameters.containsKey('bind');
+    if (!isOAuthUri && !hasOAuthParams) return;
 
     // Skip if main.dart already processed this deep link (e.g., Windows argv).
     final incomingToken = uri.queryParameters['access_token'];
