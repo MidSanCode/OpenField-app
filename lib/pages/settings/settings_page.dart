@@ -190,6 +190,69 @@ class _DeveloperModeTile extends StatelessWidget {
 class _ServerHostTile extends StatelessWidget {
   const _ServerHostTile();
 
+  Future<void> _openDialog(BuildContext context, SettingsService settings) async {
+    final controller = TextEditingController(text: settings.serverHost);
+    String? errorText;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('serverHost'.tr()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                decoration: InputDecoration(
+                  hintText: 'serverHostHint'.tr(),
+                  errorText: errorText,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.restart_alt, size: 18),
+                  label: Text('resetServerHost'.tr()),
+                  onPressed: () {
+                    controller.text = SettingsService.defaultServerHost;
+                    setState(() => errorText = null);
+                  },
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text('cancel'.tr()),
+            ),
+            TextButton(
+              onPressed: () async {
+                final input = controller.text;
+                final validationError = SettingsService.validateServerHost(input);
+                if (validationError != null) {
+                  setState(() => errorText = validationError);
+                  return;
+                }
+                final ok = await settings.setServerHost(input);
+                if (!ok) {
+                  setState(() => errorText = 'invalidServerHost'.tr());
+                  return;
+                }
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              },
+              child: Text('save'.tr()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsService>(context);
@@ -197,33 +260,7 @@ class _ServerHostTile extends StatelessWidget {
       leading: const Icon(Icons.dns_outlined),
       title: Text('serverHost'.tr()),
       subtitle: Text('serverHostHint'.tr()),
-      onTap: () async {
-        final controller = TextEditingController(text: settings.serverHost);
-        final result = await showDialog<String>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text('serverHost'.tr()),
-            content: TextField(
-              controller: controller,
-              keyboardType: TextInputType.url,
-              decoration: InputDecoration(hintText: 'serverHostHint'.tr()),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text('cancel'.tr()),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(controller.text),
-                child: Text('save'.tr()),
-              ),
-            ],
-          ),
-        );
-        if (result != null) {
-          await settings.setServerHost(result);
-        }
-      },
+      onTap: () => _openDialog(context, settings),
       trailing: Text(
         settings.serverHost,
         style: Theme.of(context).textTheme.bodySmall,

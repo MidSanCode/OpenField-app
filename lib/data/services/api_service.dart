@@ -126,12 +126,35 @@ class ApiService {
       : _client = client ?? LoggingClient(http.Client());
 
   /// Applies a new server host (e.g. `http://localhost:8080`). Setting a null
-  /// or empty value resets to the default.
+  /// or empty value resets to the default. Malformed input (missing scheme,
+  /// unparsable URL) silently falls back to the default rather than breaking
+  /// every subsequent request.
   static void setServerHost(String? host) {
-    final value = host?.trim().replaceAll(RegExp(r'/+$'), '');
-    _serverHost = (value == null || value.isEmpty)
-        ? defaultServerHost
-        : value;
+    var value = host?.trim().replaceAll(RegExp(r'/+$'), '') ?? '';
+    if (value.isEmpty) {
+      _serverHost = defaultServerHost;
+      _baseUrl = '$_serverHost/api/v1';
+      return;
+    }
+    if (!value.contains('://')) {
+      value = 'http://$value';
+    }
+    Uri? uri;
+    try {
+      uri = Uri.parse(value);
+    } catch (_) {
+      _serverHost = defaultServerHost;
+      _baseUrl = '$_serverHost/api/v1';
+      return;
+    }
+    if (!uri.hasScheme ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      _serverHost = defaultServerHost;
+      _baseUrl = '$_serverHost/api/v1';
+      return;
+    }
+    _serverHost = value;
     _baseUrl = '$_serverHost/api/v1';
   }
 

@@ -1,5 +1,6 @@
 import 'dart:ui' show Color;
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart' show ChangeNotifier, ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -83,12 +84,40 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setServerHost(String host) async {
-    final normalized = host.trim().replaceAll(RegExp(r'/+$'), '');
-    _serverHost = normalized.isEmpty ? defaultServerHost : normalized;
+  /// Validates a user-entered server host. Returns null when valid, or a
+  /// human-readable error message describing the first problem found.
+  ///
+  /// Accepts either a bare host (`example.com`, `127.0.0.1:8080`) or a full
+  /// URL (`https://example.com`). Rejects empty strings, unsupported schemes
+  /// and anything `Uri.parse` cannot read.
+  static String? validateServerHost(String host) {
+    final trimmed = host.trim();
+    if (trimmed.isEmpty) return 'emptyServerHost'.tr();
+    final withScheme = trimmed.contains('://') ? trimmed : 'http://$trimmed';
+    Uri? uri;
+    try {
+      uri = Uri.parse(withScheme);
+    } catch (_) {
+      return 'invalidServerHost'.tr();
+    }
+    if (!uri.hasScheme || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return 'invalidServerHost'.tr();
+    }
+    if (uri.host.isEmpty) return 'invalidServerHost'.tr();
+    return null;
+  }
+
+  Future<bool> setServerHost(String host) async {
+    if (validateServerHost(host) != null) return false;
+    var normalized = host.trim().replaceAll(RegExp(r'/+$'), '');
+    if (!normalized.contains('://')) {
+      normalized = 'http://$normalized';
+    }
+    _serverHost = normalized;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyServerHost, _serverHost);
     notifyListeners();
+    return true;
   }
 
   Future<void> setBackgroundImagePath(String? path) async {
