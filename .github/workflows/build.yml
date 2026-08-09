@@ -202,7 +202,9 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         if: env.ANDROID_KEYSTORE_PASSWORD != ''
         run: |
-          cat > android/app/key.properties <<EOF
+          # key.properties must live in android/ (the gradle root project),
+          # not android/app/, or the release signing config is never loaded.
+          cat > android/key.properties <<EOF
           storeFile=upload-keystore.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
