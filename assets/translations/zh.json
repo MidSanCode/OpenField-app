@@ -190,6 +190,7 @@
   "requestFailed": "请求失败，请重试",
   "requestTimeout": "请求超时，请重试",
   "resetServerHost": "恢复默认",
+  "refresh": "刷新",
   "retry": "重试",
   "role": "角色",
   "save": "保存",

@@ -187,6 +187,7 @@
   "requestFailed": "Request failed, please try again",
   "requestTimeout": "The request timed out, please try again",
   "resetServerHost": "Reset to default",
+  "refresh": "Refresh",
   "retry": "Retry",
   "role": "Role",
   "save": "Save",

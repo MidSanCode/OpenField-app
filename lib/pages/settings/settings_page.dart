@@ -2,8 +2,9 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/core/config/app_config.dart';
 import 'package:openfield/core/log/log_overlay.dart';
@@ -439,30 +440,83 @@ class _ColorDot extends StatelessWidget {
   }
 }
 
-class _BackgroundImageTile extends StatelessWidget {
+class _BackgroundImageTile extends StatefulWidget {
   const _BackgroundImageTile();
+
+  @override
+  State<_BackgroundImageTile> createState() => _BackgroundImageTileState();
+}
+
+class _BackgroundImageTileState extends State<_BackgroundImageTile> {
+  bool _picking = false;
+
+  Future<void> _pick(SettingsService settings) async {
+    if (_picking) return;
+    setState(() => _picking = true);
+    try {
+      // file_picker works on all platforms (mobile gallery, desktop file
+      // dialog), unlike image_picker whose gallery source is not supported on
+      // desktop and silently fails there.
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: false,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.single.path;
+      if (picked == null) return;
+      // Copy the selected file into a stable, app-owned location so the
+      // background survives restarts and cache cleanups (the picker often
+      // returns a path inside the OS temp/cache directory).
+      final saved = await _copyToBackgroundDir(picked);
+      await settings.setBackgroundImagePath(saved);
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  Future<String> _copyToBackgroundDir(String src) async {
+    final dir = await _backgroundDir();
+    final ext = src.contains('.') ? src.substring(src.lastIndexOf('.')) : '.img';
+    final dst = '${dir.path}/background$ext';
+    await File(src).copy(dst);
+    return dst;
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsService>(context);
     return ListTile(
-      leading: const Icon(Icons.image_outlined),
+      leading: _picking
+          ? const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.image_outlined),
       title: Text('backgroundImage'.tr()),
       subtitle: Text('backgroundImageHint'.tr()),
       trailing: settings.backgroundImagePath == null
           ? const Icon(Icons.chevron_right)
           : TextButton(
-              onPressed: () => settings.setBackgroundImagePath(null),
+              onPressed: _picking ? null : () => settings.setBackgroundImagePath(null),
               child: Text('clear'.tr()),
             ),
-      onTap: () async {
-        final picker = ImagePicker();
-        final result = await picker.pickImage(source: ImageSource.gallery);
-        if (result == null) return;
-        await settings.setBackgroundImagePath(result.path);
-      },
+      onTap: _picking ? null : () => _pick(settings),
     );
   }
+}
+
+/// Resolves the directory used to persist the selected background image.
+/// Computed once per call; cheap because the underlying call is memoized by
+/// path_provider.
+Future<Directory> _backgroundDir() async {
+  final base = await getApplicationSupportDirectory();
+  final dir = Directory('${base.path}/background');
+  if (!await dir.exists()) {
+    await dir.create(recursive: true);
+  }
+  return dir;
 }
 
 /// Temporarily hides the background image without deleting it.

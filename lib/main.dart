@@ -223,9 +223,15 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
                     return Stack(
                       children: [
                         Positioned.fill(
+                          // ValueKey forces Flutter to rebuild the underlying
+                          // image element when the path changes; without it the
+                          // cached decoded image is reused and the new
+                          // background never appears until a restart.
                           child: Image.file(
                             File(bgPath),
+                            key: ValueKey('bg:$bgPath'),
                             fit: BoxFit.cover,
+                            gaplessPlayback: false,
                             errorBuilder: (_, _, _) => const SizedBox.shrink(),
                           ),
                         ),

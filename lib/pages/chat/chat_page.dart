@@ -229,7 +229,16 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('chat'.tr())),
+      appBar: AppBar(
+        title: Text('chat'.tr()),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'refresh'.tr(),
+            onPressed: _load,
+          ),
+        ],
+      ),
       body: _isWide ? _buildSplitBody() : _buildBody(),
     );
   }
