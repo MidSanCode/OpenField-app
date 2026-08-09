@@ -109,12 +109,18 @@ MediaType _mediaTypeFor(String filePath) {
 
 class ApiService {
   static const String defaultBaseUrl = 'https://of-api.msc-studio.eu.cc/api/v1';
+  static const String defaultServerHost = 'https://of-api.msc-studio.eu.cc';
   static String _baseUrl = defaultBaseUrl;
+  static String _serverHost = defaultServerHost;
   final http.Client _client;
 
   /// The active API base URL. Updated when the user changes the server host in
   /// settings. Read dynamically per request so changes apply immediately.
   static String get baseUrl => _baseUrl;
+
+  /// The normalized server host the API is currently pointing at. Sessions are
+  /// bound to this value (see [AuthService.switchServer]).
+  static String get serverHost => _serverHost;
 
   ApiService({http.Client? client})
       : _client = client ?? LoggingClient(http.Client());
@@ -123,9 +129,10 @@ class ApiService {
   /// or empty value resets to the default.
   static void setServerHost(String? host) {
     final value = host?.trim().replaceAll(RegExp(r'/+$'), '');
-    _baseUrl = (value == null || value.isEmpty)
-        ? defaultBaseUrl
-        : '$value/api/v1';
+    _serverHost = (value == null || value.isEmpty)
+        ? defaultServerHost
+        : value;
+    _baseUrl = '$_serverHost/api/v1';
   }
 
   Map<String, String> _headers({String? token, bool json = true}) {

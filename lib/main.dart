@@ -55,11 +55,13 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   late final GoRouter _router;
   StreamSubscription<Uri>? _linkSubscription;
   bool _deepLinkHandled = false;
+  String? _lastSyncedHost;
 
   @override
   void initState() {
     super.initState();
     LogService.instance.setEnabled(_settingsService.developerMode);
+    _lastSyncedHost = _settingsService.serverHost;
     ApiService.setServerHost(_settingsService.serverHost);
     _settingsService.addListener(_syncServerHost);
     _router = createRouter(_authService, appNavigatorKey);
@@ -87,7 +89,13 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   }
 
   void _syncServerHost() {
-    ApiService.setServerHost(_settingsService.serverHost);
+    final host = _settingsService.serverHost;
+    if (host == _lastSyncedHost) return;
+    _lastSyncedHost = host;
+    ApiService.setServerHost(host);
+    // Account sessions are bound to the server that issued them: when the host
+    // changes, switch to the account saved for the new server (or log out).
+    _authService.switchServer(host);
   }
 
   @override

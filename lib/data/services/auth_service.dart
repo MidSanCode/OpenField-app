@@ -11,6 +11,16 @@ class AuthService extends ChangeNotifier {
   static const _keyUsername = 'username';
   static const _keyEmail = 'email';
   static const _keyAvatarUrl = 'avatar_url';
+  static const _keyBoundHost = 'bound_host';
+
+  static const _sessionFields = [
+    'access_token',
+    'refresh_token',
+    'access_expires_at',
+    'username',
+    'email',
+    'avatar_url',
+  ];
 
   final ApiService _api = ApiService();
 
@@ -23,6 +33,10 @@ class AuthService extends ChangeNotifier {
   User? _user;
   bool _isLoading = true;
   Timer? _refreshTimer;
+
+  /// The server host the current session was issued by. Sessions are bound to
+  /// their server so the account can be restored when the host changes.
+  String? _boundHost;
 
   bool get isAuthenticated => _accessToken != null;
   bool get isLoading => _isLoading;
@@ -38,12 +52,17 @@ class AuthService extends ChangeNotifier {
   bool get isAccessTokenExpired =>
       _accessExpiresAt != null && _accessExpiresAt!.isBefore(DateTime.now());
 
+  /// Completes once persisted session state has been read. [switchServer]
+  /// awaits this before touching the session to avoid racing startup.
+  late final Future<void> _loadFuture;
+
   AuthService() {
-    _load();
+    _loadFuture = _load();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    _boundHost = prefs.getString(_keyBoundHost);
     _accessToken = prefs.getString(_keyAccessToken);
     _refreshToken = prefs.getString(_keyRefreshToken);
     final expMs = prefs.getInt(_keyAccessExpiresAt);
@@ -108,6 +127,10 @@ class AuthService extends ChangeNotifier {
     _accessExpiresAt =
         DateTime.now().add(Duration(seconds: expiresIn ?? (24 * 60 * 60)));
     final prefs = await SharedPreferences.getInstance();
+    // Bind the session to the server that issued it so it can be restored when
+    // the user switches back to this server host.
+    _boundHost = ApiService.serverHost;
+    await prefs.setString(_keyBoundHost, _boundHost!);
     await prefs.setString(_keyAccessToken, accessToken);
     if (_refreshToken != null) {
       await prefs.setString(_keyRefreshToken, _refreshToken!);
@@ -272,12 +295,134 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyUsername);
     await prefs.remove(_keyEmail);
     await prefs.remove(_keyAvatarUrl);
+    // Forgetting the session also forgets the account saved for this server,
+    // so switching back does not silently restore a logged-out account.
+    await _removeSessionForHost(prefs, _boundHost);
     notifyListeners();
   }
+
+  /// Switches the active account to the one saved for [newHost]. The current
+  /// session is persisted under the host that issued it, then, if an account
+  /// was previously saved for [newHost], that session is restored and
+  /// re-validated against the new server; otherwise the user is logged out so
+  /// they can sign in on the new server.
+  Future<void> switchServer(String newHost) async {
+    await _loadFuture;
+    newHost = _normalizeHost(newHost);
+    if (newHost == _boundHost) return;
+
+    await _saveSessionForHost(_boundHost);
+    _boundHost = newHost;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyBoundHost, newHost);
+
+    final saved = await _loadSessionForHost(newHost);
+    if (saved?.accessToken != null) {
+      await _applySession(saved!);
+      _user = null;
+      _startRefreshLoop();
+      notifyListeners();
+      if (isAccessTokenExpired) {
+        if (!await refreshAccessToken()) {
+          await clearTokens();
+          return;
+        }
+      }
+      await _verifySession();
+    } else {
+      await clearTokens();
+    }
+  }
+
+  Future<void> _applySession(_SavedSession s) async {
+    _accessToken = s.accessToken;
+    _refreshToken = s.refreshToken;
+    _accessExpiresAt = s.accessExpiresAt;
+    _username = s.username;
+    _email = s.email;
+    _avatarUrl = s.avatarUrl;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAccessToken, s.accessToken ?? '');
+    await prefs.setString(_keyRefreshToken, s.refreshToken ?? '');
+    await prefs.setInt(
+      _keyAccessExpiresAt,
+      s.accessExpiresAt?.millisecondsSinceEpoch ?? 0,
+    );
+    await prefs.setString(_keyUsername, s.username ?? '');
+    await prefs.setString(_keyEmail, s.email ?? '');
+    await prefs.setString(_keyAvatarUrl, s.avatarUrl ?? '');
+  }
+
+  /// Persists the active session under [host] so it can be restored later.
+  /// With no active session, any stale copy for [host] is removed instead.
+  Future<void> _saveSessionForHost(String? host) async {
+    if (host == null || host.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (_accessToken == null) {
+      await _removeSessionForHost(prefs, host);
+      return;
+    }
+    await prefs.setString(_sessionKey(host, 'access_token'), _accessToken!);
+    await prefs.setString(_sessionKey(host, 'refresh_token'), _refreshToken ?? '');
+    await prefs.setInt(
+      _sessionKey(host, 'access_expires_at'),
+      _accessExpiresAt?.millisecondsSinceEpoch ?? 0,
+    );
+    await prefs.setString(_sessionKey(host, 'username'), _username ?? '');
+    await prefs.setString(_sessionKey(host, 'email'), _email ?? '');
+    await prefs.setString(_sessionKey(host, 'avatar_url'), _avatarUrl ?? '');
+  }
+
+  Future<void> _removeSessionForHost(SharedPreferences prefs, String? host) async {
+    if (host == null || host.isEmpty) return;
+    for (final field in _sessionFields) {
+      await prefs.remove(_sessionKey(host, field));
+    }
+  }
+
+  Future<_SavedSession?> _loadSessionForHost(String host) async {
+    final prefs = await SharedPreferences.getInstance();
+    final access = prefs.getString(_sessionKey(host, 'access_token'));
+    if (access == null || access.isEmpty) return null;
+    final expMs = prefs.getInt(_sessionKey(host, 'access_expires_at'));
+    return _SavedSession(
+      accessToken: access,
+      refreshToken: prefs.getString(_sessionKey(host, 'refresh_token')),
+      accessExpiresAt:
+          expMs != null ? DateTime.fromMillisecondsSinceEpoch(expMs) : null,
+      username: prefs.getString(_sessionKey(host, 'username')),
+      email: prefs.getString(_sessionKey(host, 'email')),
+      avatarUrl: prefs.getString(_sessionKey(host, 'avatar_url')),
+    );
+  }
+
+  String _sessionKey(String host, String field) => 'session.$host.$field';
+
+  String _normalizeHost(String host) =>
+      host.trim().replaceAll(RegExp(r'/+$'), '');
 
   @override
   void dispose() {
     _stopRefreshLoop();
     super.dispose();
   }
+}
+
+/// A persisted account session saved for a specific server host.
+class _SavedSession {
+  final String? accessToken;
+  final String? refreshToken;
+  final DateTime? accessExpiresAt;
+  final String? username;
+  final String? email;
+  final String? avatarUrl;
+
+  _SavedSession({
+    this.accessToken,
+    this.refreshToken,
+    this.accessExpiresAt,
+    this.username,
+    this.email,
+    this.avatarUrl,
+  });
 }
