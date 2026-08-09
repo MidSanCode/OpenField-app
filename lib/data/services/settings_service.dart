@@ -9,7 +9,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyDeveloperMode = 'settings_developer_mode';
   static const _keyServerHost = 'settings_server_host';
   static const _keyBackgroundImagePath = 'settings_background_image_path';
-  static const String defaultServerHost = 'http://localhost:8080';
+  static const String defaultServerHost = 'https://of-api.msc-studio.eu.cc';
 
   String? _locale;
   ThemeMode _themeMode = ThemeMode.system;
