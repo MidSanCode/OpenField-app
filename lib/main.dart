@@ -16,6 +16,7 @@ import 'package:openfield/core/web/history_stub.dart'
 import 'package:openfield/core/windows/protocol_registration.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/permission_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/core/theme/app_theme.dart';
@@ -66,6 +67,11 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     _authService.addListener(_syncRealtimeConnection);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _syncRealtimeConnection(),
+    );
+    // Ask for the runtime permissions the app relies on (notifications, photo
+    // library). Requests are fire-and-forget and never block startup.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => PermissionService.requestOnLaunch(),
     );
   }
 

@@ -1,4 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Networking. INTERNET is a normal permission granted at install time and
+         is required for the app to talk to the OpenField API. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Notifications (Android 13+ runtime permission, requested on launch). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Photo library access for older Android (< 13); Android 13+ uses the
+         system photo picker and grants access implicitly. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <application
         android:label="openfield"
         android:name="${applicationName}"

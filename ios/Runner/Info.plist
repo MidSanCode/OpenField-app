@@ -39,6 +39,10 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>OpenField needs access to your photo library so you can pick images for your profile, posts and group chats.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>OpenField may save images you create to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
