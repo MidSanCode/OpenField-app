@@ -985,11 +985,20 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to create group'));
   }
 
-  Future<void> startPrivateChat(String accessToken, int userId, {String message = ''}) async {
+  Future<void> startPrivateChat(
+    String accessToken,
+    int userId, {
+    String message = '',
+    bool encrypted = false,
+  }) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations/start'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'user_id': userId, 'message': message}),
+      body: jsonEncode({
+        'user_id': userId,
+        'message': message,
+        'encrypted': encrypted,
+      }),
     );
     if (response.statusCode != 201) {
       throw ApiException(

@@ -86,20 +86,67 @@ class _StartChatPageState extends State<StartChatPage> {
           );
           Navigator.of(context).pop();
         }
-      } else {
-        await _apiService.startPrivateChat(token, user.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('chatRequestSent'.tr())),
-          );
-          Navigator.of(context).pop();
-        }
+        return;
+      }
+      // Ask whether to enable end-to-end encryption before sending the
+      // private-chat request; once both parties accept it can't be turned on
+      // later without rotating the group key.
+      final encrypted = await _askEncryption() ?? false;
+      if (!mounted) return;
+      await _apiService.startPrivateChat(token, user.id, encrypted: encrypted);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('chatRequestSent'.tr())),
+        );
+        Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
+  }
+
+  /// Shows a small dialog asking whether to enable end-to-end encryption on
+  /// the new private chat. Returns null when the user dismissed the dialog
+  /// without choosing.
+  Future<bool?> _askEncryption() async {
+    var result = false;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('chatPrivateEncryption'.tr()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('chatPrivateEncryptionHint'.tr()),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('chatEncryptChat'.tr()),
+                subtitle: Text('chatEncryptChatSubtitle'.tr()),
+                value: result,
+                onChanged: (v) => setState(() => result = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: Text('cancel'.tr()),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('ok'),
+              child: Text('confirm'.tr()),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == 'cancel' || action == null) return null;
+    return result;
   }
 
   @override
