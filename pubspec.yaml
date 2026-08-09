@@ -30,6 +30,8 @@ dependencies:
   sqflite_common_ffi: ^2.4.2
   path: ^1.9.1
   web_socket_channel: ^3.0.3
+  pointycastle: ^4.0.0
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

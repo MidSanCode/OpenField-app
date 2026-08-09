@@ -12,6 +12,7 @@ class Conversation {
   final bool isPublic;
   final bool allowJoin;
   final DateTime? muteAllUntil;
+  final bool encrypted;
   final int memberCount;
   final bool isMember;
   final ChatMessage? lastMessage;
@@ -28,6 +29,7 @@ class Conversation {
     this.isPublic = false,
     this.allowJoin = false,
     this.muteAllUntil,
+    this.encrypted = false,
     this.memberCount = 0,
     this.isMember = false,
     this.lastMessage,
@@ -57,6 +59,7 @@ class Conversation {
       isPublic: json['is_public'] as bool? ?? false,
       allowJoin: json['allow_join'] as bool? ?? false,
       muteAllUntil: muteAll != null ? DateTime.parse(muteAll as String) : null,
+      encrypted: json['encrypted'] as bool? ?? false,
       memberCount: json['member_count'] as int? ?? 0,
       isMember: json['is_member'] as bool? ?? false,
       lastMessage: last is Map<String, dynamic> ? ChatMessage.fromJson(last) : null,

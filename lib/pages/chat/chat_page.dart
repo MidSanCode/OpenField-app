@@ -471,12 +471,15 @@ class _ConversationTile extends StatelessWidget {
           text = 'chatGroupUnmutedAll'.tr();
           break;
         default:
-          text = last.content;
+          text = last.displayContent;
       }
     } else if (conversation.isGroup && last.displayName.isNotEmpty) {
-      text = '${last.displayName}: ${last.content}';
+      text = '${last.displayName}: ${last.displayContent}';
     } else {
-      text = last.content;
+      text = last.displayContent;
+    }
+    if (text.isEmpty && conversation.encrypted) {
+      text = 'e2eeUndecryptable'.tr();
     }
     return Text(
       text,

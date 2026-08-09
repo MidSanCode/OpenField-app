@@ -12,6 +12,7 @@ class ChatMember {
   final String? nickname;
   final String? avatarUrl;
   final bool isVerified;
+  final String? e2eePublicKey;
 
   const ChatMember({
     required this.conversationId,
@@ -27,6 +28,7 @@ class ChatMember {
     this.nickname,
     this.avatarUrl,
     this.isVerified = false,
+    this.e2eePublicKey,
   });
 
   String get displayName =>
@@ -53,6 +55,7 @@ class ChatMember {
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool? ?? false,
+      e2eePublicKey: json['e2ee_public_key'] as String?,
     );
   }
 }

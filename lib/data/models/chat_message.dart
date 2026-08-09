@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import 'attachment.dart';
 
@@ -33,6 +34,11 @@ class ChatMessage {
   /// Local send state. Only meaningful for the current user's own messages.
   final MessageStatus status;
 
+  /// The decrypted plaintext of an end-to-end-encrypted message, populated
+  /// locally after a successful decrypt. When null, [content] holds the
+  /// ciphertext envelope (for encrypted conversations).
+  final String? decryptedContent;
+
   const ChatMessage({
     required this.id,
     required this.conversationId,
@@ -51,7 +57,32 @@ class ChatMessage {
     this.attachments = const [],
     String? clientId,
     this.status = MessageStatus.sent,
+    this.decryptedContent,
   }) : clientId = clientId ?? '';
+
+  /// The text to display: the decrypted plaintext for E2EE messages, otherwise
+  /// the raw content. Undecryptable E2EE envelopes are masked so the raw
+  /// ciphertext never leaks into the UI.
+  String get displayContent {
+    if (decryptedContent != null) return decryptedContent!;
+    return isEnvelope ? '' : content;
+  }
+
+  /// True when [content] looks like an E2EE envelope (a JSON object carrying
+  /// the version/sender/index/nonce/cipher fields). Used to avoid rendering
+  /// ciphertext when a message could not be decrypted.
+  bool get isEnvelope {
+    final t = content.trimLeft();
+    if (!t.startsWith('{')) return false;
+    final decoded = _tryDecodeJson(t);
+    return decoded is Map<String, dynamic> &&
+        decoded.containsKey('v') &&
+        decoded.containsKey('c');
+  }
+
+  /// True when this is a text message from an encrypted conversation that has
+  /// not been decrypted yet.
+  bool get needsDecryption => decryptedContent == null && !isSystem;
 
   bool get isDeleted => deletedAt != null;
   bool get isEdited => editedAt != null;
@@ -93,6 +124,7 @@ class ChatMessage {
       attachments: attachments,
       clientId: clientId,
       status: status ?? MessageStatus.sent,
+      decryptedContent: decryptedContent,
     );
   }
 
@@ -122,6 +154,14 @@ class ChatMessage {
       senderVerified: json['sender_verified'] as bool? ?? false,
       attachments: attachments,
     );
+  }
+
+  static Object? _tryDecodeJson(String input) {
+    try {
+      return jsonDecode(input);
+    } catch (_) {
+      return null;
+    }
   }
 }
 

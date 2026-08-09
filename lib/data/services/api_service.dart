@@ -107,7 +107,7 @@ MediaType _mediaTypeFor(String filePath) {
 }
 
 class ApiService {
-  static const String defaultBaseUrl = 'http://localhost:8080/api/v1';
+  static const String defaultBaseUrl = 'https://of-api.msc-studio.eu.cc/api/v1';
   static String _baseUrl = defaultBaseUrl;
   final http.Client _client;
 
@@ -995,16 +995,72 @@ class ApiService {
   }
 
   Future<void> updateGroupSettings(String accessToken, int conversationId,
-      {required bool isPublic, required bool allowJoin}) async {
+      {required bool isPublic, required bool allowJoin, bool? encrypted}) async {
+    final body = <String, dynamic>{'is_public': isPublic, 'allow_join': allowJoin};
+    if (encrypted != null) body['encrypted'] = encrypted;
     final response = await _client.put(
       Uri.parse('$baseUrl/conversations/$conversationId/settings'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'is_public': isPublic, 'allow_join': allowJoin}),
+      body: jsonEncode(body),
     );
     if (response.statusCode != 200) {
       throw ApiException(
           response.statusCode, _decodeError(response, 'Failed to update group settings'));
     }
+  }
+
+  // ---- Chat: E2EE ----
+
+  /// Publishes (or clears) the current user's X25519 public key used to seal
+  /// group-key envelopes.
+  Future<void> updateE2EEKey(String accessToken, String publicKey) async {
+    final response = await _client.put(
+      Uri.parse('$baseUrl/users/me/e2ee-key'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'public_key': publicKey}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to update e2ee key'));
+    }
+  }
+
+  /// Fetches the group-key envelopes stored for a conversation, together with
+  /// the current key version.
+  Future<Map<String, dynamic>> getE2EEKeys(String accessToken, int conversationId) async {
+    final response = await _client.get(
+      Uri.parse('$baseUrl/conversations/$conversationId/e2ee-keys'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load e2ee keys'));
+  }
+
+  /// Stores a batch of group-key envelopes keyed by target user id. Returns the
+  /// new key version the server assigned.
+  Future<int> putE2EEKeys(
+    String accessToken,
+    int conversationId,
+    Map<int, String> envelopes,
+  ) async {
+    final response = await _client.post(
+      Uri.parse('$baseUrl/conversations/$conversationId/e2ee-keys'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        'envelopes': envelopes.map((k, v) => MapEntry('$k', v)),
+      }),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final version = data['version'];
+      if (version is int) return version;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to store e2ee keys'));
   }
 
   Future<void> setMemberRole(String accessToken, int conversationId, int userId, String role) async {

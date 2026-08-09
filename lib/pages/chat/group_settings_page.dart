@@ -5,10 +5,11 @@ import 'package:provider/provider.dart';
 import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/e2ee_service.dart';
 
 /// Group settings editor (owner-only). Lets the owner toggle whether the group
-/// is publicly discoverable and whether anyone can join directly, plus
-/// group-wide mute controls.
+/// is publicly discoverable and whether anyone can join directly, enable
+/// end-to-end encryption, plus group-wide mute controls.
 class GroupSettingsPage extends StatefulWidget {
   final Conversation conversation;
 
@@ -22,6 +23,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
   final ApiService _apiService = ApiService();
   late bool _isPublic;
   late bool _allowJoin;
+  late bool _encrypted;
   bool _saving = false;
 
   @override
@@ -29,6 +31,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     super.initState();
     _isPublic = widget.conversation.isPublic;
     _allowJoin = widget.conversation.allowJoin;
+    _encrypted = widget.conversation.encrypted;
   }
 
   Future<void> _saveSettings() async {
@@ -42,7 +45,12 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
         widget.conversation.id,
         isPublic: _isPublic,
         allowJoin: _allowJoin,
+        encrypted: _encrypted,
       );
+      if (!mounted) return;
+      if (_encrypted && !widget.conversation.encrypted) {
+        await _enableEncryption(token);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('saved'.tr())));
@@ -53,6 +61,32 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  /// Enabling E2EE for the first time: publish the owner's identity key, then
+  /// generate a fresh group key and seal it to every member who has published
+  /// a key. Members without one won't be able to decrypt new messages.
+  Future<void> _enableEncryption(String token) async {
+    try {
+      await E2eeService.instance.ensureIdentity(_apiService, token);
+    } catch (_) {
+      // Identity publishing is best-effort; rotation below will still work if
+      // the owner already has a local key.
+    }
+    final detail = await _apiService.getConversation(token, widget.conversation.id);
+    final members = detail.members
+        .where((m) => m.e2eePublicKey != null && m.e2eePublicKey!.isNotEmpty)
+        .map((m) => (userId: m.userId, publicKey: m.e2eePublicKey!))
+        .toList();
+    if (members.isEmpty) {
+      throw Exception('e2eeNoMemberKeys'.tr());
+    }
+    await E2eeService.instance.rotateGroupKey(
+      _apiService,
+      token,
+      widget.conversation.id,
+      members,
+    );
   }
 
   Future<void> _muteAll() async {
@@ -168,6 +202,15 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
             onChanged: _saving || !_isPublic
                 ? null
                 : (v) => setState(() => _allowJoin = v),
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            value: _encrypted,
+            title: Text('chatGroupEncrypted'.tr()),
+            subtitle: Text('chatGroupEncryptedHint'.tr()),
+            onChanged: _saving
+                ? null
+                : (v) => setState(() => _encrypted = v),
           ),
           const Divider(height: 1),
           Padding(

@@ -40,7 +40,7 @@ class ChatLocalDb {
     final path = p.join(dir.path, 'openfield_chat.db');
     final db = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE messages (
@@ -58,6 +58,7 @@ class ChatLocalDb {
             sender_verified INTEGER NOT NULL DEFAULT 0,
             client_id TEXT,
             status INTEGER NOT NULL DEFAULT 2,
+            decrypted_content TEXT,
             PRIMARY KEY (conversation_id, id)
           )
         ''');
@@ -83,6 +84,10 @@ class ChatLocalDb {
         if (oldVersion < 3) {
           await db.execute(
               "ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'");
+        }
+        if (oldVersion < 4) {
+          await db.execute(
+              'ALTER TABLE messages ADD COLUMN decrypted_content TEXT');
         }
       },
     );
@@ -213,8 +218,8 @@ class ChatLocalDb {
     bool ignore = false,
   }) async {
     final insert = ignore
-        ? 'INSERT OR IGNORE INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-        : 'INSERT INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+        ? 'INSERT OR IGNORE INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status, decrypted_content) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        : 'INSERT INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status, decrypted_content) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
     await txn.rawInsert(insert, [
       m.id,
       conversationId,
@@ -230,6 +235,7 @@ class ChatLocalDb {
       m.senderVerified ? 1 : 0,
       m.clientId,
       m.status.index,
+      m.decryptedContent,
     ]);
     if (ignore) {
       await txn.delete('message_attachments',
@@ -282,6 +288,7 @@ class ChatLocalDb {
         clientId: m.clientId,
         status: m.status,
         attachments: atts,
+        decryptedContent: m.decryptedContent,
       );
     }
   }
@@ -313,6 +320,7 @@ class ChatLocalDb {
       senderVerified: (r['sender_verified'] as int? ?? 0) != 0,
       clientId: r['client_id'] as String?,
       status: status,
+      decryptedContent: r['decrypted_content'] as String?,
     );
   }
 

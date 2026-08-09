@@ -9,6 +9,7 @@ import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/chat_local_db.dart';
+import 'package:openfield/data/services/e2ee_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/chat/group_settings_page.dart';
@@ -49,6 +50,7 @@ class _ConversationPageState extends State<ConversationPage> {
   final Map<int, Timer> _typingTimers = {};
   String? _typingUserId;
   Timer? _typingSendTimer;
+  bool _e2eeKeysReady = false;
 
   @override
   void initState() {
@@ -101,18 +103,18 @@ class _ConversationPageState extends State<ConversationPage> {
     if (!mounted) return;
     switch (event.type) {
       case 'chat.message.created':
-        final msg = ChatMessage.fromJson(event.data);
+        final msg = _decryptMessage(ChatMessage.fromJson(event.data));
         final exists = _messages.any((m) => m.id == msg.id || m.clientId == msg.clientId);
         if (exists) return;
         // Race guard: this is our own optimistic message echoed back over WS
-        // before the HTTP response resolved it. Match by content + sender +
-        // near-identical timestamp and resolve it in place.
+        // before the HTTP response resolved it. Match by sender + near-identical
+        // timestamp + (for encrypted conversations) decrypted plaintext.
         final pending = _messages
             .where((m) =>
                 m.id <= 0 &&
                 m.isPending &&
                 m.senderId == msg.senderId &&
-                m.content == msg.content &&
+                _contentMatches(m, msg) &&
                 m.createdAt.difference(msg.createdAt).abs().inSeconds <= 10)
             .firstOrNull;
         if (pending != null) {
@@ -125,7 +127,7 @@ class _ConversationPageState extends State<ConversationPage> {
         _scrollToBottom();
         break;
       case 'chat.message.updated':
-        final msg = ChatMessage.fromJson(event.data);
+        final msg = _decryptMessage(ChatMessage.fromJson(event.data));
         setState(() {
           _messages = _messages.map((m) => m.id == msg.id ? msg : m).toList();
         });
@@ -142,6 +144,7 @@ class _ConversationPageState extends State<ConversationPage> {
               conversationId: m.conversationId,
               senderId: m.senderId,
               content: m.content,
+              decryptedContent: m.decryptedContent,
               kind: m.kind,
               replyToId: m.replyToId,
               replyToName: m.replyToName,
@@ -178,6 +181,9 @@ class _ConversationPageState extends State<ConversationPage> {
         break;
       case 'chat.conversation.updated':
         _refreshConversation();
+        break;
+      case 'chat.e2ee.keys.updated':
+        _syncE2EEAndRedecrypt();
         break;
     }
   }
@@ -226,6 +232,7 @@ class _ConversationPageState extends State<ConversationPage> {
           conversationId: m.conversationId,
           senderId: m.senderId,
           content: m.content,
+          decryptedContent: m.decryptedContent,
           kind: m.kind,
           replyToId: m.replyToId,
           editedAt: m.editedAt,
@@ -261,11 +268,17 @@ class _ConversationPageState extends State<ConversationPage> {
       if (detail.myMembership != null) {
         _myUserId = detail.myMembership!.userId;
       }
+      var display = _mergeMessages(_messages, messages);
+      if (detail.conversation.encrypted) {
+        await _ensureE2EE();
+        display = _decryptBatch(display);
+      }
+      if (!mounted) return;
       setState(() {
         _conversation = detail.conversation;
         _members = detail.members;
         _myMembership = detail.myMembership;
-        _messages = _mergeMessages(_messages, messages);
+        _messages = display;
         _isLoading = false;
         _hasOlder = messages.length >= 50;
       });
@@ -329,7 +342,7 @@ class _ConversationPageState extends State<ConversationPage> {
       if (!mounted) return;
       setState(() {
         _hasOlder = true;
-        _messages = [...older, ..._messages];
+        _messages = [..._decryptBatch(older), ..._messages];
         _loadingOlder = false;
       });
       return;
@@ -343,7 +356,7 @@ class _ConversationPageState extends State<ConversationPage> {
       final merged = _mergeMessages(older, serverOlder);
       setState(() {
         _hasOlder = serverOlder.length >= 50;
-        _messages = [...merged, ..._messages];
+        _messages = [..._decryptBatch(merged), ..._messages];
         _loadingOlder = false;
       });
       await ChatLocalDb.instance.appendMessages(widget.conversationId, merged);
@@ -412,7 +425,115 @@ class _ConversationPageState extends State<ConversationPage> {
         _members = detail.members;
         _myMembership = detail.myMembership;
       });
+      if (detail.conversation.encrypted) {
+        await _ensureE2EE();
+      }
     } catch (_) {}
+  }
+
+  bool get _isEncrypted => _conversation?.encrypted ?? false;
+
+  /// Whether the input bar should block sending until the group key has been
+  /// synced for an encrypted conversation.
+  bool get _e2eeBlocked => _isEncrypted && !_e2eeKeysReady && _myMembership != null;
+
+  /// Loads the identity keypair and, for encrypted conversations, fetches and
+  /// decrypts any new group-key envelopes addressed to us.
+  Future<void> _ensureE2EE() {
+    final inFlight = _e2eeFuture;
+    if (inFlight != null) return inFlight;
+    final future = _ensureE2EEInternal();
+    _e2eeFuture = future;
+    future.whenComplete(() => _e2eeFuture = null);
+    return future;
+  }
+
+  Future<void>? _e2eeFuture;
+
+  Future<void> _ensureE2EEInternal() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    try {
+      await E2eeService.instance.ensureIdentity(_apiService, token);
+      if (_isEncrypted && _myUserId != 0) {
+        try {
+          await E2eeService.instance.syncGroupKeys(
+              _apiService, token, widget.conversationId, _myUserId);
+        } catch (_) {
+          // Offline or a transient error: cached group keys still work.
+        }
+      }
+    } catch (_) {
+      // Identity setup failed; keys are unusable.
+    }
+    if (mounted) {
+      setState(() =>
+          _e2eeKeysReady = E2eeService.instance.hasGroupKey(widget.conversationId));
+    }
+  }
+
+  ChatMessage _copyWithDecrypted(ChatMessage m, String plain) {
+    return ChatMessage(
+      id: m.id,
+      conversationId: m.conversationId,
+      senderId: m.senderId,
+      content: m.content,
+      kind: m.kind,
+      replyToId: m.replyToId,
+      replyToName: m.replyToName,
+      replyToContent: m.replyToContent,
+      editedAt: m.editedAt,
+      deletedAt: m.deletedAt,
+      createdAt: m.createdAt,
+      senderName: m.senderName,
+      senderAvatar: m.senderAvatar,
+      senderVerified: m.senderVerified,
+      attachments: m.attachments,
+      clientId: m.clientId,
+      status: m.status,
+      decryptedContent: plain,
+    );
+  }
+
+  /// Decrypts a single message when the conversation is encrypted. System
+  /// messages and already-decrypted messages pass through unchanged.
+  ChatMessage _decryptMessage(ChatMessage m) {
+    if (!_isEncrypted || m.isSystem || m.decryptedContent != null) return m;
+    final plain =
+        E2eeService.instance.decryptMessage(widget.conversationId, m.senderId, m.content);
+    if (plain == null) return m;
+    return _copyWithDecrypted(m, plain);
+  }
+
+  List<ChatMessage> _decryptBatch(List<ChatMessage> msgs) =>
+      msgs.map(_decryptMessage).toList();
+
+  /// Re-syncs group keys and re-decrypts every message (used after a key
+  /// rotation event or a failed decrypt caused by a missed key sync).
+  Future<void> _syncE2EEAndRedecrypt() async {
+    await _ensureE2EE();
+    if (!mounted) return;
+    setState(() {
+      _messages = _decryptBatch(_messages);
+    });
+  }
+
+  /// Whether a pending local message and an echoed server message refer to the
+  /// same logical message. For encrypted conversations the content differs
+  /// (fresh ciphertext per send), so compare the decrypted plaintext instead.
+  bool _contentMatches(ChatMessage pending, ChatMessage echo) {
+    if (pending.content == echo.content) return true;
+    if (!_isEncrypted) return false;
+    final decrypted = E2eeService.instance
+        .decryptMessage(widget.conversationId, echo.senderId, echo.content);
+    return decrypted != null && decrypted == pending.decryptedContent;
+  }
+
+  /// Encrypts outgoing content for encrypted conversations.
+  String _encryptOutgoing(String plaintext) {
+    if (!_isEncrypted) return plaintext;
+    return E2eeService.instance.encryptMessage(widget.conversationId, _myUserId, plaintext);
   }
 
   Future<void> _joinGroup() async {
@@ -454,19 +575,35 @@ class _ConversationPageState extends State<ConversationPage> {
     final token = authService.accessToken;
     if (token == null) return;
 
+    // For encrypted conversations the group key must be available before we
+    // can encrypt; try a sync first and fall back to a hint when it is not.
+    if (_isEncrypted && !_e2eeKeysReady) {
+      await _ensureE2EE();
+      if (!mounted) return;
+      if (!_e2eeKeysReady) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('e2eeKeysPending'.tr())));
+        return;
+      }
+    }
+
     final replyToId = _replyToId;
+    final cipher = _isEncrypted ? _encryptOutgoing(content) : content;
     setState(() {
       _inputController.clear();
       _replyToId = null;
     });
 
     // Optimistic send: render the message immediately with a local id +
-    // timestamp, then resolve with the server-confirmed message.
+    // timestamp, then resolve with the server-confirmed message. For encrypted
+    // conversations the bubble shows the plaintext while [content] carries the
+    // ciphertext envelope that will be sent.
     final local = ChatMessage(
       id: -DateTime.now().millisecondsSinceEpoch,
       conversationId: widget.conversationId,
       senderId: _myUserId,
-      content: content,
+      content: cipher,
+      decryptedContent: _isEncrypted ? content : null,
       replyToId: replyToId,
       createdAt: DateTime.now(),
       senderName: authService.user?.nickname ?? authService.username,
@@ -662,7 +799,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
-    final controller = TextEditingController(text: message.content);
+    final controller = TextEditingController(text: message.displayContent);
     final content = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -684,17 +821,19 @@ class _ConversationPageState extends State<ConversationPage> {
     );
     if (content == null || content.isEmpty) return;
     try {
+      final payload = _isEncrypted ? _encryptOutgoing(content) : content;
       final updated = await _apiService.editChatMessage(
         token,
         widget.conversationId,
         message.id,
-        content,
+        payload,
       );
       if (!mounted) return;
+      final resolved = _isEncrypted ? _decryptMessage(updated) : updated;
       setState(() {
-        _messages = _messages.map((m) => m.id == updated.id ? updated : m).toList();
+        _messages = _messages.map((m) => m.id == resolved.id ? resolved : m).toList();
       });
-      ChatLocalDb.instance.upsertMessage(updated);
+      ChatLocalDb.instance.upsertMessage(resolved);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -1391,6 +1530,7 @@ class _ConversationPageState extends State<ConversationPage> {
               return _MessageBubble(
                 message: message,
                 isMine: message.senderId == _myUserId,
+                isEncrypted: _isEncrypted,
                 showSenderName: (_conversation?.isGroup ?? false) && !message.isDeleted,
                 senderAvatar: message.senderAvatar,
                 replyPreview: replyTo,
@@ -1477,6 +1617,36 @@ class _ConversationPageState extends State<ConversationPage> {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_e2eeBlocked) {
+      return SafeArea(
+        top: false,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.lock_outline, size: 18, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'e2eeKeysPending'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _syncE2EEAndRedecrypt(),
+                child: Text('retry'.tr()),
               ),
             ],
           ),
@@ -1581,7 +1751,7 @@ class _SystemMessage extends StatelessWidget {
       case 'system.unmute.all':
         return 'chatGroupUnmutedAll'.tr();
       default:
-        return message.content;
+        return message.displayContent;
     }
   }
 }
@@ -1589,6 +1759,7 @@ class _SystemMessage extends StatelessWidget {
 class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isMine;
+  final bool isEncrypted;
   final bool showSenderName;
   final String? senderAvatar;
   final ChatMessage? replyPreview;
@@ -1598,6 +1769,7 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     required this.isMine,
+    required this.isEncrypted,
     required this.showSenderName,
     required this.onLongPress,
     this.senderAvatar,
@@ -1695,9 +1867,39 @@ class _MessageBubble extends StatelessWidget {
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           )
+                        else if (isEncrypted)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4, right: 6),
+                                child: Icon(
+                                  message.decryptedContent == null
+                                      ? Icons.lock_outline
+                                      : Icons.lock,
+                                  size: 12,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              Flexible(
+                                child: message.decryptedContent == null
+                                    ? Text(
+                                        'e2eeUndecryptable'.tr(),
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          fontStyle: FontStyle.italic,
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                      )
+                                    : MarkdownContent(
+                                        data: message.displayContent,
+                                        padding: EdgeInsets.zero,
+                                      ),
+                              ),
+                            ],
+                          )
                         else
                           MarkdownContent(
-                            data: message.content,
+                            data: message.displayContent,
                             padding: EdgeInsets.zero,
                           ),
                         if (message.attachments.isNotEmpty) ...[
@@ -1763,12 +1965,17 @@ class _MessageBubble extends StatelessWidget {
   /// so quotes still render when the referenced message isn't loaded.
   String? _replyPreviewText() {
     final rp = replyPreview;
-    if (rp != null && !rp.isDeleted && rp.content.isNotEmpty) {
-      return '${rp.displayName}: ${rp.content}';
+    if (rp != null && !rp.isDeleted && rp.displayContent.isNotEmpty) {
+      return '${rp.displayName}: ${rp.displayContent}';
     }
     if (message.replyToName != null && message.replyToName!.isNotEmpty) {
       final content = message.replyToContent ?? '';
       if (content.isEmpty) return null;
+      // For encrypted conversations the server-stored replyToContent is an
+      // envelope (not plaintext), so only fall back when it is readable.
+      if (message.replyToName != null && message.replyToContent?.startsWith('{') == true) {
+        return '${message.replyToName}: ${'chatEncryptedQuote'.tr()}';
+      }
       return '${message.replyToName}: $content';
     }
     return null;
@@ -1940,7 +2147,7 @@ class _ReplyBar extends StatelessWidget {
             child: Text(
               message == null
                   ? 'chatReplying'.tr()
-                  : '${message!.displayName}: ${message!.content}',
+                  : '${message!.displayName}: ${message!.displayContent}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(
