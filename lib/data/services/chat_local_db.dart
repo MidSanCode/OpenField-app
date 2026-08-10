@@ -6,11 +6,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/data/models/chat_message.dart';
+import 'package:openfield/data/services/chat_cache_store.dart';
 
-/// Local SQLite store for chat messages. It caches messages per conversation so
-/// the UI can render instantly (offline-first) and only talk to the server for
-/// messages the cache does not yet have.
-class ChatLocalDb {
+/// Plaintext SQLite store for chat messages of non-encrypted conversations. It
+/// caches messages per conversation so the UI can render instantly
+/// (offline-first) and only talk to the server for messages the cache does not
+/// yet have. MLS-encrypted conversations are cached in [EncryptedChatDb]
+/// instead, so plaintext never lands here.
+class ChatLocalDb implements ChatCacheStore {
   ChatLocalDb._();
 
   static final ChatLocalDb instance = ChatLocalDb._();
@@ -40,7 +43,7 @@ class ChatLocalDb {
     final path = p.join(dir.path, 'openfield_chat.db');
     final db = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE messages (
@@ -59,6 +62,7 @@ class ChatLocalDb {
             client_id TEXT,
             status INTEGER NOT NULL DEFAULT 2,
             decrypted_content TEXT,
+            mentions TEXT,
             PRIMARY KEY (conversation_id, id)
           )
         ''');
@@ -89,6 +93,9 @@ class ChatLocalDb {
           await db.execute(
               'ALTER TABLE messages ADD COLUMN decrypted_content TEXT');
         }
+        if (oldVersion < 5) {
+          await db.execute('ALTER TABLE messages ADD COLUMN mentions TEXT');
+        }
       },
     );
     _db = db;
@@ -96,6 +103,7 @@ class ChatLocalDb {
   }
 
   /// Returns the lowest cached message id for a conversation, or null.
+  @override
   Future<int?> minMessageId(int conversationId) async {
     final db = await _open();
     if (db == null) return null;
@@ -114,6 +122,7 @@ class ChatLocalDb {
 
   /// Loads cached messages for a conversation, oldest first. When [beforeId]
   /// is provided, returns messages strictly older than it (for lazy loading).
+  @override
   Future<List<ChatMessage>> loadMessages(
     int conversationId, {
     int? beforeId,
@@ -141,6 +150,7 @@ class ChatLocalDb {
 
   /// Loads cached messages newer than a given message id (used to seed the
   /// newest window after a server sync).
+  @override
   Future<List<ChatMessage>> loadMessagesFrom(
     int conversationId,
     int afterId, {
@@ -162,6 +172,7 @@ class ChatLocalDb {
 
   /// Replaces the cached window for a conversation with [messages]. Used after
   /// a successful server fetch to keep the cache consistent.
+  @override
   Future<void> replaceConversation(int conversationId, List<ChatMessage> messages) async {
     final db = await _open();
     if (db == null) return;
@@ -176,6 +187,7 @@ class ChatLocalDb {
   }
 
   /// Appends messages to the cache, ignoring duplicates.
+  @override
   Future<void> appendMessages(int conversationId, List<ChatMessage> messages) async {
     if (messages.isEmpty) return;
     final db = await _open();
@@ -187,12 +199,14 @@ class ChatLocalDb {
     });
   }
 
+  @override
   Future<void> upsertMessage(ChatMessage message) async {
     final db = await _open();
     if (db == null) return;
     await _insert(db, message, message.conversationId, ignore: true);
   }
 
+  @override
   Future<void> deleteMessage(int conversationId, int messageId) async {
     final db = await _open();
     if (db == null) return;
@@ -203,6 +217,7 @@ class ChatLocalDb {
   }
 
   /// Removes all cached messages for a conversation (used after deletion).
+  @override
   Future<void> deleteConversation(int conversationId) async {
     final db = await _open();
     if (db == null) return;
@@ -218,8 +233,8 @@ class ChatLocalDb {
     bool ignore = false,
   }) async {
     final insert = ignore
-        ? 'INSERT OR IGNORE INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status, decrypted_content) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-        : 'INSERT INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status, decrypted_content) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+        ? 'INSERT OR IGNORE INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status, decrypted_content, mentions) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        : 'INSERT INTO messages (id, conversation_id, sender_id, content, kind, reply_to_id, edited_at, deleted_at, created_at, sender_name, sender_avatar, sender_verified, client_id, status, decrypted_content, mentions) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
     await txn.rawInsert(insert, [
       m.id,
       conversationId,
@@ -236,6 +251,7 @@ class ChatLocalDb {
       m.clientId,
       m.status.index,
       m.decryptedContent,
+      m.mentions.isEmpty ? null : jsonEncode(m.mentions),
     ]);
     if (ignore) {
       await txn.delete('message_attachments',
@@ -289,6 +305,7 @@ class ChatLocalDb {
         status: m.status,
         attachments: atts,
         decryptedContent: m.decryptedContent,
+        mentions: m.mentions,
       );
     }
   }
@@ -321,7 +338,19 @@ class ChatLocalDb {
       clientId: r['client_id'] as String?,
       status: status,
       decryptedContent: r['decrypted_content'] as String?,
+      mentions: _parseMentions(r['mentions']),
     );
+  }
+
+  List<int> _parseMentions(Object? v) {
+    if (v is! String || v.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(v);
+      if (decoded is List) {
+        return decoded.whereType<int>().toList();
+      }
+    } catch (_) {}
+    return const [];
   }
 
   Future<void> close() async {

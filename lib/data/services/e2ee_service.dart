@@ -52,6 +52,7 @@ class E2eeService {
   static final Uint8List _ratchetInfo = utf8.encode('openfield:e2ee:ratchet');
   static final Uint8List _msgInfo = utf8.encode('openfield:e2ee:msg');
   static final Uint8List _envelopeInfo = utf8.encode('openfield:e2ee:envelope');
+  static final Uint8List _chatDbInfo = utf8.encode('openfield:e2ee:chatdb');
 
   SharedPreferences? _prefs;
   Uint8List? _identityPrivate;
@@ -98,6 +99,17 @@ class E2eeService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Derives the key that seals the local encrypted-chat cache
+  /// ([EncryptedChatDb]) from the user's E2EE identity private key via
+  /// HKDF-SHA256. Returns null when no identity exists yet (a fresh device has
+  /// an empty encrypted cache until [ensureIdentity] creates one).
+  Future<Uint8List?> storageKey() async {
+    await _init();
+    final priv = _identityPrivate;
+    if (priv == null) return null;
+    return hkdfSha256(priv, info: _chatDbInfo, length: 32);
   }
 
   /// Loads the identity keypair (creating and publishing one on first run) and
