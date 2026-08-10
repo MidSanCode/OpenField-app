@@ -14,7 +14,13 @@ class SettingsService extends ChangeNotifier {
   static const _keyBackgroundImagePath = 'settings_background_image_path';
   static const _keyBackgroundVisible = 'settings_background_image_visible';
   static const _keyAccentColor = 'settings_accent_color';
+  static const _keyTimezone = 'settings_timezone';
   static const String defaultServerHost = 'https://of-api.msc-studio.eu.cc';
+
+  /// Sentinels for the client-side timezone setting. Empty means "follow the
+  /// device's local timezone"; otherwise an IANA-free UTC offset label such as
+  /// "UTC+8" or "UTC-5:30".
+  static const String localTimezone = '';
 
   String? _locale;
   ThemeMode _themeMode = ThemeMode.system;
@@ -23,6 +29,7 @@ class SettingsService extends ChangeNotifier {
   String? _backgroundImagePath;
   bool _backgroundVisible = true;
   Color? _accentColor;
+  String _timezone = localTimezone;
 
   String? get locale => _locale;
   ThemeMode get themeMode => _themeMode;
@@ -36,6 +43,13 @@ class SettingsService extends ChangeNotifier {
 
   /// The user-selected seed color for the app theme. Null uses the default.
   Color? get accentColor => _accentColor;
+
+  /// Client-side timezone: empty (follow device) or a fixed UTC offset label
+  /// like "UTC+8". Server timestamps are converted to this zone for display.
+  String get timezone => _timezone;
+
+  /// Whether timestamps should render in the device's own local timezone.
+  bool get usesDeviceTimezone => _timezone == localTimezone;
 
   SettingsService() {
     ready = _load();
@@ -56,7 +70,37 @@ class SettingsService extends ChangeNotifier {
     _backgroundVisible = prefs.getBool(_keyBackgroundVisible) ?? true;
     final accent = prefs.getInt(_keyAccentColor);
     _accentColor = accent != null ? Color(accent) : null;
+    _timezone = prefs.getString(_keyTimezone) ?? localTimezone;
     notifyListeners();
+  }
+
+  Future<void> setTimezone(String tz) async {
+    _timezone = tz;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyTimezone, tz);
+    notifyListeners();
+  }
+
+  /// Converts a server timestamp (UTC) into the client-selected timezone for
+  /// display. Falls back to the device's local timezone when unset or when the
+  /// stored label cannot be parsed.
+  DateTime displayTime(DateTime utc) {
+    if (usesDeviceTimezone) return utc.toLocal();
+    final offset = _parseUtcOffset(_timezone);
+    if (offset == null) return utc.toLocal();
+    return utc.toUtc().add(offset);
+  }
+
+  /// Parses a label like "UTC+8", "UTC-5", "UTC+5:30" or "UTC-9:30" into a
+  /// [Duration]. Returns null when the label is not a valid offset.
+  static Duration? _parseUtcOffset(String label) {
+    final m = RegExp(r'^UTC([+-])(\d{1,2})(?::(\d{2}))?$').firstMatch(label.trim());
+    if (m == null) return null;
+    final sign = m.group(1) == '-' ? -1 : 1;
+    final hours = int.parse(m.group(2)!);
+    final minutes = int.parse(m.group(3) ?? '0');
+    if (hours > 14 || (hours == 14 && minutes > 0) || minutes >= 60) return null;
+    return Duration(hours: sign * hours, minutes: sign * minutes);
   }
 
   Future<void> setLocale(String? locale) async {

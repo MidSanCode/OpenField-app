@@ -7,6 +7,7 @@ import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
+import 'package:openfield/data/services/settings_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/chat/conversation_page.dart';
 import 'package:openfield/pages/chat/consent_requests_page.dart';
@@ -122,7 +123,10 @@ class _ChatPageState extends State<ChatPage> {
     // including the bottom navigation bar on narrow (portrait) screens.
     await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
-        builder: (_) => ConversationPage(conversationId: conv.id),
+        builder: (_) => ConversationPage(
+          conversationId: conv.id,
+          encrypted: conv.encrypted,
+        ),
       ),
     );
     if (mounted) _load();
@@ -239,7 +243,78 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       ),
-      body: _isWide ? _buildSplitBody() : _buildBody(),
+      body: Column(
+        children: [
+          _buildRealtimeBanner(),
+          Expanded(child: _isWide ? _buildSplitBody() : _buildBody()),
+        ],
+      ),
+    );
+  }
+
+  /// Realtime connection status banner. Shows a slim "reconnecting" strip while
+  /// the socket is down and a full banner with a manual retry once the client
+  /// has given up after [RealtimeService.maxConsecutiveFailures] attempts.
+  Widget _buildRealtimeBanner() {
+    return ListenableBuilder(
+      listenable: RealtimeService.instance,
+      builder: (context, _) {
+        final ws = RealtimeService.instance;
+        if (ws.isDead) {
+          return Material(
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_off,
+                      size: 18, color: Theme.of(context).colorScheme.onErrorContainer),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'chatRealtimeOffline'.tr(),
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.onErrorContainer,
+                          fontSize: 13),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: ws.reconnect,
+                    child: Text('retry'.tr()),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        if (!ws.isConnected) {
+          return Material(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'chatRealtimeConnecting'.tr(),
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return const SizedBox.shrink();
+      },
     );
   }
 
@@ -260,6 +335,10 @@ class _ChatPageState extends State<ChatPage> {
               : ConversationPage(
                   key: ValueKey(_selectedConversationId),
                   conversationId: _selectedConversationId!,
+                  encrypted: _conversations
+                      .where((c) => c.id == _selectedConversationId)
+                      .firstOrNull
+                      ?.encrypted,
                   onBack: () {
                     setState(() => _selectedConversationId = null);
                     _reloadSilently();
@@ -431,8 +510,9 @@ class _ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final settings = Provider.of<SettingsService>(context);
     final last = conversation.lastMessage;
-    final time = last != null ? _formatTime(last.createdAt) : '';
+    final time = last != null ? _formatTime(last.createdAt, settings) : '';
     final preview = _buildPreview(context, last);
 
     return InkWell(
@@ -558,17 +638,20 @@ class _ConversationTile extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime time) {
+  String _formatTime(DateTime time, SettingsService settings) {
+    // Timestamps arrive from the server in UTC; render them in the
+    // client-selected timezone (or the device's own zone by default).
+    final local = settings.displayTime(time);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final that = DateTime(time.year, time.month, time.day);
-    final h = time.hour.toString().padLeft(2, '0');
-    final m = time.minute.toString().padLeft(2, '0');
+    final that = DateTime(local.year, local.month, local.day);
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
     if (that == today) return '$h:$m';
     if (now.difference(that).inDays < 7) {
       const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return weekdays[time.weekday - 1];
+      return weekdays[local.weekday - 1];
     }
-    return '${time.month}-${time.day}';
+    return '${local.month}-${local.day}';
   }
 }

@@ -48,14 +48,26 @@ class PushEvent {
 }
 
 /// Maintains a persistent WebSocket connection to the push service and exposes
-/// a broadcast stream of [PushEvent]s. Automatically reconnects with backoff.
+/// a broadcast stream of [PushEvent]s.
+///
+/// Reconnect policy: on a connection failure (or the socket closing), retry
+/// every 5 seconds up to [maxConsecutiveFailures] consecutive failures, then
+/// give up and flip to a "dead" state that the UI surfaces with a banner and a
+/// manual "reconnect" button. Any successful connection resets the counter, so
+/// a stable link is never torn down by the failure budget.
 ///
 /// Uses [WebSocketChannel] from `web_socket_channel`, which works on both
 /// native and web. Browsers cannot set custom headers on WebSocket connections,
 /// so the access token is passed as a `token` query parameter instead; the
 /// gateway validates it before forwarding the upgrade.
-class RealtimeService {
+class RealtimeService extends ChangeNotifier {
   static final RealtimeService instance = RealtimeService();
+
+  /// Consecutive failures tolerated before the connection is declared dead.
+  static const int maxConsecutiveFailures = 3;
+
+  /// Delay between reconnection attempts.
+  static const Duration retryInterval = Duration(seconds: 5);
 
   final _controller = StreamController<PushEvent>.broadcast();
 
@@ -63,6 +75,7 @@ class RealtimeService {
   bool _shouldRun = false;
   bool _disposed = false;
   bool _connected = false;
+  bool _dead = false;
   Timer? _reconnectTimer;
   int _retryCount = 0;
   String? _token;
@@ -74,11 +87,31 @@ class RealtimeService {
   /// True when a live WebSocket connection is established.
   bool get isConnected => _connected;
 
+  /// True after [maxConsecutiveFailures] consecutive failed attempts. The UI
+  /// shows a banner offering a manual retry via [reconnect].
+  bool get isDead => _dead;
+
+  /// Number of consecutive failed attempts so far (resets on success).
+  int get retryCount => _retryCount;
+
   /// Connects (or reconnects) to the push service using the current token.
   void connect(String token) {
     _shouldRun = true;
     _disposed = false;
+    _dead = false;
+    _retryCount = 0;
     _token = token;
+    notifyListeners();
+    _open();
+  }
+
+  /// Manually retries a dead connection. Resets the failure counter so the new
+  /// attempt gets the full budget again.
+  void reconnect() {
+    if (!_shouldRun || _disposed || _token == null) return;
+    _dead = false;
+    _retryCount = 0;
+    notifyListeners();
     _open();
   }
 
@@ -87,9 +120,12 @@ class RealtimeService {
     _shouldRun = false;
     _disposed = true;
     _token = null;
+    _dead = false;
+    _retryCount = 0;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _closeChannel();
+    notifyListeners();
   }
 
   void _open() {
@@ -101,7 +137,7 @@ class RealtimeService {
   void _scheduleReconnect() {
     // Small delay so the UI settles before opening the socket.
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 1), () {
+    _reconnectTimer = Timer(const Duration(milliseconds: 600), () {
       _connectNow();
     });
   }
@@ -121,15 +157,15 @@ class RealtimeService {
       _channel = channel;
       _connected = true;
       _retryCount = 0;
+      _dead = false;
+      notifyListeners();
       _listen(channel);
     } catch (e) {
       debugPrint('[WS] connect failed: $e');
       _channel = null;
       _connected = false;
       if (_shouldRun && !_disposed) {
-        _retryCount++;
-        final delay = Duration(seconds: (2 * _retryCount).clamp(1, 30));
-        _reconnectTimer = Timer(delay, () => _connectNow());
+        _registerFailure();
       }
     }
   }
@@ -154,9 +190,7 @@ class RealtimeService {
         }
         _connected = false;
         if (_shouldRun && !_disposed) {
-          _retryCount++;
-          final delay = Duration(seconds: (2 * _retryCount).clamp(1, 30));
-          _reconnectTimer = Timer(delay, () => _connectNow());
+          _registerFailure();
         }
       },
       onError: (Object e) {
@@ -165,9 +199,30 @@ class RealtimeService {
           _channel = null;
         }
         _connected = false;
+        if (_shouldRun && !_disposed) {
+          _registerFailure();
+        }
       },
       cancelOnError: false,
     );
+  }
+
+  /// Counts a failed attempt; after [maxConsecutiveFailures] the connection is
+  /// declared dead and reconnection stops until the user taps retry.
+  /// A retry already scheduled from a related callback (e.g. the same socket
+  /// firing both onError and onDone) is not counted twice.
+  void _registerFailure() {
+    if (_reconnectTimer != null) return;
+    _retryCount++;
+    if (_retryCount >= maxConsecutiveFailures) {
+      _dead = true;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      debugPrint('[WS] giving up after $_retryCount consecutive failures');
+      notifyListeners();
+      return;
+    }
+    _reconnectTimer = Timer(retryInterval, () => _connectNow());
   }
 
   void _closeChannel() {

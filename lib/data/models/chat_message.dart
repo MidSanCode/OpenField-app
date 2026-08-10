@@ -27,6 +27,11 @@ class ChatMessage {
   final bool senderVerified;
   final List<Attachment> attachments;
 
+  /// Server-confirmed user IDs explicitly @-mentioned in this message. The
+  /// sentinel [-1] marks an @everyone mention. Sent by the sender so other
+  /// clients can highlight/notify the right people.
+  final List<int> mentions;
+
   /// Local, client-generated identity used to track a message before the
   /// server assigns an [id] (optimistic sends) and to keep ordering stable.
   final String clientId;
@@ -55,10 +60,18 @@ class ChatMessage {
     this.senderAvatar,
     this.senderVerified = false,
     this.attachments = const [],
+    this.mentions = const [],
     String? clientId,
     this.status = MessageStatus.sent,
     this.decryptedContent,
   }) : clientId = clientId ?? '';
+
+  /// The sentinel user id stored in [mentions] for an @everyone mention.
+  static const int everyoneSentinel = -1;
+
+  /// True when this message mentions the current user (or everyone).
+  bool mentionsMe(int myUserId) =>
+      mentions.contains(myUserId) || mentions.contains(everyoneSentinel);
 
   /// The text to display: the decrypted plaintext for E2EE messages, otherwise
   /// the raw content. Undecryptable E2EE envelopes are masked so the raw
@@ -122,6 +135,7 @@ class ChatMessage {
       senderAvatar: senderAvatar,
       senderVerified: senderVerified,
       attachments: attachments,
+      mentions: mentions,
       clientId: clientId,
       status: status ?? MessageStatus.sent,
       decryptedContent: decryptedContent,
@@ -153,7 +167,24 @@ class ChatMessage {
       senderAvatar: json['sender_avatar'] as String?,
       senderVerified: json['sender_verified'] as bool? ?? false,
       attachments: attachments,
+      mentions: _asIntList(json['mentions']),
     );
+  }
+
+  /// Coerces a mentions array, tolerating strings and missing values.
+  static List<int> _asIntList(Object? value) {
+    if (value is List) {
+      return value
+          .map((e) {
+            if (e is int) return e;
+            if (e is num) return e.toInt();
+            if (e is String) return int.tryParse(e);
+            return null;
+          })
+          .whereType<int>()
+          .toList();
+    }
+    return const [];
   }
 
   /// Safely coerces an id field, tolerating strings and missing values so a

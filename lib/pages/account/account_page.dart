@@ -14,6 +14,7 @@ import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/account/wallet_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
 import 'package:openfield/pages/settings/settings_page.dart';
+import 'package:openfield/widgets/experience_bar.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
@@ -31,6 +32,33 @@ class _AccountPageState extends State<AccountPage> {
   final TextEditingController _tokenController = TextEditingController();
   StreamSubscription<Uri>? _linkSubscription;
   bool _isLoggingIn = false;
+  bool _claimingDailyBonus = false;
+
+  Future<void> _claimDailyBonus(AuthService authService) async {
+    final token = authService.accessToken;
+    if (token == null) return;
+    setState(() => _claimingDailyBonus = true);
+    try {
+      final data = await _apiService.claimDailyBonus(token);
+      await authService.fetchCurrentUser();
+      if (!mounted) return;
+      final granted = data['granted'] == true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            granted
+                ? 'dailyBonusClaimed'.tr(namedArgs: {'exp': '${data['amount'] ?? ''}'})
+                : 'dailyBonusAlready'.tr(),
+          ),
+        ),
+      );
+      setState(() {});
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    } finally {
+      if (mounted) setState(() => _claimingDailyBonus = false);
+    }
+  }
 
   @override
   void initState() {
@@ -307,6 +335,12 @@ class _AccountPageState extends State<AccountPage> {
           avatarUrl: avatarUrl,
           displayName: displayName,
         ),
+        // ---- Level & daily bonus ----
+        if (user != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: _buildLevelCard(context, theme, authService, user),
+          ),
         // ---- Bio ----
         if (user != null && user.bio.isNotEmpty) ...[
           Padding(
@@ -401,6 +435,59 @@ class _AccountPageState extends State<AccountPage> {
         ),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _buildLevelCard(
+    BuildContext context,
+    ThemeData theme,
+    AuthService authService,
+    User user,
+  ) {
+    final canClaim = user.canClaimDailyBonus;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ExperienceBar(user: user),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  Icons.card_giftcard_outlined,
+                  size: 20,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    canClaim ? 'dailyBonusHint'.tr() : 'dailyBonusDone'.tr(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed:
+                      canClaim && !_claimingDailyBonus ? () => _claimDailyBonus(authService) : null,
+                  icon: _claimingDailyBonus
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.bolt, size: 18),
+                  label: Text('claimDailyBonus'.tr()),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

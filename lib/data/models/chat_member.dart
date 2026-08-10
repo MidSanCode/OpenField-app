@@ -15,6 +15,10 @@ class ChatMember {
   final bool isVerified;
   final String? e2eePublicKey;
 
+  /// Per-conversation chat notification preference: 'all' (every message),
+  /// 'mentions' (only when @-mentioned) or 'none'. Server default is 'all'.
+  final String notifyLevel;
+
   const ChatMember({
     required this.conversationId,
     required this.userId,
@@ -31,6 +35,7 @@ class ChatMember {
     this.avatarUrl,
     this.isVerified = false,
     this.e2eePublicKey,
+    this.notifyLevel = 'all',
   });
 
   String get displayName =>
@@ -39,6 +44,34 @@ class ChatMember {
   bool get isMuted {
     final until = mutedUntil;
     return until != null && until.isAfter(DateTime.now());
+  }
+
+  ChatMember copyWith({
+    String? role,
+    String? note,
+    String? groupNickname,
+    String? title,
+    DateTime? mutedUntil,
+    String? notifyLevel,
+  }) {
+    return ChatMember(
+      conversationId: conversationId,
+      userId: userId,
+      role: role ?? this.role,
+      note: note ?? this.note,
+      groupNickname: groupNickname ?? this.groupNickname,
+      title: title ?? this.title,
+      status: status,
+      addedBy: addedBy,
+      createdAt: createdAt,
+      mutedUntil: mutedUntil ?? this.mutedUntil,
+      username: username,
+      nickname: nickname,
+      avatarUrl: avatarUrl,
+      isVerified: isVerified,
+      e2eePublicKey: e2eePublicKey,
+      notifyLevel: notifyLevel ?? this.notifyLevel,
+    );
   }
 
   factory ChatMember.fromJson(Map<String, dynamic> json) {
@@ -59,6 +92,7 @@ class ChatMember {
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool? ?? false,
       e2eePublicKey: json['e2ee_public_key'] as String?,
+      notifyLevel: json['notify_level'] as String? ?? 'all',
     );
   }
 

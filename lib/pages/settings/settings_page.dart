@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/core/config/app_config.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/theme/app_theme.dart';
+import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/pages/settings/permissions_page.dart';
 
@@ -32,6 +33,8 @@ class SettingsPage extends StatelessWidget {
                 const _LanguageTile(),
                 const Divider(height: 1),
                 const _ServerHostTile(),
+                const Divider(height: 1),
+                const _TimezoneTile(),
                 const Divider(height: 1),
                 const _AppColorTile(),
                 const Divider(height: 1),
@@ -67,16 +70,28 @@ class SettingsPage extends StatelessWidget {
           _SectionHeader(title: 'about'.tr()),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: Text('about'.tr()),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${'version'.tr()} ${AppConfig.versionLabel}'),
-                  Text('aboutDeveloper'.tr()),
-                ],
-              ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text('about'.tr()),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${'version'.tr()} ${AppConfig.versionLabel}'),
+                      Text('aboutDeveloper'.tr()),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.check_circle_outline),
+                  title: Text('capabilities'.tr()),
+                  subtitle: Text('capabilitiesHint'.tr()),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showCapabilitiesSheet(context),
+                ),
+              ],
             ),
           ),
         ],
@@ -103,6 +118,99 @@ class _SectionHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Fetches the server capability matrix and shows it in a modal sheet so the
+/// user can compare what this client supports against the running server.
+Future<void> _showCapabilitiesSheet(BuildContext context) async {
+  final theme = Theme.of(context);
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: SizedBox(
+        height: MediaQuery.of(sheetContext).size.height * 0.6,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text('capabilities'.tr(), style: theme.textTheme.titleMedium),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: FutureBuilder<Map<String, dynamic>>(
+                future: ApiService().getCapabilities(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'loadFailed'.tr(),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
+                  final data = snapshot.data!;
+                  final caps = data['capabilities'] as Map? ?? const {};
+                  final version = data['version'] ?? '';
+                  final entries = caps.entries.toList()
+                    ..sort((a, b) => a.key.compareTo(b.key));
+                  return ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      if (version is String && version.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            '${'serverVersion'.tr()} $version',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ...entries.map(
+                        (e) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            e.value == true ? Icons.check_circle : Icons.remove_circle_outline,
+                            size: 20,
+                            color: e.value == true
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.error,
+                          ),
+                          title: Text(
+                            e.key,
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _ThemeTile extends StatelessWidget {
@@ -266,6 +374,117 @@ class _ServerHostTile extends StatelessWidget {
         settings.serverHost,
         style: Theme.of(context).textTheme.bodySmall,
         overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+/// Client-side timezone override. Opens a sheet listing the device timezone
+/// plus common UTC offsets; the chosen offset is applied to chat timestamps.
+class _TimezoneTile extends StatelessWidget {
+  const _TimezoneTile();
+
+  String _currentLabel(SettingsService settings) {
+    if (settings.usesDeviceTimezone) return 'useDeviceTimezone'.tr();
+    return settings.timezone;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsService>(context);
+    return ListTile(
+      leading: const Icon(Icons.schedule_outlined),
+      title: Text('timezone'.tr()),
+      subtitle: Text('timezoneHint'.tr()),
+      trailing: Text(
+        _currentLabel(settings),
+        style: Theme.of(context).textTheme.bodySmall,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () async {
+        final selected = await showModalBottomSheet<String>(
+          context: context,
+          isScrollControlled: true,
+          builder: (_) => const _TimezonePicker(),
+        );
+        if (selected != null && context.mounted) {
+          await settings.setTimezone(selected);
+        }
+      },
+    );
+  }
+}
+
+/// Scrollable list of timezone choices. Selecting the device entry stores the
+/// empty sentinel; everything else stores a "UTC±H[:MM]" label.
+class _TimezonePicker extends StatelessWidget {
+  const _TimezonePicker();
+
+  /// Real-world UTC offsets, in (hours, minutes) pairs.
+  static const List<(int, int)> _offsets = [
+    (-12, 0), (-11, 0), (-10, 0), (-9, 30), (-9, 0), (-8, 0), (-7, 0),
+    (-6, 0), (-5, 0), (-4, 30), (-4, 0), (-3, 30), (-3, 0), (-2, 0),
+    (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (3, 30), (4, 0), (4, 30),
+    (5, 0), (5, 30), (5, 45), (6, 0), (6, 30), (7, 0), (8, 0), (8, 45),
+    (9, 0), (9, 30), (10, 0), (10, 30), (11, 0), (12, 0), (12, 45),
+    (13, 0), (14, 0),
+  ];
+
+  static String _label(int hours, int minutes) {
+    final sign = hours < 0 || minutes < 0 ? '-' : '+';
+    final h = hours.abs();
+    final m = minutes.abs();
+    return m == 0 ? 'UTC$sign$h' : 'UTC$sign$h:$m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsService>(context);
+    final current = settings.timezone;
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.schedule_outlined, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text('timezone'.tr(), style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView(
+                children: [
+                  ListTile(
+                    leading: settings.usesDeviceTimezone
+                        ? const Icon(Icons.radio_button_checked)
+                        : const Icon(Icons.radio_button_off),
+                    title: Text('useDeviceTimezone'.tr()),
+                    onTap: () => Navigator.of(context).pop(SettingsService.localTimezone),
+                  ),
+                  for (final (h, m) in _offsets)
+                    ListTile(
+                      leading: current == _label(h, m)
+                          ? const Icon(Icons.radio_button_checked)
+                          : const Icon(Icons.radio_button_off),
+                      title: Text(_label(h, m)),
+                      onTap: () => Navigator.of(context).pop(_label(h, m)),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

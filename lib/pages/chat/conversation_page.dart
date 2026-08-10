@@ -8,9 +8,12 @@ import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/chat_cache_store.dart';
 import 'package:openfield/data/services/chat_local_db.dart';
 import 'package:openfield/data/services/e2ee_service.dart';
+import 'package:openfield/data/services/encrypted_chat_db.dart';
 import 'package:openfield/data/services/realtime_service.dart';
+import 'package:openfield/data/services/settings_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/chat/group_settings_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
@@ -20,11 +23,21 @@ import 'package:openfield/widgets/verified_badge.dart';
 class ConversationPage extends StatefulWidget {
   final int conversationId;
 
+  /// Known encryption state of the conversation, passed by the caller so the
+  /// page can load the cache from the correct store before the detail fetch
+  /// returns. When null it is resolved after the first load.
+  final bool? encrypted;
+
   /// When set, the page is embedded in a split view (landscape chat page) and
   /// this callback is invoked instead of popping the navigator.
   final VoidCallback? onBack;
 
-  const ConversationPage({super.key, required this.conversationId, this.onBack});
+  const ConversationPage({
+    super.key,
+    required this.conversationId,
+    this.encrypted,
+    this.onBack,
+  });
 
   @override
   State<ConversationPage> createState() => _ConversationPageState();
@@ -51,9 +64,30 @@ class _ConversationPageState extends State<ConversationPage> {
   Timer? _typingSendTimer;
   bool _e2eeKeysReady = false;
 
+  /// Confirmed encryption state of this conversation (resolved from the server
+  /// detail). Drives which cache store messages are read from and written to.
+  bool _isEncryptedConv = false;
+
+  /// The cache store for a conversation with the given encryption state:
+  /// MLS-encrypted conversations are kept in the dedicated encrypted database,
+  /// everything else in the plaintext database.
+  ChatCacheStore _storeFor(bool encrypted) =>
+      encrypted ? EncryptedChatDb.instance : ChatLocalDb.instance;
+
+  /// The cache store for this conversation.
+  ChatCacheStore get _store => _storeFor(_isEncryptedConv);
+
+  /// Mention autocomplete state. When the caret trails a bare `@token`, the
+  /// matching members are listed above the input bar so the user can pick one
+  /// (or @everyone, when privileged) to insert a mention.
+  List<ChatMember> _mentionCandidates = [];
+  bool _mentionShowEveryone = false;
+  int _mentionTokenStart = 0;
+
   @override
   void initState() {
     super.initState();
+    _isEncryptedConv = widget.encrypted ?? false;
     _myUserId = Provider.of<AuthService>(context, listen: false).user?.id ?? 0;
     if (_myUserId == 0) {
       _loadMyUserId();
@@ -122,11 +156,11 @@ class _ConversationPageState extends State<ConversationPage> {
             .firstOrNull;
         if (pending != null) {
           setState(() => _messages = _replaceByClientId(pending.clientId, msg));
-          ChatLocalDb.instance.upsertMessage(msg);
+          _store.upsertMessage(msg);
           return;
         }
         setState(() => _messages = _sorted([..._messages, msg]));
-        ChatLocalDb.instance.upsertMessage(msg);
+        _store.upsertMessage(msg);
         _scrollToBottom();
         // If the new push arrived as an undecrypted envelope, our cached group
         // key for this version may be stale (e.g. the sender rotated keys
@@ -141,7 +175,7 @@ class _ConversationPageState extends State<ConversationPage> {
         setState(() {
           _messages = _messages.map((m) => m.id == msg.id ? msg : m).toList();
         });
-        ChatLocalDb.instance.upsertMessage(msg);
+        _store.upsertMessage(msg);
         break;
       case 'chat.message.deleted':
         final msg = ChatMessage.fromJson(event.data);
@@ -175,7 +209,7 @@ class _ConversationPageState extends State<ConversationPage> {
         });
         final t = tombstone;
         if (t != null) {
-          ChatLocalDb.instance.upsertMessage(t);
+          _store.upsertMessage(t);
         }
         break;
       case 'chat.typing':
@@ -199,7 +233,8 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   /// Debounced sender-side signal so we don't spam the server on every keystroke.
-  void _onTypingChanged(String _) {
+  void _onTypingChanged(String text) {
+    _updateMentionSuggestions(text);
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -207,6 +242,131 @@ class _ConversationPageState extends State<ConversationPage> {
     _typingSendTimer = Timer(const Duration(milliseconds: 800), () {
       _apiService.sendTyping(token, widget.conversationId).catchError((_) {});
     });
+  }
+
+  /// Shows member suggestions while the caret trails a bare `@token`.
+  void _updateMentionSuggestions(String text) {
+    final sel = _inputController.selection;
+    if (!sel.isValid || sel.baseOffset != sel.extentOffset) {
+      _setMentionCandidates(const [], showEveryone: false);
+      return;
+    }
+    final caret = sel.baseOffset;
+    if (caret <= 0 || text.length < caret) {
+      _setMentionCandidates(const [], showEveryone: false);
+      return;
+    }
+    final before = text.substring(0, caret);
+    if (before.contains('\n')) {
+      _setMentionCandidates(const [], showEveryone: false);
+      return;
+    }
+    final lastSpace = before.lastIndexOf(' ');
+    final tokenStart = lastSpace < 0 ? 0 : lastSpace + 1;
+    final token = before.substring(tokenStart);
+    if (!token.startsWith('@') || token.length > 32) {
+      _setMentionCandidates(const [], showEveryone: false);
+      return;
+    }
+    final query = token.substring(1).toLowerCase();
+    final canEveryone = _myMembership?.role == 'owner' ||
+        _myMembership?.role == 'admin';
+    final matches = _members
+        .where((m) {
+          if (m.userId == _myUserId) return false;
+          final name =
+              m.groupNickname.isNotEmpty ? m.groupNickname : m.displayName;
+          return name.toLowerCase().contains(query) ||
+              (m.username ?? '').toLowerCase().contains(query);
+        })
+        .take(8)
+        .toList();
+    if (mounted) {
+      setState(() {
+        _mentionTokenStart = tokenStart;
+        _mentionCandidates = matches;
+        _mentionShowEveryone =
+            canEveryone && 'everyone'.contains(query);
+      });
+    }
+  }
+
+  void _setMentionCandidates(List<ChatMember> c, {bool showEveryone = false}) {
+    if (!mounted) return;
+    if (c.isEmpty &&
+        showEveryone == false &&
+        _mentionCandidates.isEmpty &&
+        !_mentionShowEveryone) {
+      return;
+    }
+    setState(() {
+      _mentionCandidates = c;
+      _mentionShowEveryone = showEveryone;
+    });
+  }
+
+  void _insertMention(ChatMember member) {
+    final name =
+        member.groupNickname.isNotEmpty ? member.groupNickname : member.displayName;
+    _replaceMentionToken('@$name ');
+  }
+
+  void _insertEveryoneMention() {
+    _replaceMentionToken('@everyone ');
+  }
+
+  /// Replaces the currently-open `@token` (from [_mentionTokenStart] to the
+  /// caret) with the chosen mention, then closes the suggestion list.
+  void _replaceMentionToken(String replacement) {
+    final text = _inputController.text;
+    final sel = _inputController.selection;
+    if (sel.isValid && sel.baseOffset >= _mentionTokenStart) {
+      final end = sel.baseOffset > text.length ? text.length : sel.baseOffset;
+      final newText = text.replaceRange(_mentionTokenStart, end, replacement);
+      _inputController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(
+            offset: (_mentionTokenStart + replacement.length).clamp(0, newText.length)),
+      );
+    } else {
+      _inputController.text = '$text$replacement';
+      _inputController.selection =
+          TextSelection.collapsed(offset: _inputController.text.length);
+    }
+    setState(() {
+      _mentionCandidates = [];
+      _mentionShowEveryone = false;
+    });
+    _scrollToBottom();
+  }
+
+  /// Collects the user ids referenced by `@name` tokens in the outgoing text.
+  /// `@everyone` maps to the sentinel [ChatMessage.everyoneSentinel]; the
+  /// server strips it again when the sender lacks owner/admin privileges.
+  List<int> _extractMentions(String text) {
+    final ids = <int>{};
+    final canEveryone = _myMembership?.role == 'owner' ||
+        _myMembership?.role == 'admin';
+    for (final token in text.split(RegExp(r'\s+'))) {
+      if (!token.startsWith('@') || token.length < 2) continue;
+      final name = token.substring(1);
+      if (canEveryone && name.toLowerCase() == 'everyone') {
+        ids.add(ChatMessage.everyoneSentinel);
+        continue;
+      }
+      ChatMember? matched;
+      for (final m in _members) {
+        final dn = m.groupNickname.isNotEmpty ? m.groupNickname : m.displayName;
+        if (dn == name || m.username == name) {
+          matched = m;
+          break;
+        }
+      }
+      if (matched != null && matched.userId != _myUserId) {
+        ids.add(matched.userId);
+      }
+    }
+    return ids.toList();
   }
 
   /// Resolves a typing user's display name from known members, falling back to
@@ -231,29 +391,16 @@ class _ConversationPageState extends State<ConversationPage> {
       _error = null;
     });
 
-    // Offline-first: render cached messages immediately if present.
-    final cached = await ChatLocalDb.instance.loadMessages(widget.conversationId, limit: 200);
+    // Offline-first: render cached messages immediately if present. MLS-
+    // encrypted conversations are read from the dedicated encrypted store, so
+    // decrypted plaintext never touches the plaintext cache.
+    final cached =
+        await _storeFor(_isEncryptedConv).loadMessages(widget.conversationId, limit: 200);
     // A message left in "sending" from a previous session can never complete;
     // surface it as failed so the user can retry.
     final restored = cached.map((m) {
       if (m.status == MessageStatus.sending && m.id <= 0) {
-        return ChatMessage(
-          id: m.id,
-          conversationId: m.conversationId,
-          senderId: m.senderId,
-          content: m.content,
-          decryptedContent: m.decryptedContent,
-          kind: m.kind,
-          replyToId: m.replyToId,
-          editedAt: m.editedAt,
-          deletedAt: m.deletedAt,
-          createdAt: m.createdAt,
-          senderName: m.senderName,
-          senderAvatar: m.senderAvatar,
-          senderVerified: m.senderVerified,
-          clientId: m.clientId,
-          status: MessageStatus.failed,
-        );
+        return m.resolve(status: MessageStatus.failed);
       }
       return m;
     }).toList();
@@ -278,8 +425,29 @@ class _ConversationPageState extends State<ConversationPage> {
       if (detail.myMembership != null) {
         _myUserId = detail.myMembership!.userId;
       }
+      final encrypted = detail.conversation.encrypted;
+      if (encrypted != _isEncryptedConv) {
+        // Caller did not know the encryption state up front; load the cache
+        // from the correct store now (keeps the offline-first render honest).
+        _isEncryptedConv = encrypted;
+        final correctCache =
+            await _storeFor(encrypted).loadMessages(widget.conversationId, limit: 200);
+        setState(() {
+          _messages = correctCache
+              .map((m) => m.status == MessageStatus.sending && m.id <= 0
+                  ? m.resolve(status: MessageStatus.failed)
+                  : m)
+              .toList();
+        });
+      }
+      if (encrypted) {
+        // Writes must never land in the plaintext cache; scrub any legacy copy
+        // left by a pre-encryption build so plaintext does not linger on disk.
+        _isEncryptedConv = true;
+        unawaited(ChatLocalDb.instance.deleteConversation(widget.conversationId));
+      }
       var display = _mergeMessages(_messages, messages);
-      if (detail.conversation.encrypted) {
+      if (encrypted) {
         await _ensureE2EE();
         display = _decryptBatch(display);
       }
@@ -298,8 +466,8 @@ class _ConversationPageState extends State<ConversationPage> {
         }
       });
       // Cache the merged result so the next open is instant.
-      await ChatLocalDb.instance.replaceConversation(
-          widget.conversationId, _messages);
+      await _storeFor(encrypted)
+          .replaceConversation(widget.conversationId, _messages);
       if (messages.isNotEmpty) {
         await _apiService.markConversationRead(
           token,
@@ -343,7 +511,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final before = _messages.first.id;
 
     // Local first: older messages already cached render without the network.
-    final older = await ChatLocalDb.instance.loadMessages(
+    final older = await _store.loadMessages(
       widget.conversationId,
       beforeId: before,
       limit: 50,
@@ -369,7 +537,7 @@ class _ConversationPageState extends State<ConversationPage> {
         _messages = [..._decryptBatch(merged), ..._messages];
         _loadingOlder = false;
       });
-      await ChatLocalDb.instance.appendMessages(widget.conversationId, merged);
+      await _store.appendMessages(widget.conversationId, merged);
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingOlder = false);
@@ -607,10 +775,13 @@ class _ConversationPageState extends State<ConversationPage> {
     }
 
     final replyToId = _replyToId;
+    final mentions = _extractMentions(content);
     final cipher = _isEncrypted ? _encryptOutgoing(content) : content;
     setState(() {
       _inputController.clear();
       _replyToId = null;
+      _mentionCandidates = [];
+      _mentionShowEveryone = false;
     });
 
     // Optimistic send: render the message immediately with a local id +
@@ -629,6 +800,7 @@ class _ConversationPageState extends State<ConversationPage> {
       senderAvatar: authService.user?.avatarUrl ?? authService.avatarUrl,
       clientId: generateClientId(),
       status: MessageStatus.sending,
+      mentions: mentions,
     );
     setState(() => _messages = _sorted([..._messages, local]));
     _scrollToBottom();
@@ -644,12 +816,13 @@ class _ConversationPageState extends State<ConversationPage> {
         widget.conversationId,
         local.content,
         replyToId: local.replyToId,
+        mentions: local.mentions,
       );
       if (!mounted) return;
       setState(() {
         _messages = _replaceByClientId(local.clientId, msg);
       });
-      ChatLocalDb.instance.upsertMessage(msg);
+      _store.upsertMessage(msg);
       await _apiService.markConversationRead(token, widget.conversationId, msg.id);
     } catch (e) {
       if (!mounted) return;
@@ -744,7 +917,7 @@ class _ConversationPageState extends State<ConversationPage> {
       setState(() {
         _messages = _replaceByClientId(local.clientId, msg);
       });
-      ChatLocalDb.instance.upsertMessage(msg);
+      _store.upsertMessage(msg);
       _scrollToBottom();
       await _apiService.markConversationRead(token, widget.conversationId, msg.id);
     } catch (e) {
@@ -852,7 +1025,7 @@ class _ConversationPageState extends State<ConversationPage> {
       setState(() {
         _messages = _messages.map((m) => m.id == resolved.id ? resolved : m).toList();
       });
-      ChatLocalDb.instance.upsertMessage(resolved);
+      _store.upsertMessage(resolved);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -889,7 +1062,7 @@ class _ConversationPageState extends State<ConversationPage> {
         (m) => m.id == message.id,
         orElse: () => message,
       );
-      ChatLocalDb.instance.upsertMessage(deleted);
+      _store.upsertMessage(deleted);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -1014,6 +1187,66 @@ class _ConversationPageState extends State<ConversationPage> {
     if (mounted) _refreshConversation();
   }
 
+  /// Lets the user pick their per-conversation chat notification preference
+  /// ('all' | 'mentions' | 'none'). Server defaults to 'all'.
+  Future<void> _changeNotifyLevel() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    final current = _myMembership?.notifyLevel ?? 'all';
+    final entries = [
+      ('all', 'chatNotifyAll'.tr()),
+      ('mentions', 'chatNotifyMentions'.tr()),
+      ('none', 'chatNotifyNone'.tr()),
+    ];
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+              child: Text(
+                'chatNotifyLevel'.tr(),
+                style: Theme.of(ctx).textTheme.titleMedium,
+              ),
+            ),
+            for (final entry in entries)
+              ListTile(
+                leading: Icon(
+                  current == entry.$1
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  color: current == entry.$1
+                      ? Theme.of(ctx).colorScheme.primary
+                      : null,
+                ),
+                title: Text(entry.$2),
+                onTap: () => Navigator.of(ctx).pop(entry.$1),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || choice == current || !mounted) return;
+    try {
+      await _apiService.setNotifyLevel(token, widget.conversationId, choice);
+      if (!mounted) return;
+      setState(() {
+        _myMembership = _myMembership?.copyWith(notifyLevel: choice);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('chatNotifyLevelSaved'.tr())),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
   Future<void> _leaveGroup() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
@@ -1068,7 +1301,7 @@ class _ConversationPageState extends State<ConversationPage> {
     if (confirmed != true) return;
     try {
       await _apiService.deleteConversation(token, widget.conversationId);
-      ChatLocalDb.instance.deleteConversation(widget.conversationId);
+      _store.deleteConversation(widget.conversationId);
       if (!mounted) return;
       if (widget.onBack != null) {
         widget.onBack!();
@@ -1110,6 +1343,9 @@ class _ConversationPageState extends State<ConversationPage> {
                 case 'settings':
                   _openGroupSettings();
                   break;
+                case 'notify':
+                  _changeNotifyLevel();
+                  break;
                 case 'leave':
                   _leaveGroup();
                   break;
@@ -1125,6 +1361,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 PopupMenuItem(value: 'nickname', child: Text('chatGroupNickname'.tr())),
               if (isGroup)
                 PopupMenuItem(value: 'settings', child: Text('chatGroupSettings'.tr())),
+              PopupMenuItem(value: 'notify', child: Text('chatNotifyLevel'.tr())),
               if (isGroup && _myMembership?.role != 'owner')
                 PopupMenuItem(
                   value: 'leave',
@@ -1206,6 +1443,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 message: message,
                 isMine: message.senderId == _myUserId,
                 isEncrypted: _isEncrypted,
+                isMentioned: message.mentionsMe(_myUserId),
                 showSenderName: (_conversation?.isGroup ?? false) && !message.isDeleted,
                 senderAvatar: message.senderAvatar,
                 senderTitle: _members
@@ -1236,8 +1474,67 @@ class _ConversationPageState extends State<ConversationPage> {
                     ?.isVerified ??
                 false,
           ),
+        if (_mentionCandidates.isNotEmpty || _mentionShowEveryone)
+          _buildMentionSuggestions(),
         _buildInputArea(),
       ],
+    );
+  }
+
+  /// Member autocomplete list shown above the input bar while the caret trails
+  /// a bare `@token`. Tapping inserts the mention and closes the list.
+  Widget _buildMentionSuggestions() {
+    final theme = Theme.of(context);
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 220),
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        children: [
+          if (_mentionShowEveryone)
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.record_voice_over_outlined),
+              title: Text(
+                '@everyone',
+                style: TextStyle(color: theme.colorScheme.primary),
+              ),
+              subtitle: Text('chatMentionEveryone'.tr()),
+              onTap: _insertEveryoneMention,
+            ),
+          if (_mentionShowEveryone && _mentionCandidates.isNotEmpty)
+            const Divider(height: 1),
+          for (final member in _mentionCandidates)
+            ListTile(
+              dense: true,
+              leading: CircleAvatar(
+                radius: 14,
+                backgroundImage: (member.avatarUrl != null &&
+                        member.avatarUrl!.isNotEmpty)
+                    ? NetworkImage(member.avatarUrl!)
+                    : null,
+                child: (member.avatarUrl == null || member.avatarUrl!.isEmpty)
+                    ? Text(member.displayName.isEmpty
+                        ? '?'
+                        : member.displayName.substring(0, 1).toUpperCase())
+                    : null,
+              ),
+              title: Text(member.groupNickname.isNotEmpty
+                  ? member.groupNickname
+                  : member.displayName),
+              subtitle: member.groupNickname.isNotEmpty
+                  ? Text(member.username ?? '')
+                  : null,
+              onTap: () => _insertMention(member),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1440,6 +1737,10 @@ class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isMine;
   final bool isEncrypted;
+
+  /// True when this message @-mentions the current user (or @everyone). Renders
+  /// a subtle highlight so mentions are easy to spot.
+  final bool isMentioned;
   final bool showSenderName;
   final String? senderAvatar;
   final String senderTitle;
@@ -1451,6 +1752,7 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isMine,
     required this.isEncrypted,
+    required this.isMentioned,
     required this.showSenderName,
     required this.onLongPress,
     this.senderAvatar,
@@ -1463,6 +1765,7 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final replyPreviewText = _replyPreviewText();
+    final settings = Provider.of<SettingsService>(context);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1542,6 +1845,12 @@ class _MessageBubble extends StatelessWidget {
                         bottomLeft: const Radius.circular(14),
                         bottomRight: const Radius.circular(14),
                       ),
+                      border: isMentioned
+                          ? Border.all(
+                              color: theme.colorScheme.tertiary,
+                              width: 1.2,
+                            )
+                          : null,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1627,7 +1936,7 @@ class _MessageBubble extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          _formatTime(message.createdAt),
+                          _formatTime(settings, message.createdAt),
                           style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
                         ),
                         if (isMine && !message.isDeleted) ...[
@@ -1661,9 +1970,12 @@ class _MessageBubble extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime time) {
-    final h = time.hour.toString().padLeft(2, '0');
-    final m = time.minute.toString().padLeft(2, '0');
+  String _formatTime(SettingsService settings, DateTime time) {
+    // Server timestamps are UTC; render in the client-selected timezone (or the
+    // device's own zone by default).
+    final local = settings.displayTime(time);
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
     return '$h:$m';
   }
 

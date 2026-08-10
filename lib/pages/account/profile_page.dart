@@ -5,6 +5,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/follow_list_page.dart';
+import 'package:openfield/widgets/experience_bar.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
@@ -187,6 +188,13 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
         ),
+        if (user.level > 0) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ExperienceBar(user: user),
+          ),
+        ],
         const SizedBox(height: 12),
         // Follow counts row
         _buildFollowCountsRow(theme, user),

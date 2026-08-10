@@ -1317,11 +1317,18 @@ class ApiService {
     String content, {
     int? replyToId,
     List<int> attachmentIds = const [],
+    List<int> mentions = const [],
   }) async {
+    final body = <String, dynamic>{
+      'content': content,
+      'reply_to_id': replyToId,
+      'attachment_ids': attachmentIds,
+    };
+    if (mentions.isNotEmpty) body['mentions'] = mentions;
     final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/messages'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'content': content, 'reply_to_id': replyToId, 'attachment_ids': attachmentIds}),
+      body: jsonEncode(body),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 201 && data != null) {
@@ -1329,6 +1336,50 @@ class ApiService {
     }
     throw ApiException(
         response.statusCode, _decodeError(response, 'Failed to send message'));
+  }
+
+  /// Sets the current user's per-conversation notification preference
+  /// ('all' | 'mentions' | 'none').
+  Future<void> setNotifyLevel(
+      String accessToken, int conversationId, String level) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/conversations/$conversationId/notify-level'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'level': level}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to update notification level'));
+    }
+  }
+
+  /// Claims the once-per-server-day experience bonus for the current user.
+  /// Idempotent: returns {granted: false} when already claimed today.
+  Future<Map<String, dynamic>> claimDailyBonus(String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/users/me/claim-daily-bonus'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to claim daily bonus'));
+  }
+
+  /// Fetches the server's public capability matrix (open, no auth).
+  Future<Map<String, dynamic>> getCapabilities() async {
+    final response = await _get(
+      Uri.parse('$baseUrl/capabilities'),
+      headers: _headers(json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load capabilities'));
   }
 
   Future<ChatMessage> editChatMessage(String accessToken, int conversationId, int messageId, String content) async {
