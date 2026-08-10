@@ -228,6 +228,8 @@
   "theme": "Theme",
   "timezone": "Timezone",
   "timezoneHint": "Show timestamps in a fixed timezone",
+  "regionSettings": "Region Settings",
+  "regionSettingsHint": "Timezone used to display this account's timestamps",
   "tokenLogin": "Token Login",
   "tokenLoginHint": "Copy the access token and refresh token from the login result page; paste the access token, then a space/newline and the refresh token",
   "tokenPlaceholder": "Access token (then refresh token, space or newline separated)",

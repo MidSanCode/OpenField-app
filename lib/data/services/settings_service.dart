@@ -3,6 +3,7 @@ import 'dart:ui' show Color;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart' show ChangeNotifier, ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:openfield/core/log/log_recorder.dart';
 
 /// Persists app-level preferences: language, color theme, server host, custom
 /// background image and its visibility.
@@ -125,6 +126,7 @@ class SettingsService extends ChangeNotifier {
     _developerMode = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyDeveloperMode, value);
+    LogService.instance.setEnabled(value);
     notifyListeners();
   }
 

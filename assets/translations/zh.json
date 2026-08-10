@@ -231,6 +231,8 @@
   "theme": "主题",
   "timezone": "时区",
   "timezoneHint": "以固定时区显示时间戳",
+  "regionSettings": "地区设置",
+  "regionSettingsHint": "用于显示此账号时间戳的时区",
   "tokenLogin": "令牌登录",
   "tokenLoginHint": "在浏览器登录成功页依次复制访问令牌和刷新令牌，先粘贴访问令牌再换行粘贴刷新令牌",
   "tokenPlaceholder": "访问令牌（空格或换行后再粘贴刷新令牌）",

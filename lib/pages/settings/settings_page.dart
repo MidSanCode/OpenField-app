@@ -34,8 +34,6 @@ class SettingsPage extends StatelessWidget {
                 const Divider(height: 1),
                 const _ServerHostTile(),
                 const Divider(height: 1),
-                const _TimezoneTile(),
-                const Divider(height: 1),
                 const _AppColorTile(),
                 const Divider(height: 1),
                 const _BackgroundImageTile(),
@@ -63,6 +61,8 @@ class SettingsPage extends StatelessWidget {
                     );
                   },
                 ),
+                const Divider(height: 1),
+                const _RegionTile(),
               ],
             ),
           ),
@@ -379,10 +379,10 @@ class _ServerHostTile extends StatelessWidget {
   }
 }
 
-/// Client-side timezone override. Opens a sheet listing the device timezone
-/// plus common UTC offsets; the chosen offset is applied to chat timestamps.
-class _TimezoneTile extends StatelessWidget {
-  const _TimezoneTile();
+/// Account region setting. Opens a sheet listing the device timezone plus
+/// common UTC offsets; the chosen offset is applied to chat timestamps.
+class _RegionTile extends StatelessWidget {
+  const _RegionTile();
 
   String _currentLabel(SettingsService settings) {
     if (settings.usesDeviceTimezone) return 'useDeviceTimezone'.tr();
@@ -393,9 +393,9 @@ class _TimezoneTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsService>(context);
     return ListTile(
-      leading: const Icon(Icons.schedule_outlined),
-      title: Text('timezone'.tr()),
-      subtitle: Text('timezoneHint'.tr()),
+      leading: const Icon(Icons.public_outlined),
+      title: Text('regionSettings'.tr()),
+      subtitle: Text('regionSettingsHint'.tr()),
       trailing: Text(
         _currentLabel(settings),
         style: Theme.of(context).textTheme.bodySmall,

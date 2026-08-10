@@ -34,12 +34,31 @@ Future<void> main() async {
 
 void _initConsoleLogging() {
   Logger.root.level = Level.ALL;
+  // Keep the original function: the bridged debugPrint below feeds every
+  // message back into Logger, so the console listener must print directly
+  // to avoid an infinite loop.
+  final originalDebugPrint = debugPrint;
   Logger.root.onRecord.listen((record) {
     if (kDebugMode) {
       final stack = record.error != null ? ' error=${record.error}' : '';
-      debugPrint('[${record.level.name}] ${record.message}$stack');
+      originalDebugPrint('[${record.level.name}] ${record.message}$stack');
     }
   });
+  // Bridge Flutter's print()/debugPrint() output and uncaught framework
+  // errors into the package:logging stream so the log viewer captures them.
+  debugPrint = (String? message, {int? wrapWidth}) {
+    Logger.root.info(message ?? '');
+    originalDebugPrint(message, wrapWidth: wrapWidth);
+  };
+  final originalOnError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    Logger.root.severe(
+      'Flutter error: ${details.exception}',
+      details.exception,
+      details.stack,
+    );
+    originalOnError?.call(details);
+  };
 }
 
 class OpenFieldApp extends StatefulWidget {
@@ -60,7 +79,10 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   @override
   void initState() {
     super.initState();
-    LogService.instance.setEnabled(_settingsService.developerMode);
+    // Logging follows developer mode, which is read from prefs asynchronously.
+    _settingsService.ready.then((_) {
+      LogService.instance.setEnabled(_settingsService.developerMode);
+    });
     _lastSyncedHost = _settingsService.serverHost;
     ApiService.setServerHost(_settingsService.serverHost);
     _settingsService.addListener(_syncServerHost);
