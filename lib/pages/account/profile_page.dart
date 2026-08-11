@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
@@ -120,12 +121,9 @@ class _ProfilePageState extends State<ProfilePage> {
           height: 160,
           width: double.infinity,
           child: hasBanner
-              ? Image.network(
-                  user.bannerUrl,
+              ? MediaImage(
+                  url: user.bannerUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Container(
-                    color: theme.colorScheme.primaryContainer,
-                  ),
                 )
               : Container(color: theme.colorScheme.primaryContainer),
         ),

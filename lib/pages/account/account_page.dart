@@ -5,12 +5,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/core/widgets/error_dialog.dart';
+import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
+import 'package:openfield/pages/account/tasks_page.dart';
 import 'package:openfield/pages/account/wallet_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
 import 'package:openfield/pages/settings/settings_page.dart';
@@ -409,6 +411,23 @@ class _AccountPageState extends State<AccountPage> {
             ],
             ListTile(
               minLeadingWidth: 48,
+              leading: const Icon(Icons.emoji_events_outlined),
+              title: Text('tasks'.tr()),
+              subtitle: Text(
+                'taskMilestones'.tr(),
+                style: const TextStyle(fontSize: 12),
+              ),
+              contentPadding: const EdgeInsets.only(left: 24, right: 17),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TasksPage()),
+                );
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
+              minLeadingWidth: 48,
               leading: const Icon(Icons.account_balance_wallet_outlined),
               title: Text('wallet'.tr()),
               subtitle: Text(
@@ -512,7 +531,7 @@ class _AccountPageState extends State<AccountPage> {
             SizedBox(
               height: bannerHeight,
               child: bannerUrl != null
-                  ? Image.network(bannerUrl, fit: BoxFit.cover)
+                  ? MediaImage(url: bannerUrl, fit: BoxFit.cover)
                   : Container(
                       color: theme.colorScheme.primaryContainer,
                       child: Center(

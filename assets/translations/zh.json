@@ -295,5 +295,14 @@
   "transferStatusPending": "待对方接受",
   "transferStatusAccepted": "已接受",
   "transferStatusDeclined": "已拒绝",
-  "transferStatusRefunded": "已退回"
+  "transferStatusRefunded": "已退回",
+  "tasks": "任务",
+  "taskClaim": "领取",
+  "taskClaimedReward": "已领取奖励：+{exp} 经验，+{currency} 金币",
+  "taskStreakDays": "连续 {streak} 天",
+  "taskMakeupCost": "补签（花费 {cost} 金币）",
+  "taskMakeupDone": "补签成功",
+  "taskMilestones": "签到里程碑",
+  "taskAchievements": "成就任务",
+  "taskProgress": "{progress} / {target}"
 }

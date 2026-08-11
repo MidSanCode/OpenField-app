@@ -292,5 +292,14 @@
   "transferStatusPending": "Awaiting acceptance",
   "transferStatusAccepted": "Accepted",
   "transferStatusDeclined": "Declined",
-  "transferStatusRefunded": "Refunded"
+  "transferStatusRefunded": "Refunded",
+  "tasks": "Tasks",
+  "taskClaim": "Claim",
+  "taskClaimedReward": "Reward claimed: +{exp} EXP, +{currency} coins",
+  "taskStreakDays": "{streak}-day streak",
+  "taskMakeupCost": "Make up (cost {cost} coins)",
+  "taskMakeupDone": "Check-in made up",
+  "taskMilestones": "Check-in milestones",
+  "taskAchievements": "Achievements",
+  "taskProgress": "{progress} / {target}"
 }

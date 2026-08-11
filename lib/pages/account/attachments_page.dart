@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
@@ -160,17 +161,9 @@ Widget _buildTile(BuildContext context, Attachment attachment, VoidCallback onOp
             child: Container(
               color: theme.colorScheme.surfaceContainerHighest,
               child: attachment.isImage
-                  ? Image.network(
-                      attachment.url,
+                  ? MediaImage(
+                      url: attachment.url,
                       fit: BoxFit.cover,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const Center(child: CircularProgressIndicator());
-                      },
-                      errorBuilder: (context, error, stack) => const Icon(
-                        Icons.broken_image_outlined,
-                        size: 32,
-                      ),
                     )
                   : Icon(
                       iconFor(attachment),

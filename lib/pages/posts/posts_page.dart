@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
@@ -599,13 +600,9 @@ class _ComposerDialogState extends State<_ComposerDialog> {
     return SizedBox(
       width: 90,
       height: 90,
-      child: Image.network(
-        media.url ?? '',
+      child: MediaImage(
+        url: media.url ?? '',
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stack) => Container(
-          color: theme.colorScheme.surfaceContainerHighest,
-          child: const Icon(Icons.broken_image_outlined),
-        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/pages/media/media_preview_page.dart';
 
@@ -84,20 +85,12 @@ class _ImageCell extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.network(
-              att.previewUrl,
+            MediaImage(
+              url: att.previewUrl,
               fit: BoxFit.cover,
               // Cap the decoded image so preview grids never hold the full
               // original in memory.
               cacheWidth: 720,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return Container(color: Theme.of(context).colorScheme.surfaceContainerHighest);
-              },
-              errorBuilder: (context, error, stack) => Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: const Icon(Icons.broken_image_outlined),
-              ),
             ),
             if (!att.isPublic)
               Positioned(

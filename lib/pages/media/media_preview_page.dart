@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 
@@ -156,20 +157,10 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
             child: Transform.rotate(
               angle: angle,
               child: Center(
-                child: Image.network(
-                  att.url,
+                child: MediaImage(
+                  url: att.url,
                   fit: BoxFit.contain,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    );
-                  },
-                  errorBuilder: (context, error, stack) => const Icon(
-                    Icons.broken_image_outlined,
-                    size: 48,
-                    color: Colors.white,
-                  ),
+                  dark: true,
                 ),
               ),
             ),
