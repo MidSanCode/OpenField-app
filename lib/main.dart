@@ -241,25 +241,38 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
                   builder: (context, child) {
                     final bgPath =
                         settings.backgroundVisible ? settings.backgroundImagePath : null;
-                    if (bgPath == null) return child!;
-                    return Stack(
-                      children: [
-                        Positioned.fill(
-                          // ValueKey forces Flutter to rebuild the underlying
-                          // image element when the path changes; without it the
-                          // cached decoded image is reused and the new
-                          // background never appears until a restart.
-                          child: Image.file(
-                            File(bgPath),
-                            key: ValueKey('bg:$bgPath'),
-                            fit: BoxFit.cover,
-                            gaplessPlayback: false,
-                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                          ),
+                    var themed = child!;
+                    if (bgPath != null) {
+                      // Opaque scaffold surfaces would otherwise cover the
+                      // background image entirely, so make page backgrounds
+                      // transparent while the image is active. Cards, app bars
+                      // and other explicit surfaces keep their own colors.
+                      themed = Theme(
+                        data: Theme.of(context).copyWith(
+                          scaffoldBackgroundColor: Colors.transparent,
                         ),
-                        child!,
-                      ],
-                    );
+                        child: themed,
+                      );
+                      return Stack(
+                        children: [
+                          Positioned.fill(
+                            // ValueKey forces Flutter to rebuild the underlying
+                            // image element when the path changes; without it the
+                            // cached decoded image is reused and the new
+                            // background never appears until a restart.
+                            child: Image.file(
+                              File(bgPath),
+                              key: ValueKey('bg:$bgPath'),
+                              fit: BoxFit.cover,
+                              gaplessPlayback: false,
+                              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                            ),
+                          ),
+                          themed,
+                        ],
+                      );
+                    }
+                    return themed;
                   },
                 );
               },

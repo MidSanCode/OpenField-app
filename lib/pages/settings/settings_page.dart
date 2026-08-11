@@ -10,6 +10,8 @@ import 'package:openfield/core/config/app_config.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/theme/app_theme.dart';
 import 'package:openfield/data/services/api_service.dart';
+import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/pages/settings/permissions_page.dart';
 
@@ -44,6 +46,9 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 16),
+          _SectionHeader(title: 'realtimeSettings'.tr()),
+          const _RealtimeTile(),
           const SizedBox(height: 16),
           _SectionHeader(title: 'accountSettings'.tr()),
           Card(
@@ -117,6 +122,107 @@ class _SectionHeader extends StatelessWidget {
             ),
       ),
     );
+  }
+}
+
+/// Manual control over the realtime WebSocket connection: current state plus
+/// buttons to reconnect after a failure, or disconnect/connect on demand.
+class _RealtimeTile extends StatelessWidget {
+  const _RealtimeTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListenableBuilder(
+        listenable: RealtimeService.instance,
+        builder: (context, _) {
+          final ws = RealtimeService.instance;
+          final loggedIn = authService.accessToken != null;
+          final stateLabel = _stateLabel(context, ws);
+          final stateColor = _stateColor(context, ws);
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.wifi_off_outlined),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('realtimeSettings'.tr()),
+                          const SizedBox(height: 2),
+                          Text(
+                            stateLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: stateColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ActionChip(
+                      label: Text(
+                        ws.isConnected
+                            ? 'realtimeDisconnect'.tr()
+                            : 'realtimeConnect'.tr(),
+                      ),
+                      onPressed: loggedIn ? () => _toggle(context, ws, authService) : null,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: loggedIn ? ws.reconnect : null,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: Text('realtimeReconnect'.tr()),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'retryCount'.tr(args: ['${ws.retryCount}']),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _stateLabel(BuildContext context, RealtimeService ws) {
+    if (ws.isConnected) return 'realtimeConnected'.tr();
+    if (ws.isDead) return 'realtimeDead'.tr();
+    return 'realtimeDisconnected'.tr();
+  }
+
+  Color _stateColor(BuildContext context, RealtimeService ws) {
+    if (ws.isConnected) {
+      return Theme.of(context).colorScheme.primary;
+    }
+    if (ws.isDead) {
+      return Theme.of(context).colorScheme.error;
+    }
+    return Theme.of(context).colorScheme.onSurfaceVariant;
+  }
+
+  void _toggle(BuildContext context, RealtimeService ws, AuthService authService) {
+    if (ws.isConnected) {
+      ws.disconnect();
+    } else {
+      final token = authService.accessToken;
+      if (token != null) ws.connect(token);
+    }
   }
 }
 
@@ -379,14 +485,44 @@ class _ServerHostTile extends StatelessWidget {
   }
 }
 
-/// Account region setting. Opens a sheet listing the device timezone plus
-/// common UTC offsets; the chosen offset is applied to chat timestamps.
+/// Account region setting. Choosing a region applies its timezone to chat
+/// timestamps and pushes the region + language to the server for notifications.
 class _RegionTile extends StatelessWidget {
   const _RegionTile();
 
+  /// Sentinel returned when the user picks "follow the device"; distinguishes
+  /// a deliberate clear from dismissing the sheet (which returns null).
+  static const _followDevice = RegionOption(
+    code: '',
+    labelKey: 'useDeviceTimezone',
+    timezone: '',
+    lang: '',
+  );
+
   String _currentLabel(SettingsService settings) {
-    if (settings.usesDeviceTimezone) return 'useDeviceTimezone'.tr();
-    return settings.timezone;
+    final option = settings.regionOption;
+    if (option != null) return option.labelKey.tr();
+    return 'useDeviceTimezone'.tr();
+  }
+
+  /// Syncs the chosen region and its language to the server so server-pushed
+  /// notifications use the right locale. Best effort: failures are surfaced
+  /// quietly without blocking the local change.
+  Future<void> _syncLocale(BuildContext context) async {
+    final settings = Provider.of<SettingsService>(context, listen: false);
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    try {
+      await ApiService().updateLocale(token,
+          region: settings.region, lang: settings.regionLang);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('localeSyncFailed'.tr())),
+        );
+      }
+    }
   }
 
   @override
@@ -402,45 +538,32 @@ class _RegionTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       onTap: () async {
-        final selected = await showModalBottomSheet<String>(
+        final selected = await showModalBottomSheet<RegionOption>(
           context: context,
           isScrollControlled: true,
-          builder: (_) => const _TimezonePicker(),
+          builder: (_) => const _RegionPicker(),
         );
-        if (selected != null && context.mounted) {
-          await settings.setTimezone(selected);
+        if (selected == null) return;
+        if (identical(selected, _followDevice)) {
+          await settings.setRegion(null);
+        } else {
+          await settings.setRegion(selected);
         }
+        if (context.mounted) await _syncLocale(context);
       },
     );
   }
 }
 
-/// Scrollable list of timezone choices. Selecting the device entry stores the
-/// empty sentinel; everything else stores a "UTC±H[:MM]" label.
-class _TimezonePicker extends StatelessWidget {
-  const _TimezonePicker();
-
-  /// Real-world UTC offsets, in (hours, minutes) pairs.
-  static const List<(int, int)> _offsets = [
-    (-12, 0), (-11, 0), (-10, 0), (-9, 30), (-9, 0), (-8, 0), (-7, 0),
-    (-6, 0), (-5, 0), (-4, 30), (-4, 0), (-3, 30), (-3, 0), (-2, 0),
-    (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (3, 30), (4, 0), (4, 30),
-    (5, 0), (5, 30), (5, 45), (6, 0), (6, 30), (7, 0), (8, 0), (8, 45),
-    (9, 0), (9, 30), (10, 0), (10, 30), (11, 0), (12, 0), (12, 45),
-    (13, 0), (14, 0),
-  ];
-
-  static String _label(int hours, int minutes) {
-    final sign = hours < 0 || minutes < 0 ? '-' : '+';
-    final h = hours.abs();
-    final m = minutes.abs();
-    return m == 0 ? 'UTC$sign$h' : 'UTC$sign$h:$m';
-  }
+/// Scrollable list of named regions. Selecting "follow the device" clears the
+/// region and its timezone; everything else applies the region's fixed offset.
+class _RegionPicker extends StatelessWidget {
+  const _RegionPicker();
 
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsService>(context);
-    final current = settings.timezone;
+    final current = settings.region;
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.6,
@@ -450,9 +573,9 @@ class _TimezonePicker extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
               child: Row(
                 children: [
-                  Icon(Icons.schedule_outlined, color: Theme.of(context).colorScheme.primary),
+                  Icon(Icons.public_outlined, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 8),
-                  Text('timezone'.tr(), style: Theme.of(context).textTheme.titleMedium),
+                  Text('regionSettings'.tr(), style: Theme.of(context).textTheme.titleMedium),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -466,19 +589,22 @@ class _TimezonePicker extends StatelessWidget {
               child: ListView(
                 children: [
                   ListTile(
-                    leading: settings.usesDeviceTimezone
+                    leading: current.isEmpty
                         ? const Icon(Icons.radio_button_checked)
                         : const Icon(Icons.radio_button_off),
                     title: Text('useDeviceTimezone'.tr()),
-                    onTap: () => Navigator.of(context).pop(SettingsService.localTimezone),
+                    subtitle: Text('useDeviceTimezoneHint'.tr()),
+                    onTap: () =>
+                        Navigator.of(context).pop(_RegionTile._followDevice),
                   ),
-                  for (final (h, m) in _offsets)
+                  for (final region in SettingsService.kRegions)
                     ListTile(
-                      leading: current == _label(h, m)
+                      leading: current == region.code
                           ? const Icon(Icons.radio_button_checked)
                           : const Icon(Icons.radio_button_off),
-                      title: Text(_label(h, m)),
-                      onTap: () => Navigator.of(context).pop(_label(h, m)),
+                      title: Text(region.labelKey.tr()),
+                      subtitle: Text('${region.timezone} · ${_langName(region.lang)}'),
+                      onTap: () => Navigator.of(context).pop(region),
                     ),
                 ],
               ),
@@ -487,6 +613,34 @@ class _TimezonePicker extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Human-readable name for a pushed language code, falling back to the raw
+  /// code. Kept inline (no i18n keys) because these names are mostly identical
+  /// across locales.
+  static String _langName(String code) {
+    switch (code) {
+      case 'zh':
+        return '中文';
+      case 'ja':
+        return '日本語';
+      case 'ko':
+        return '한국어';
+      case 'de':
+        return 'Deutsch';
+      case 'fr':
+        return 'Français';
+      case 'it':
+        return 'Italiano';
+      case 'es':
+        return 'Español';
+      case 'pt':
+        return 'Português';
+      case 'ru':
+        return 'Русский';
+      default:
+        return 'English';
+    }
   }
 }
 

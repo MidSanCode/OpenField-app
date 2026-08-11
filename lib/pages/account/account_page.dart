@@ -395,7 +395,7 @@ class _AccountPageState extends State<AccountPage> {
               ListTile(
                 minLeadingWidth: 48,
                 leading: const Icon(Icons.badge_outlined),
-                title: Text('editProfile'.tr()),
+                title: Text('accountSettings'.tr()),
                 contentPadding: const EdgeInsets.only(left: 24, right: 17),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
@@ -739,7 +739,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         : '';
 
     return Scaffold(
-      appBar: AppBar(title: Text('editProfile'.tr())),
+      appBar: AppBar(title: Text('accountSettings'.tr())),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [

@@ -5,6 +5,23 @@ import 'package:flutter/material.dart' show ChangeNotifier, ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:openfield/core/log/log_recorder.dart';
 
+/// A named region the user can pick that bundles a timezone offset, a display
+/// name (via an i18n key) and the language used for server-pushed
+/// notifications. Choosing a region is a shortcut for setting all three.
+class RegionOption {
+  final String code;
+  final String labelKey;
+  final String timezone;
+  final String lang;
+
+  const RegionOption({
+    required this.code,
+    required this.labelKey,
+    required this.timezone,
+    required this.lang,
+  });
+}
+
 /// Persists app-level preferences: language, color theme, server host, custom
 /// background image and its visibility.
 class SettingsService extends ChangeNotifier {
@@ -16,12 +33,108 @@ class SettingsService extends ChangeNotifier {
   static const _keyBackgroundVisible = 'settings_background_image_visible';
   static const _keyAccentColor = 'settings_accent_color';
   static const _keyTimezone = 'settings_timezone';
+  static const _keyRegion = 'settings_region';
+  static const _keyRegionLang = 'settings_region_lang';
   static const String defaultServerHost = 'https://of-api.msc-studio.eu.cc';
 
   /// Sentinels for the client-side timezone setting. Empty means "follow the
   /// device's local timezone"; otherwise an IANA-free UTC offset label such as
   /// "UTC+8" or "UTC-5:30".
   static const String localTimezone = '';
+
+  /// Sentinels for the region setting. A null/empty region means "follow the
+  /// device" and clears the server-pushed language.
+  static const String localRegion = '';
+
+  /// Known regions offered in the region picker. Each bundles a timezone
+  /// offset for local timestamp display and the server-push notification
+  /// language.
+  static const List<RegionOption> kRegions = [
+    RegionOption(
+      code: 'zh-CN',
+      labelKey: 'regionCn',
+      timezone: 'UTC+8',
+      lang: 'zh',
+    ),
+    RegionOption(
+      code: 'zh-TW',
+      labelKey: 'regionTw',
+      timezone: 'UTC+8',
+      lang: 'zh',
+    ),
+    RegionOption(
+      code: 'zh-HK',
+      labelKey: 'regionHk',
+      timezone: 'UTC+8',
+      lang: 'zh',
+    ),
+    RegionOption(
+      code: 'en-US',
+      labelKey: 'regionUs',
+      timezone: 'UTC-5',
+      lang: 'en',
+    ),
+    RegionOption(
+      code: 'en-GB',
+      labelKey: 'regionGb',
+      timezone: 'UTC+0',
+      lang: 'en',
+    ),
+    RegionOption(
+      code: 'en-AU',
+      labelKey: 'regionAu',
+      timezone: 'UTC+10',
+      lang: 'en',
+    ),
+    RegionOption(
+      code: 'ja-JP',
+      labelKey: 'regionJp',
+      timezone: 'UTC+9',
+      lang: 'ja',
+    ),
+    RegionOption(
+      code: 'ko-KR',
+      labelKey: 'regionKr',
+      timezone: 'UTC+9',
+      lang: 'ko',
+    ),
+    RegionOption(
+      code: 'de-DE',
+      labelKey: 'regionDe',
+      timezone: 'UTC+1',
+      lang: 'de',
+    ),
+    RegionOption(
+      code: 'fr-FR',
+      labelKey: 'regionFr',
+      timezone: 'UTC+1',
+      lang: 'fr',
+    ),
+    RegionOption(
+      code: 'it-IT',
+      labelKey: 'regionIt',
+      timezone: 'UTC+1',
+      lang: 'it',
+    ),
+    RegionOption(
+      code: 'es-ES',
+      labelKey: 'regionEs',
+      timezone: 'UTC+1',
+      lang: 'es',
+    ),
+    RegionOption(
+      code: 'pt-BR',
+      labelKey: 'regionBr',
+      timezone: 'UTC-3',
+      lang: 'pt',
+    ),
+    RegionOption(
+      code: 'ru-RU',
+      labelKey: 'regionRu',
+      timezone: 'UTC+3',
+      lang: 'ru',
+    ),
+  ];
 
   String? _locale;
   ThemeMode _themeMode = ThemeMode.system;
@@ -31,6 +144,8 @@ class SettingsService extends ChangeNotifier {
   bool _backgroundVisible = true;
   Color? _accentColor;
   String _timezone = localTimezone;
+  String _region = localRegion;
+  String _regionLang = '';
 
   String? get locale => _locale;
   ThemeMode get themeMode => _themeMode;
@@ -52,6 +167,23 @@ class SettingsService extends ChangeNotifier {
   /// Whether timestamps should render in the device's own local timezone.
   bool get usesDeviceTimezone => _timezone == localTimezone;
 
+  /// The selected region code (e.g. "zh-CN"), or empty when following the
+  /// device. Drives the display name in the region picker.
+  String get region => _region;
+
+  /// The language code pushed to the server for notifications (e.g. "zh"),
+  /// derived from the selected region.
+  String get regionLang => _regionLang;
+
+  /// The [RegionOption] matching the current [region], or null when none.
+  RegionOption? get regionOption {
+    if (_region.isEmpty) return null;
+    for (final r in kRegions) {
+      if (r.code == _region) return r;
+    }
+    return null;
+  }
+
   SettingsService() {
     ready = _load();
   }
@@ -72,6 +204,8 @@ class SettingsService extends ChangeNotifier {
     final accent = prefs.getInt(_keyAccentColor);
     _accentColor = accent != null ? Color(accent) : null;
     _timezone = prefs.getString(_keyTimezone) ?? localTimezone;
+    _region = prefs.getString(_keyRegion) ?? localRegion;
+    _regionLang = prefs.getString(_keyRegionLang) ?? '';
     notifyListeners();
   }
 
@@ -79,6 +213,30 @@ class SettingsService extends ChangeNotifier {
     _timezone = tz;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyTimezone, tz);
+    notifyListeners();
+  }
+
+  /// Applies a region, setting its timezone offset for display and its
+  /// notification language. Passing null/empty clears the region (follow the
+  /// device). Returns the new region and the pushed language so callers can
+  /// sync the server via PUT /users/me/locale.
+  Future<void> setRegion(RegionOption? option) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (option == null) {
+      _region = localRegion;
+      _regionLang = '';
+      _timezone = localTimezone;
+      await prefs.remove(_keyRegion);
+      await prefs.remove(_keyRegionLang);
+      await prefs.remove(_keyTimezone);
+    } else {
+      _region = option.code;
+      _regionLang = option.lang;
+      _timezone = option.timezone;
+      await prefs.setString(_keyRegion, option.code);
+      await prefs.setString(_keyRegionLang, option.lang);
+      await prefs.setString(_keyTimezone, option.timezone);
+    }
     notifyListeners();
   }
 

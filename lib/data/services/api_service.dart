@@ -13,6 +13,8 @@ import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/user.dart';
 import '../models/wallet.dart';
+import '../models/task.dart';
+import '../models/transfer.dart';
 
 /// Error raised when an API request fails, carrying the HTTP status code when
 /// the server responded, or null for network/parse failures.
@@ -1366,6 +1368,163 @@ class ApiService {
     }
     throw ApiException(
         response.statusCode, _decodeError(response, 'Failed to claim daily bonus'));
+  }
+
+  /// Updates the user's region and display language for server-pushed
+  /// notifications.
+  Future<void> updateLocale(String accessToken,
+      {String region = '', String lang = ''}) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/users/me/locale'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'region': region, 'lang': lang}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to update locale'));
+    }
+  }
+
+  /// Fetches the task catalog with the user's progress, current sign-in streak
+  /// and the make-up cost in currency.
+  Future<Map<String, dynamic>> listTasks(String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/tasks'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) return data;
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load tasks'));
+  }
+
+  /// Claims the daily sign-in streak reward. Returns {granted: bool, exp,
+  /// currency, streak}.
+  Future<Map<String, dynamic>> claimDailyLogin(String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/tasks/daily-login/claim'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) return data;
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to claim daily sign-in'));
+  }
+
+  /// Pays the make-up cost to renew the sign-in streak. Returns {granted,
+  /// exp, cost, streak}.
+  Future<Map<String, dynamic>> makeUpCheckin(String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/tasks/daily-login/makeup'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) return data;
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to make up check-in'));
+  }
+
+  /// Claims a one-time achievement task reward by its code.
+  Future<Map<String, dynamic>> claimTask(String accessToken, String code) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/tasks/$code/claim'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) return data;
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to claim task'));
+  }
+
+  /// Fetches the user's experience history, newest first.
+  Future<List<ExpEntry>> listExpHistory(String accessToken, {int limit = 50}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/exp/history?limit=$limit'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['entries'];
+      if (list is List) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((e) => ExpEntry.fromJson(e))
+            .toList();
+      }
+      return const [];
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load exp history'));
+  }
+
+  /// Lists incoming or outgoing currency transfers.
+  Future<List<Transfer>> listTransfers(String accessToken,
+      {String direction = 'incoming', int page = 1, int limit = 20}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/transfers?direction=$direction&page=$page&limit=$limit'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['transfers'];
+      if (list is List) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((t) => Transfer.fromJson(t))
+            .toList();
+      }
+      return const [];
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to load transfers'));
+  }
+
+  /// Creates a transfer to another user. The amount is held from the sender and
+  /// only credited to the recipient on acceptance.
+  Future<Transfer> createTransfer(String accessToken,
+      {required int recipientId, required int amount, String note = ''}) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/transfers'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'recipient_id': recipientId, 'amount': amount, 'note': note}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final transfer = data['transfer'];
+      if (transfer is Map<String, dynamic>) return Transfer.fromJson(transfer);
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to create transfer'));
+  }
+
+  /// Accepts a pending incoming transfer, crediting it to the recipient.
+  Future<Transfer> acceptTransfer(String accessToken, int id) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/transfers/$id/accept'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final transfer = data['transfer'];
+      if (transfer is Map<String, dynamic>) return Transfer.fromJson(transfer);
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to accept transfer'));
+  }
+
+  /// Declines a pending incoming transfer, refunding it to the sender.
+  Future<Transfer> declineTransfer(String accessToken, int id) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/transfers/$id/decline'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final transfer = data['transfer'];
+      if (transfer is Map<String, dynamic>) return Transfer.fromJson(transfer);
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to decline transfer'));
   }
 
   /// Fetches the server's public capability matrix (open, no auth).
