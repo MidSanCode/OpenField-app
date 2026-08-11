@@ -187,16 +187,10 @@ class User {
 
   /// Fraction (0..1) of progress toward the next level.
   double get levelProgress {
-    final lvl = level;
-    if (lvl >= _maxLevel) return 1;
-    final current = _thresholds[lvl - 1];
-    final next = _thresholds[lvl];
-    final span = next - current;
-    if (span <= 0) return 1;
-    final into = exp - current;
-    if (into <= 0) return 0;
-    if (into >= span) return 1;
-    return into / span;
+    final total = totalExpForNextLevel;
+    if (total <= 0) return 1;
+    final into = exp / total;
+    return into.clamp(0.0, 1.0);
   }
 
   /// Exp accumulated since the current level began.
@@ -210,6 +204,16 @@ class User {
 
   /// Exp still required to advance to the next level.
   int get expForNextLevel => _thresholds[level] - _thresholds[level - 1];
+
+  /// Lifetime-total experience required to *reach* the level after the current
+  /// one. Unlike [expForNextLevel] (the incremental span), this value is
+  /// cumulative: it only grows as the user levels up, so the exp bar keeps
+  /// adding on top of earned exp instead of resetting to zero at each level.
+  int get totalExpForNextLevel {
+    final lvl = level;
+    if (lvl >= _maxLevel) return _thresholds[_maxLevel];
+    return _thresholds[lvl];
+  }
 
   /// Whether the once-per-server-day bonus can be claimed right now. The
   /// server remains authoritative; this is only an optimistic hint.

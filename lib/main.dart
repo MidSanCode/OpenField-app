@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:logging/logging.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
+import 'package:openfield/core/config/app_config.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/log/log_recorder.dart';
 import 'package:openfield/core/router/app_router.dart';
@@ -25,6 +26,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   await EasyLocalization.ensureInitialized();
+  await AppConfig.load();
   if (!kIsWeb && Platform.isWindows) {
     ensureOpenFieldProtocol();
   }

@@ -46,7 +46,7 @@ class ExperienceBar extends StatelessWidget {
             ],
             const Spacer(),
             Text(
-              '${user.expIntoLevel} / ${user.expForNextLevel}',
+              '${user.exp} / ${user.totalExpForNextLevel}',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
