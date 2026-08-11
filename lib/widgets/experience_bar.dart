@@ -60,7 +60,10 @@ class ExperienceBar extends StatelessWidget {
             height: 8,
             child: Stack(
               children: [
-                Container(color: theme.colorScheme.surfaceContainerHighest),
+                // The whole track takes the tier colour (softly tinted) so the
+                // entire bar changes colour as the user climbs tiers, not just
+                // the filled portion.
+                Container(color: tierColor.withValues(alpha: 0.18)),
                 FractionallySizedBox(
                   alignment: Alignment.centerLeft,
                   widthFactor: progress,

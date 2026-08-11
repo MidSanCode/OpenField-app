@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui' show Color;
 
 /// Level-system constants mirrored from the server so the app can derive a
@@ -145,14 +144,23 @@ class User {
 
   String get displayName => nickname.isNotEmpty ? nickname : username;
 
-  /// Experience-based level, derived with the same formula as the server:
-  /// level = ceil(log_1.05(1 + 1.05 * exp / 100)), capped at 200.
+  /// Experience-based level, derived with the same cumulative formula as the
+  /// server. Total exp must reach the cumulative threshold of level 2 (=100)
+  /// to advance from level 1; every level costs 5% more than the previous,
+  /// rounded to the nearest integer.
   int get level {
-    if (exp <= 0) return 0;
-    final raw = math.log(1 + _levelGrowth * exp / _expPerLevel) /
-        math.log(_levelGrowth);
-    final lvl = raw.ceil().clamp(0, _maxLevel);
-    return lvl;
+    final e = exp;
+    if (e <= 0) return 1;
+    var lo = 1, hi = _maxLevel;
+    while (lo <= hi) {
+      final mid = (lo + hi) >> 1;
+      if (_thresholds[mid - 1] <= e) {
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return hi;
   }
 
   /// The tier (level band with a name and colour) for the current level, or
@@ -181,26 +189,27 @@ class User {
   double get levelProgress {
     final lvl = level;
     if (lvl >= _maxLevel) return 1;
-    final current = _expForLevel(lvl);
-    final next = _expForLevel(lvl + 1);
+    final current = _thresholds[lvl - 1];
+    final next = _thresholds[lvl];
     final span = next - current;
     if (span <= 0) return 1;
-    final into = (exp - current).clamp(0, span);
+    final into = exp - current;
+    if (into <= 0) return 0;
+    if (into >= span) return 1;
     return into / span;
   }
 
   /// Exp accumulated since the current level began.
   int get expIntoLevel {
     final lvl = level;
-    final into = exp - _expForLevel(lvl);
-    return into < 0 ? 0 : into;
+    final into = exp - _thresholds[lvl - 1];
+    if (into <= 0) return 0;
+    final span = _thresholds[lvl] - _thresholds[lvl - 1];
+    return into > span ? span : into;
   }
 
   /// Exp still required to advance to the next level.
-  int get expForNextLevel {
-    final lvl = level;
-    return _expForLevel(lvl + 1) - _expForLevel(lvl);
-  }
+  int get expForNextLevel => _thresholds[level] - _thresholds[level - 1];
 
   /// Whether the once-per-server-day bonus can be claimed right now. The
   /// server remains authoritative; this is only an optimistic hint.
@@ -212,13 +221,22 @@ class User {
         .isAtSameMomentAs(DateTime(now.year, now.month, now.day));
   }
 
-  /// Exp required to reach [level] (geometric sum, same as the server).
-  static int _expForLevel(int level) {
-    if (level <= 0) return 0;
-    final cost = _expPerLevel *
-        (math.pow(_levelGrowth, level).toDouble() - _levelGrowth) /
-        (_levelGrowth - 1);
-    return cost.ceil();
+  /// Cumulative exp required to *reach* each level, precomputed once.
+  ///
+  /// [_thresholds]`[i]` is the total exp needed to be at level `i+1`
+  /// (level 1 costs 0). Level 2 costs [_expPerLevel]; each later level costs
+  /// 5% more than the previous, rounded to the nearest integer, so reaching
+  /// level 3 needs 100 + 105 = 205 total exp.
+  static final List<int> _thresholds = _buildThresholds();
+
+  static List<int> _buildThresholds() {
+    final thresholds = List<int>.filled(_maxLevel + 1, 0);
+    var cost = _expPerLevel;
+    for (var level = 1; level <= _maxLevel; level++) {
+      thresholds[level] = thresholds[level - 1] + cost;
+      cost = (cost * _levelGrowth).round();
+    }
+    return thresholds;
   }
 
   User copyWith({
