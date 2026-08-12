@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/core/config/app_config.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/theme/app_theme.dart';
+import 'package:openfield/data/models/client_capabilities.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
@@ -275,14 +276,25 @@ Future<void> _showCapabilitiesSheet(BuildContext context) async {
                   final data = snapshot.data!;
                   final caps = data['capabilities'] as Map? ?? const {};
                   final version = data['version'] ?? '';
-                  final entries = caps.entries.toList()
-                    ..sort((a, b) => a.key.compareTo(b.key));
+                  final serverKeys = caps.keys
+                      .whereType<String>()
+                      .toSet();
+                  final clientKeys = ClientCapabilities.supported;
+                  final allKeys =
+                      (serverKeys.union(clientKeys)).toList()..sort();
+                  // How many features each side supports over the unioned set.
+                  final serverCount = allKeys
+                      .where((k) => caps[k] == true)
+                      .length;
+                  final clientCount = allKeys
+                      .where(clientKeys.contains)
+                      .length;
                   return ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
                       if (version is String && version.isNotEmpty)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.only(bottom: 4),
                           child: Text(
                             '${'serverVersion'.tr()} $version',
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -290,21 +302,33 @@ Future<void> _showCapabilitiesSheet(BuildContext context) async {
                             ),
                           ),
                         ),
-                      ...entries.map(
-                        (e) => ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            e.value == true ? Icons.check_circle : Icons.remove_circle_outline,
-                            size: 20,
-                            color: e.value == true
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.error,
-                          ),
-                          title: Text(
-                            e.key,
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                          ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 12),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _CapabilityCount(
+                              icon: Icons.phone_android,
+                              label: 'capabilityClientCount'
+                                  .tr(namedArgs: {'count': '$clientCount'}),
+                              color: theme.colorScheme.primary,
+                            ),
+                            _CapabilityCount(
+                              icon: Icons.dns_outlined,
+                              label: 'capabilityServerCount'
+                                  .tr(namedArgs: {'count': '$serverCount'}),
+                              color: theme.colorScheme.tertiary,
+                            ),
+                          ],
+                        ),
+                      ),
+                      ...allKeys.map(
+                        (k) => _CapabilityRow(
+                          name: k,
+                          clientSupported: clientKeys.contains(k),
+                          serverSupported: caps[k] == true,
+                          theme: theme,
                         ),
                       ),
                     ],
@@ -317,6 +341,91 @@ Future<void> _showCapabilitiesSheet(BuildContext context) async {
       ),
     ),
   );
+}
+
+class _CapabilityCount extends StatelessWidget {
+  const _CapabilityCount({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CapabilityRow extends StatelessWidget {
+  const _CapabilityRow({
+    required this.name,
+    required this.clientSupported,
+    required this.serverSupported,
+    required this.theme,
+  });
+
+  final String name;
+  final bool clientSupported;
+  final bool serverSupported;
+  final ThemeData theme;
+
+  IconData get _icon {
+    if (clientSupported && serverSupported) return Icons.check_circle;
+    if (clientSupported) return Icons.phone_android;
+    return Icons.remove_circle_outline;
+  }
+
+  Color get _color {
+    if (clientSupported && serverSupported) return theme.colorScheme.primary;
+    if (clientSupported) return theme.colorScheme.tertiary;
+    return theme.colorScheme.error;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(_icon, size: 20, color: _color),
+      title: Text(
+        name,
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+      ),
+      trailing: Text(
+        serverSupported ? '✓' : '✗',
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: serverSupported
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.colorScheme.error,
+        ),
+      ),
+    );
+  }
 }
 
 class _ThemeTile extends StatelessWidget {
@@ -826,6 +935,7 @@ class _BackgroundImageTileState extends State<_BackgroundImageTile> {
   Future<void> _pick(SettingsService settings) async {
     if (_picking) return;
     setState(() => _picking = true);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       // file_picker works on all platforms (mobile gallery, desktop file
       // dialog), unlike image_picker whose gallery source is not supported on
@@ -843,6 +953,23 @@ class _BackgroundImageTileState extends State<_BackgroundImageTile> {
       // returns a path inside the OS temp/cache directory).
       final saved = await _copyToBackgroundDir(picked);
       await settings.setBackgroundImagePath(saved);
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('backgroundImageSet'.tr())),
+        );
+      }
+    } catch (e) {
+      // A failure here previously left the background silently unset. Surface
+      // it so the user knows the pick did not take effect.
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('backgroundImageSetFailed'.tr(
+              namedArgs: {'error': e.toString()},
+            )),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _picking = false);
     }
@@ -850,15 +977,27 @@ class _BackgroundImageTileState extends State<_BackgroundImageTile> {
 
   Future<String> _copyToBackgroundDir(String src) async {
     final dir = await _backgroundDir();
-    final ext = src.contains('.') ? src.substring(src.lastIndexOf('.')) : '.img';
+    // Extract the extension from the file name only. Taking the last dot of
+    // the whole path picks up dots in ancestor directories and yields a
+    // garbage destination that made File.copy throw on Windows paths like
+    // "C:\Users\john.doe\Downloads\photo" -> dst ".../background.john.doe...".
+    final name = src.split(RegExp(r'[/\\]')).last;
+    final dot = name.lastIndexOf('.');
+    final ext = (dot > 0 && dot < name.length - 1)
+        ? name.substring(dot)
+        : '.img';
     final dst = '${dir.path}/background$ext';
     await File(src).copy(dst);
+    if (!await File(dst).exists()) {
+      throw StateError('copy produced no file: $dst');
+    }
     return dst;
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsService>(context);
+    final path = settings.backgroundImagePath;
     return ListTile(
       leading: _picking
           ? const SizedBox(
@@ -866,10 +1005,29 @@ class _BackgroundImageTileState extends State<_BackgroundImageTile> {
               height: 24,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : const Icon(Icons.image_outlined),
+          : path == null
+              ? const Icon(Icons.image_outlined)
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: Image.file(
+                      File(path),
+                      key: ValueKey('bg-preview:$path'),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        child: const Icon(Icons.broken_image_outlined, size: 18),
+                      ),
+                    ),
+                  ),
+                ),
       title: Text('backgroundImage'.tr()),
-      subtitle: Text('backgroundImageHint'.tr()),
-      trailing: settings.backgroundImagePath == null
+      subtitle: Text(path ?? 'backgroundImageHint'.tr()),
+      trailing: path == null
           ? const Icon(Icons.chevron_right)
           : TextButton(
               onPressed: _picking ? null : () => settings.setBackgroundImagePath(null),

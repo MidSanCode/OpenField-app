@@ -84,6 +84,7 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     // Logging follows developer mode, which is read from prefs asynchronously.
     _settingsService.ready.then((_) {
       LogService.instance.setEnabled(_settingsService.developerMode);
+      _validateBackgroundPath();
     });
     _lastSyncedHost = _settingsService.serverHost;
     ApiService.setServerHost(_settingsService.serverHost);
@@ -109,6 +110,26 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
       RealtimeService.instance.connect(token);
     } else {
       RealtimeService.instance.disconnect();
+    }
+  }
+
+  /// Clears a saved background path whose file no longer exists (e.g. the app
+  /// was reinstalled or the copy in the old flow failed silently). Without
+  /// this, a stale path would keep the background feature "set" while never
+  /// rendering anything.
+  Future<void> _validateBackgroundPath() async {
+    if (kIsWeb) return;
+    final path = _settingsService.backgroundImagePath;
+    if (path == null) return;
+    try {
+      final file = File(path);
+      if (!await file.exists()) {
+        await _settingsService.setBackgroundImagePath(null);
+        Logger.root.info('cleared stale background image path: $path');
+      }
+    } catch (_) {
+      // Unreadable path: drop it rather than fail startup.
+      await _settingsService.setBackgroundImagePath(null);
     }
   }
 
@@ -241,10 +262,11 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
                   routeInformationParser: _router.routeInformationParser,
                   routeInformationProvider: _router.routeInformationProvider,
                   builder: (context, child) {
-                    final bgPath =
-                        settings.backgroundVisible ? settings.backgroundImagePath : null;
+                    final bgPath = !kIsWeb && settings.backgroundVisible
+                        ? settings.backgroundImagePath
+                        : null;
                     var themed = child!;
-                    if (bgPath != null) {
+                    if (bgPath != null && bgPath.isNotEmpty) {
                       // Opaque scaffold surfaces would otherwise cover the
                       // background image entirely, so make page backgrounds
                       // transparent while the image is active. Cards, app bars
@@ -267,7 +289,13 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
                               key: ValueKey('bg:$bgPath'),
                               fit: BoxFit.cover,
                               gaplessPlayback: false,
-                              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                              // A missing/corrupt file must not leave a silent
+                              // blank: fall back to the theme surface color so
+                              // the app still looks intentional and the user
+                              // can see the background did not load.
+                              errorBuilder: (_, _, _) => ColoredBox(
+                                color: Theme.of(context).colorScheme.surface,
+                              ),
                             ),
                           ),
                           themed,
