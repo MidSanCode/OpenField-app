@@ -1424,6 +1424,57 @@ class ApiService {
         _decodeError(response, 'Failed to make up check-in'));
   }
 
+  /// Fetches the daily-login sign-in calendar: date range, signed days, streak
+  /// and make-up cost.
+  Future<Map<String, dynamic>> checkinCalendar(String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/tasks/daily-login/calendar'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) return data;
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to load sign-in calendar'));
+  }
+
+  /// Pays to sign in a specific missed past calendar day ("YYYY-MM-DD").
+  /// Returns {granted: bool, date, exp, cost, streak}.
+  Future<Map<String, dynamic>> makeupByDate(
+      String accessToken, String date) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/tasks/daily-login/makeup-date'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'date': date}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) return data;
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to make up check-in'));
+  }
+
+  /// Sets (or changes) the 6-digit payment PIN.
+  Future<void> setPin(String accessToken, String pin) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/users/me/pin'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'pin': pin}),
+    );
+    if (response.statusCode == 200) return;
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to set PIN'));
+  }
+
+  /// Verifies a payment PIN against the stored hash.
+  Future<bool> verifyPin(String accessToken, String pin) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/users/me/pin/verify'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'pin': pin}),
+    );
+    if (response.statusCode == 200) return true;
+    return false;
+  }
+
   /// Claims a one-time achievement task reward by its code.
   Future<Map<String, dynamic>> claimTask(String accessToken, String code) async {
     final response = await _post(
@@ -1480,13 +1531,22 @@ class ApiService {
   }
 
   /// Creates a transfer to another user. The amount is held from the sender and
-  /// only credited to the recipient on acceptance.
+  /// only credited to the recipient on acceptance. The 6-digit payment PIN
+  /// authorizes the outgoing payment.
   Future<Transfer> createTransfer(String accessToken,
-      {required int recipientId, required int amount, String note = ''}) async {
+      {required int recipientId,
+      required int amount,
+      String note = '',
+      String pin = ''}) async {
     final response = await _post(
       Uri.parse('$baseUrl/transfers'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'recipient_id': recipientId, 'amount': amount, 'note': note}),
+      body: jsonEncode({
+        'recipient_id': recipientId,
+        'amount': amount,
+        'note': note,
+        'pin': pin,
+      }),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 200 && data != null) {

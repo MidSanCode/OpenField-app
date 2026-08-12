@@ -89,6 +89,8 @@ class User {
   final bool isFollowing;
   final int exp;
   final DateTime? lastDailyBonusAt;
+  final bool hasPin;
+  final DateTime? createdAt;
 
   User({
     required this.id,
@@ -112,6 +114,8 @@ class User {
     this.isFollowing = false,
     this.exp = 0,
     this.lastDailyBonusAt,
+    this.hasPin = false,
+    this.createdAt,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -137,6 +141,8 @@ class User {
       isFollowing: json['is_following'] as bool? ?? false,
       exp: (json['exp'] as num?)?.toInt() ?? 0,
       lastDailyBonusAt: _asDate(json['last_daily_bonus_at']),
+      hasPin: json['has_pin'] as bool? ?? false,
+      createdAt: _asDate(json['created_at']),
     );
   }
 
@@ -184,6 +190,16 @@ class User {
   /// Gradient colours for tiers that render with a shifting gradient instead of
   /// a solid colour (e.g. the final "source" tier). Empty for solid tiers.
   List<Color> get tierGradient => tier?.gradientColors ?? const [];
+
+  /// Fraction (0..1) of progress toward the next level, computed against the
+  /// current level's own span so the bar fills from empty to full within each
+  /// level (never looks blank at level 1).
+  double get levelProgressWithin {
+    final span = expForNextLevel;
+    if (span <= 0) return 1;
+    final into = expIntoLevel;
+    return (into / span).clamp(0.0, 1.0);
+  }
 
   /// Fraction (0..1) of progress toward the next level.
   double get levelProgress {
@@ -265,6 +281,8 @@ class User {
     bool? isFollowing,
     int? exp,
     DateTime? lastDailyBonusAt,
+    bool? hasPin,
+    DateTime? createdAt,
   }) {
     return User(
       id: id ?? this.id,
@@ -288,6 +306,8 @@ class User {
       isFollowing: isFollowing ?? this.isFollowing,
       exp: exp ?? this.exp,
       lastDailyBonusAt: lastDailyBonusAt ?? this.lastDailyBonusAt,
+      hasPin: hasPin ?? this.hasPin,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 

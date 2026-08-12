@@ -13,7 +13,12 @@ class ExperienceBar extends StatelessWidget {
     final theme = Theme.of(context);
     final tierColor = user.tierColor;
     final gradient = user.tierGradient;
-    final progress = user.levelProgress.clamp(0.0, 1.0);
+    // Per-level progress: fills from empty to full within each level so a new
+    // level-1 user never sees an empty (blank) bar. Keeps a minimal sliver so
+    // any earned exp is visibly reflected.
+    final progress = user.levelProgressWithin.clamp(0.05, 1.0);
+    final expIn = '${user.expIntoLevel}';
+    final expSpan = '${user.expForNextLevel}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,7 +51,7 @@ class ExperienceBar extends StatelessWidget {
             ],
             const Spacer(),
             Text(
-              '${user.exp} / ${user.totalExpForNextLevel}',
+              '$expIn / $expSpan',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

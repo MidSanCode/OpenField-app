@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:openfield/core/widgets/pin_dialog.dart';
 import 'package:openfield/data/models/transfer.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/models/wallet.dart';
@@ -346,7 +347,7 @@ class _WalletPageState extends State<WalletPage> {
             children: [
               TextField(
                 controller: controller,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: 'transferAmount'.tr(),
                   errorText: errorText,
@@ -374,14 +375,30 @@ class _WalletPageState extends State<WalletPage> {
                   setState(() => errorText = 'transferAmountInvalid'.tr());
                   return;
                 }
+                final note = noteController.text.trim();
+                // Close the transfer dialog before prompting for the PIN so the
+                // PIN dialog stays on top of the page, not the dialog.
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                if (!context.mounted) return;
                 try {
+                  var pin = '';
+                  if (!(authService.user?.hasPin ?? false)) {
+                    // First payment: force the user to set a payment PIN.
+                    pin = await showPinDialog(context, isSetting: true) ?? '';
+                    if (pin.isEmpty || !context.mounted) return;
+                    await _apiService.setPin(token, pin);
+                    await authService.fetchCurrentUser();
+                  } else {
+                    pin = await showPinDialog(context, isSetting: false) ?? '';
+                    if (pin.isEmpty || !context.mounted) return;
+                  }
                   await _apiService.createTransfer(
                     token,
                     recipientId: recipient.id,
                     amount: amount,
-                    note: noteController.text.trim(),
+                    note: note,
+                    pin: pin,
                   );
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
                   if (context.mounted) {
                     messenger.showSnackBar(
                       SnackBar(content: Text('transferSent'.tr())),
@@ -389,7 +406,11 @@ class _WalletPageState extends State<WalletPage> {
                     await _load();
                   }
                 } catch (e) {
-                  setState(() => errorText = e.toString());
+                  if (context.mounted) {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(e.toString())),
+                    );
+                  }
                 }
               },
               child: Text('send'.tr()),
@@ -413,9 +434,8 @@ class _WalletPageState extends State<WalletPage> {
   int? _parseAmount(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return null;
-    final value = double.tryParse(trimmed);
-    if (value == null) return null;
-    return (value * 100).round();
+    final value = int.tryParse(trimmed);
+    return value;
   }
 
   String _statusLabel(Transfer t) {
@@ -445,7 +465,7 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   String _formatAmount(int amount) {
-    return (amount / 100).toStringAsFixed(2);
+    return '$amount';
   }
 
   String _formatTime(DateTime time) {

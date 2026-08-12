@@ -5,6 +5,7 @@ import 'package:openfield/core/widgets/error_dialog.dart';
 import 'package:openfield/data/models/task.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/pages/account/checkin_calendar_page.dart';
 
 /// The in-app task center: daily sign-in, streak milestones and one-time
 /// achievements with claimable EXP and currency rewards.
@@ -98,24 +99,12 @@ class _TasksPageState extends State<TasksPage> {
     }
   }
 
-  Future<void> _makeup() async {
+  Future<void> _openCalendar() async {
     if (_claimingCode != null) return;
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final token = authService.accessToken;
-    if (token == null) return;
-    setState(() => _claimingCode = 'makeup');
-    try {
-      await _apiService.makeUpCheckin(token);
-      await _refresh();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('taskMakeupDone'.tr())),
-      );
-    } catch (e) {
-      if (mounted) await showApiErrorDialog(context, e);
-    } finally {
-      if (mounted) setState(() => _claimingCode = null);
-    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CheckinCalendarPage()),
+    );
+    if (mounted) await _refresh();
   }
 
   @override
@@ -194,7 +183,6 @@ class _TasksPageState extends State<TasksPage> {
     final canClaim = daily.claimable;
     final busy = _claimingCode != null;
     final isBusyDaily = _claimingCode == 'daily_login';
-    final isBusyMakeup = _claimingCode == 'makeup';
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -257,17 +245,9 @@ class _TasksPageState extends State<TasksPage> {
             if (!daily.completed) ...[
               const SizedBox(height: 8),
               OutlinedButton.icon(
-                onPressed: busy ? null : _makeup,
-                icon: isBusyMakeup
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.history, size: 18),
-                label: Text(
-                  'taskMakeupCost'.tr(namedArgs: {'cost': '$_makeupCost'}),
-                ),
+                onPressed: busy ? null : _openCalendar,
+                icon: const Icon(Icons.calendar_month, size: 18),
+                label: Text('taskMakeupCost'.tr(namedArgs: {'cost': '$_makeupCost'})),
               ),
             ],
           ],
