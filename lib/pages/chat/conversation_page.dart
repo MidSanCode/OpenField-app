@@ -16,6 +16,7 @@ import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/chat/group_settings_page.dart';
+import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
@@ -1774,17 +1775,24 @@ class _MessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isMine) ...[
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              backgroundImage: (senderAvatar != null && senderAvatar!.isNotEmpty)
-                  ? NetworkImage(senderAvatar!)
-                  : null,
-              child: (senderAvatar == null || senderAvatar!.isEmpty)
-                  ? Text(message.displayName.isEmpty
-                      ? '?'
-                      : message.displayName.substring(0, 1).toUpperCase())
-                  : null,
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ProfilePage(userId: message.senderId),
+                ),
+              ),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                backgroundImage: (senderAvatar != null && senderAvatar!.isNotEmpty)
+                    ? NetworkImage(senderAvatar!)
+                    : null,
+                child: (senderAvatar == null || senderAvatar!.isEmpty)
+                    ? Text(message.displayName.isEmpty
+                        ? '?'
+                        : message.displayName.substring(0, 1).toUpperCase())
+                    : null,
+              ),
             ),
             const SizedBox(width: 8),
           ],
