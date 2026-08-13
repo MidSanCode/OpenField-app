@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/pages/account/account_page.dart';
 import 'package:openfield/pages/chat/chat_page.dart';
+import 'package:openfield/pages/posts/posts_page.dart';
 import 'package:openfield/widgets/app_shell.dart';
 
 GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigatorKey) {
@@ -22,14 +23,15 @@ GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigat
           ),
           StatefulShellBranch(
             routes: [
+              GoRoute(path: '/posts', name: 'posts', builder: (context, state) => const PostsPage()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
               GoRoute(path: '/account', name: 'account', builder: (context, state) => const AccountPage()),
             ],
           ),
         ],
-      ),
-      GoRoute(
-        path: '/posts',
-        redirect: (context, state) => '/chat',
       ),
     ],
   );

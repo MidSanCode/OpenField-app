@@ -96,7 +96,7 @@ class ReplyTile extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 2),
-                  MarkdownContent(data: reply.content),
+                  MarkdownContent(data: reply.content, selectable: false),
                   if (reply.attachments.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     AttachmentView(attachments: reply.attachments),

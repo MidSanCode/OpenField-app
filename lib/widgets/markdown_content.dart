@@ -7,12 +7,14 @@ class MarkdownContent extends StatelessWidget {
   final String data;
   final TextStyle? style;
   final EdgeInsetsGeometry padding;
+  final bool selectable;
 
   const MarkdownContent({
     super.key,
     required this.data,
     this.style,
     this.padding = EdgeInsets.zero,
+    this.selectable = true,
   });
 
   @override
@@ -23,7 +25,7 @@ class MarkdownContent extends StatelessWidget {
       padding: padding,
       child: MarkdownBody(
         data: data,
-        selectable: true,
+        selectable: selectable,
         styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
           p: baseStyle,
           blockquoteDecoration: BoxDecoration(

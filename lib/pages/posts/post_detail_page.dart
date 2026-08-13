@@ -263,22 +263,22 @@ class _PostDetailPageState extends State<PostDetailPage> {
     }
   }
 
-  /// Builds a reply tree: top-level replies followed by their nested children.
+  /// Builds a reply tree: top-level replies followed by their nested children,
+  /// so 楼中楼 (reply-to-reply) threads are pre-rendered inline.
   List<Widget> _buildReplyTree(List<PostReply> replies) {
     final childrenOf = <int?, List<PostReply>>{};
     for (final r in replies) {
       childrenOf.putIfAbsent(r.parentId, () => []).add(r);
     }
     final result = <Widget>[];
-    void addChildren(int? parentId) {
+    void addChildren(int? parentId, int depth) {
       for (final r in childrenOf[parentId] ?? []) {
-        final depth = r.parentId == null ? 0 : 1;
         result.add(_buildReplyItem(r, depth));
-        addChildren(r.id);
+        addChildren(r.id, depth + 1);
       }
     }
 
-    addChildren(null);
+    addChildren(null, 0);
     return result;
   }
 
