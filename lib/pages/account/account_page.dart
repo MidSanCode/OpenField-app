@@ -352,55 +352,14 @@ class _AccountPageState extends State<AccountPage> {
           ),
         ],
 
-        // ---- Sections (app settings + account settings) ----
+        // ---- Sections grouped by related functionality ----
         _SettingsSection(
-          title: 'appSettings'.tr(),
+          title: 'account'.tr(),
           children: [
-            ListTile(
-              minLeadingWidth: 48,
-              leading: const Icon(Icons.settings_outlined),
-              title: Text('settings'.tr()),
-              subtitle: Text(
-                'appSettings'.tr(),
-                style: const TextStyle(fontSize: 12),
-              ),
-              contentPadding: const EdgeInsets.only(left: 24, right: 17),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsPage()),
-                );
-              },
-            ),
-          ],
-        ),
-        _SettingsSection(
-          title: 'accountSettings'.tr(),
-          children: [
-            if (user != null) ...[
-              ListTile(
-                minLeadingWidth: 48,
-                leading: const Icon(Icons.attach_file),
-                title: Text('myAttachments'.tr()),
-                subtitle: Text(
-                  'manageAttachmentsHint'.tr(),
-                  style: const TextStyle(fontSize: 12),
-                ),
-                contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AttachmentsPage()),
-                  );
-                },
-              ),
-              const Divider(height: 1),
-              ListTile(
-                minLeadingWidth: 48,
-                leading: const Icon(Icons.badge_outlined),
-                title: Text('accountSettings'.tr()),
-                contentPadding: const EdgeInsets.only(left: 24, right: 17),
-                trailing: const Icon(Icons.chevron_right),
+            if (user != null)
+              _NavTile(
+                icon: Icons.badge_outlined,
+                title: 'accountSettings'.tr(),
                 onTap: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const AccountSettingsPage()),
@@ -408,35 +367,22 @@ class _AccountPageState extends State<AccountPage> {
                   if (mounted) setState(() {});
                 },
               ),
-              const Divider(height: 1),
-            ],
-            ListTile(
-              minLeadingWidth: 48,
-              leading: const Icon(Icons.emoji_events_outlined),
-              title: Text('tasks'.tr()),
-              subtitle: Text(
-                'taskMilestones'.tr(),
-                style: const TextStyle(fontSize: 12),
-              ),
-              contentPadding: const EdgeInsets.only(left: 24, right: 17),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const TasksPage()),
-                );
-              },
+            if (user != null) const Divider(height: 1),
+            _NavTile(
+              icon: Icons.logout,
+              title: 'logout'.tr(),
+              showChevron: false,
+              onTap: _logout,
             ),
-            const Divider(height: 1),
-            ListTile(
-              minLeadingWidth: 48,
-              leading: const Icon(Icons.account_balance_wallet_outlined),
-              title: Text('wallet'.tr()),
-              subtitle: Text(
-                'walletHint'.tr(),
-                style: const TextStyle(fontSize: 12),
-              ),
-              contentPadding: const EdgeInsets.only(left: 24, right: 17),
-              trailing: const Icon(Icons.chevron_right),
+          ],
+        ),
+        _SettingsSection(
+          title: 'walletAndRewards'.tr(),
+          children: [
+            _NavTile(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'wallet'.tr(),
+              subtitle: 'walletHint'.tr(),
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const WalletPage()),
@@ -444,29 +390,57 @@ class _AccountPageState extends State<AccountPage> {
               },
             ),
             const Divider(height: 1),
-            ListTile(
-              minLeadingWidth: 48,
-              leading: const Icon(Icons.bookmarks_outlined),
-              title: Text('favorites'.tr()),
-              subtitle: Text(
-                'favoritesPosts'.tr(),
-                style: const TextStyle(fontSize: 12),
+            _NavTile(
+              icon: Icons.emoji_events_outlined,
+              title: 'tasks'.tr(),
+              subtitle: 'taskMilestones'.tr(),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TasksPage()),
+                );
+              },
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: 'myContent'.tr(),
+          children: [
+            if (user != null)
+              _NavTile(
+                icon: Icons.attach_file,
+                title: 'myAttachments'.tr(),
+                subtitle: 'manageAttachmentsHint'.tr(),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AttachmentsPage()),
+                  );
+                },
               ),
-              contentPadding: const EdgeInsets.only(left: 24, right: 17),
-              trailing: const Icon(Icons.chevron_right),
+            if (user != null) const Divider(height: 1),
+            _NavTile(
+              icon: Icons.bookmarks_outlined,
+              title: 'favorites'.tr(),
+              subtitle: 'favoritesPosts'.tr(),
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const FavoritesPage()),
                 );
               },
             ),
-            const Divider(height: 1),
-            ListTile(
-              minLeadingWidth: 48,
-              leading: const Icon(Icons.logout),
-              title: Text('logout'.tr()),
-              contentPadding: const EdgeInsets.only(left: 24, right: 17),
-              onTap: _logout,
+          ],
+        ),
+        _SettingsSection(
+          title: 'appSettings'.tr(),
+          children: [
+            _NavTile(
+              icon: Icons.settings_outlined,
+              title: 'settings'.tr(),
+              subtitle: 'appSettings'.tr(),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+                );
+              },
             ),
           ],
         ),
@@ -647,6 +621,40 @@ class _SettingsSection extends StatelessWidget {
         ),
         ...children,
       ],
+    );
+  }
+}
+
+class _NavTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback? onTap;
+  final bool showChevron;
+
+  const _NavTile({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.onTap,
+    this.showChevron = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      minLeadingWidth: 48,
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: subtitle != null
+          ? Text(
+              subtitle!,
+              style: const TextStyle(fontSize: 12),
+            )
+          : null,
+      contentPadding: const EdgeInsets.only(left: 24, right: 17),
+      trailing: showChevron ? const Icon(Icons.chevron_right) : null,
+      onTap: onTap,
     );
   }
 }
