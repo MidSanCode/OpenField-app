@@ -126,7 +126,7 @@ class _PostsPageState extends State<PostsPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => _ComposerDialog(
-        onSubmit: (content, media) => _submitPost(content, media),
+        onSubmit: (content, media, visibility) => _submitPost(content, media, visibility: visibility),
         isPosting: _isPosting,
       ),
     );
@@ -143,16 +143,18 @@ class _PostsPageState extends State<PostsPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => _ComposerDialog(
-        onSubmit: (content, items) => _submitPost(content, items, postId: post.id),
+        onSubmit: (content, items, visibility) => _submitPost(content, items, postId: post.id, visibility: visibility),
         isPosting: _isPosting,
         initialContent: post.content,
         initialMedia: media,
+        initialVisibility: post.visibility,
         isEditing: true,
       ),
     );
   }
 
-  Future<bool> _submitPost(String content, List<ComposerMedia> media, {int? postId}) async {
+  Future<bool> _submitPost(String content, List<ComposerMedia> media,
+      {int? postId, String visibility = 'public'}) async {
     if (content.trim().isEmpty && media.isEmpty) return false;
 
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -169,9 +171,11 @@ class _PostsPageState extends State<PostsPage> {
         }
       }
       if (postId == null) {
-        await _apiService.createPost(content, token, attachmentIds: attachmentIds);
+        await _apiService.createPost(content, token,
+            attachmentIds: attachmentIds, visibility: visibility);
       } else {
-        await _apiService.updatePost(postId, content, token, attachmentIds: attachmentIds);
+        await _apiService.updatePost(postId, content, token,
+            attachmentIds: attachmentIds, visibility: visibility);
       }
       await _loadPosts();
       return true;
@@ -334,10 +338,11 @@ class _PostsPageState extends State<PostsPage> {
 }
 
 class _ComposerDialog extends StatefulWidget {
-  final Future<bool> Function(String content, List<ComposerMedia> media) onSubmit;
+  final Future<bool> Function(String content, List<ComposerMedia> media, String visibility) onSubmit;
   final bool isPosting;
   final String initialContent;
   final List<ComposerMedia> initialMedia;
+  final String initialVisibility;
   final bool isEditing;
 
   const _ComposerDialog({
@@ -345,6 +350,7 @@ class _ComposerDialog extends StatefulWidget {
     required this.isPosting,
     this.initialContent = '',
     this.initialMedia = const [],
+    this.initialVisibility = 'public',
     this.isEditing = false,
   });
 
@@ -356,6 +362,7 @@ class _ComposerDialogState extends State<_ComposerDialog> {
   final DraftService _draftService = DraftService();
   late final TextEditingController _controller;
   late List<ComposerMedia> _media;
+  late String _visibility;
   String? _currentDraftId;
   bool _isSubmitting = false;
 
@@ -364,6 +371,7 @@ class _ComposerDialogState extends State<_ComposerDialog> {
     super.initState();
     _controller = TextEditingController(text: widget.initialContent);
     _media = List.of(widget.initialMedia);
+    _visibility = widget.initialVisibility;
   }
 
   @override
@@ -443,7 +451,7 @@ class _ComposerDialogState extends State<_ComposerDialog> {
 
   Future<void> _submit() async {
     setState(() => _isSubmitting = true);
-    final success = await widget.onSubmit(_controller.text.trim(), _media);
+    final success = await widget.onSubmit(_controller.text.trim(), _media, _visibility);
     if (mounted && success) {
       final draftId = _currentDraftId;
       if (draftId != null) {
@@ -576,6 +584,19 @@ class _ComposerDialogState extends State<_ComposerDialog> {
                     tooltip: 'save'.tr(),
                   ),
                   const Spacer(),
+                  PopupMenuButton<String>(
+                    tooltip: 'visibility'.tr(),
+                    icon: Icon(_visibilityIcon(_visibility)),
+                    initialValue: _visibility,
+                    onSelected: (value) => setState(() => _visibility = value),
+                    itemBuilder: (context) => [
+                      for (final v in const ['public', 'login', 'friends', 'private'])
+                        PopupMenuItem(
+                          value: v,
+                          child: _VisibilityItem(value: v),
+                        ),
+                    ],
+                  ),
                   IconButton(
                     onPressed: isBusy ? null : _openDrafts,
                     icon: const Icon(Icons.drafts_outlined),
@@ -593,6 +614,21 @@ class _ComposerDialogState extends State<_ComposerDialog> {
         ),
       ),
     );
+  }
+
+  IconData _visibilityIcon(String value) {
+    switch (value) {
+      case 'public':
+        return Icons.public;
+      case 'login':
+        return Icons.login;
+      case 'friends':
+        return Icons.group;
+      case 'private':
+        return Icons.lock_outline;
+      default:
+        return Icons.public;
+    }
   }
 
   Widget _buildThumb(ComposerMedia media, ThemeData theme) {
@@ -843,5 +879,42 @@ class _DraftBoxDialogState extends State<_DraftBoxDialog> {
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+}
+
+/// A post visibility choice shown inside the composer's visibility menu.
+class _VisibilityItem extends StatelessWidget {
+  final String value;
+
+  const _VisibilityItem({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (icon, title, hint) = switch (value) {
+      'public' => (Icons.public, 'visibilityPublic', 'visibilityPublicHint'),
+      'login' => (Icons.login, 'visibilityLogin', 'visibilityLoginHint'),
+      'friends' => (Icons.group, 'visibilityFriends', 'visibilityFriendsHint'),
+      'private' => (Icons.lock_outline, 'visibilityPrivate', 'visibilityPrivateHint'),
+      _ => (Icons.public, 'visibilityPublic', 'visibilityPublicHint'),
+    };
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: theme.colorScheme.primary),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title.tr(), style: theme.textTheme.bodyLarge),
+            Text(
+              hint.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }

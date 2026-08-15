@@ -14,6 +14,9 @@ class Post {
   final int replyCount;
   final int viewCount;
   final int uniqueViews;
+  final int favoriteCount;
+  final String visibility;
+  final bool isFavorite;
   final Map<String, int> reactions;
   final String myReaction;
 
@@ -31,6 +34,9 @@ class Post {
     this.replyCount = 0,
     this.viewCount = 0,
     this.uniqueViews = 0,
+    this.favoriteCount = 0,
+    this.visibility = 'public',
+    this.isFavorite = false,
     this.reactions = const {},
     this.myReaction = '',
   });
@@ -71,6 +77,9 @@ class Post {
       replyCount: _asInt(json['reply_count']),
       viewCount: _asInt(json['view_count']),
       uniqueViews: _asInt(json['unique_views']),
+      favoriteCount: _asInt(json['favorite_count']),
+      visibility: json['visibility'] as String? ?? 'public',
+      isFavorite: json['is_favorite'] as bool? ?? false,
       reactions: reactions,
       myReaction: json['my_reaction'] as String? ?? '',
     );
@@ -93,5 +102,47 @@ class Post {
     } catch (_) {
       return null;
     }
+  }
+
+  Post copyWith({
+    int? id,
+    int? userId,
+    String? content,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? username,
+    String? nickname,
+    String? avatarUrl,
+    bool? isVerified,
+    List<Attachment>? attachments,
+    int? replyCount,
+    int? viewCount,
+    int? uniqueViews,
+    int? favoriteCount,
+    String? visibility,
+    bool? isFavorite,
+    Map<String, int>? reactions,
+    String? myReaction,
+  }) {
+    return Post(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      content: content ?? this.content,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      username: username ?? this.username,
+      nickname: nickname ?? this.nickname,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      isVerified: isVerified ?? this.isVerified,
+      attachments: attachments ?? this.attachments,
+      replyCount: replyCount ?? this.replyCount,
+      viewCount: viewCount ?? this.viewCount,
+      uniqueViews: uniqueViews ?? this.uniqueViews,
+      favoriteCount: favoriteCount ?? this.favoriteCount,
+      visibility: visibility ?? this.visibility,
+      isFavorite: isFavorite ?? this.isFavorite,
+      reactions: reactions ?? this.reactions,
+      myReaction: myReaction ?? this.myReaction,
+    );
   }
 }

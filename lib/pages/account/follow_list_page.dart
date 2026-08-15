@@ -7,13 +7,17 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
-enum FollowListType { followers, following }
+enum FollowListType { followers, following, friends }
 
 class FollowListPage extends StatefulWidget {
   final int userId;
   final FollowListType initialTab;
 
-  const FollowListPage({super.key, required this.userId, this.initialTab = FollowListType.followers});
+  const FollowListPage({
+    super.key,
+    required this.userId,
+    this.initialTab = FollowListType.followers,
+  });
 
   @override
   State<FollowListPage> createState() => _FollowListPageState();
@@ -24,6 +28,7 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
   late TabController _tabController;
   List<User> _followers = [];
   List<User> _following = [];
+  List<User> _friends = [];
   bool _isLoading = true;
   Object? _error;
 
@@ -31,9 +36,13 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 2,
+      length: 3,
       vsync: this,
-      initialIndex: widget.initialTab == FollowListType.following ? 1 : 0,
+      initialIndex: switch (widget.initialTab) {
+        FollowListType.following => 1,
+        FollowListType.friends => 2,
+        FollowListType.followers => 0,
+      },
     );
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) _loadCurrentTab();
@@ -50,22 +59,30 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
   Future<void> _loadCurrentTab() async {
     final auth = Provider.of<AuthService>(context, listen: false);
     final token = auth.accessToken;
-    final isFollowers =
-        _tabController.animation?.value == 0.0;
+    final index = _tabController.index.ceil().toInt();
     setState(() {
       _isLoading = true;
       _error = null;
     });
     try {
-      final users = isFollowers
-          ? await _apiService.listFollowers(widget.userId, token: token)
-          : await _apiService.listFollowing(widget.userId, token: token);
+      final List<User> users;
+      switch (index) {
+        case 0:
+          users = await _apiService.listFollowers(widget.userId, token: token);
+        case 1:
+          users = await _apiService.listFollowing(widget.userId, token: token);
+        default:
+          users = await _apiService.listFriends(widget.userId, token: token);
+      }
       if (!mounted) return;
       setState(() {
-        if (isFollowers) {
-          _followers = users;
-        } else {
-          _following = users;
+        switch (index) {
+          case 0:
+            _followers = users;
+          case 1:
+            _following = users;
+          default:
+            _friends = users;
         }
         _isLoading = false;
       });
@@ -80,28 +97,35 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final index = _tabController.index.ceil().toInt();
     return Scaffold(
       appBar: AppBar(
-        title: Text(_tabController.animation?.value == 0.0 ? 'followers'.tr() : 'following'.tr()),
+        title: Text(switch (index) {
+          0 => 'followers'.tr(),
+          1 => 'following'.tr(),
+          _ => 'friends'.tr(),
+        }),
         bottom: TabBar(
           controller: _tabController,
           tabs: [
             Tab(text: 'followers'.tr()),
             Tab(text: 'following'.tr()),
+            Tab(text: 'friends'.tr()),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildUserList(_followers),
-          _buildUserList(_following),
+          _buildUserList(_followers, emptyText: 'noPosts'.tr()),
+          _buildUserList(_following, emptyText: 'noPosts'.tr()),
+          _buildUserList(_friends, emptyText: 'friendsEmpty'.tr()),
         ],
       ),
     );
   }
 
-  Widget _buildUserList(List<User> users) {
+  Widget _buildUserList(List<User> users, {String? emptyText}) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -118,9 +142,7 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
       );
     }
     if (users.isEmpty) {
-      return Center(
-        child: Text('noPosts'.tr()),
-      );
+      return Center(child: Text(emptyText ?? 'noPosts'.tr()));
     }
     return ListView.builder(
       itemCount: users.length,

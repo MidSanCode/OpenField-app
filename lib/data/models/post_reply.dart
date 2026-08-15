@@ -16,6 +16,8 @@ class PostReply {
   final String? parentContent;
   final String? parentName;
   final List<Attachment> attachments;
+  final int favoriteCount;
+  final bool isFavorite;
 
   const PostReply({
     required this.id,
@@ -33,6 +35,8 @@ class PostReply {
     this.parentContent,
     this.parentName,
     this.attachments = const [],
+    this.favoriteCount = 0,
+    this.isFavorite = false,
   });
 
   bool get isDeleted => deletedAt != null;
@@ -64,6 +68,8 @@ class PostReply {
               .map((a) => Attachment.fromJson(a))
               .toList() ??
           const [],
+      favoriteCount: _asInt(json['favorite_count']),
+      isFavorite: json['is_favorite'] as bool? ?? false,
     );
   }
 

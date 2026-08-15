@@ -120,18 +120,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
         _isSending = false;
         _replyingTo = null;
         _pendingAttachment = null;
-        _post = Post(
-          id: _post.id,
-          userId: _post.userId,
-          content: _post.content,
-          createdAt: _post.createdAt,
-          updatedAt: _post.updatedAt,
-          username: _post.username,
-          nickname: _post.nickname,
-          avatarUrl: _post.avatarUrl,
-          attachments: _post.attachments,
-          replyCount: _post.replyCount + 1,
-        );
+        _post = _post.copyWith(replyCount: _post.replyCount + 1);
       });
     } catch (e) {
       if (!mounted) return;
@@ -144,49 +133,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
     setState(() {
       _replyingTo = reply;
     });
-  }
-
-  Future<void> _onReplyLongPress(PostReply reply) async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final token = authService.accessToken;
-    if (token == null) return;
-    final isMine = reply.userId == authService.user?.id;
-
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.reply_outlined),
-              title: Text('reply'.tr()),
-              onTap: () => Navigator.of(ctx).pop('reply'),
-            ),
-            if (isMine) ...[
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: Text('edit'.tr()),
-                onTap: () => Navigator.of(ctx).pop('edit'),
-              ),
-              ListTile(
-                leading: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error),
-                title: Text('delete'.tr(), style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-                onTap: () => Navigator.of(ctx).pop('delete'),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-    if (action == null) return;
-    if (action == 'reply') {
-      _replyTo(reply);
-    } else if (action == 'edit') {
-      await _editReply(reply);
-    } else if (action == 'delete') {
-      await _deleteReply(reply);
-    }
   }
 
   Future<void> _editReply(PostReply reply) async {
@@ -243,16 +189,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
       if (!mounted) return;
       setState(() {
         _replies = _replies.where((r) => r.id != reply.id).toList();
-        _post = Post(
-          id: _post.id,
-          userId: _post.userId,
-          content: _post.content,
-          createdAt: _post.createdAt,
-          updatedAt: _post.updatedAt,
-          username: _post.username,
-          nickname: _post.nickname,
-          avatarUrl: _post.avatarUrl,
-          attachments: _post.attachments,
+        _post = _post.copyWith(
           replyCount: (_post.replyCount - 1).clamp(0, 1 << 30),
         );
       });
@@ -283,12 +220,26 @@ class _PostDetailPageState extends State<PostDetailPage> {
   }
 
   Widget _buildReplyItem(PostReply reply, int depth) {
+    final authService = Provider.of<AuthService>(context);
+    final currentUserId = authService.user?.id;
     return Padding(
       padding: EdgeInsets.only(left: depth * 16),
       child: ReplyTile(
         reply: reply,
         onTap: () => _openReplyDetail(reply),
-        onLongPress: () => _onReplyLongPress(reply),
+        onReply: () => _replyTo(reply),
+        token: authService.accessToken,
+        isMine: reply.userId == currentUserId,
+        onEdit: () => _editReply(reply),
+        onDelete: () => _deleteReply(reply),
+        onReplyChanged: (updated) => setState(() {
+          _replies = _replies.map((r) => r.id == updated.id ? updated : r).toList();
+        }),
+        onUnauthenticated: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('loginWithOIDC'.tr())),
+          );
+        },
         onTapAuthor: () => _openAuthorProfile(reply.userId),
       ),
     );

@@ -1,37 +1,120 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:openfield/data/models/post_reply.dart';
+import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/widgets/attachment_view.dart';
+import 'package:openfield/widgets/content_context_menu.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 /// A single reply row used in post detail and reply detail pages.
-class ReplyTile extends StatelessWidget {
+class ReplyTile extends StatefulWidget {
   final PostReply reply;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
   final VoidCallback? onTapAuthor;
+  final VoidCallback? onReply;
+  final String? token;
+  final bool isMine;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final ValueChanged<PostReply>? onReplyChanged;
+  final VoidCallback? onUnauthenticated;
 
   const ReplyTile({
     super.key,
     required this.reply,
     required this.onTap,
-    required this.onLongPress,
     this.onTapAuthor,
+    this.onReply,
+    this.token,
+    this.isMine = false,
+    this.onEdit,
+    this.onDelete,
+    this.onReplyChanged,
+    this.onUnauthenticated,
   });
+
+  @override
+  State<ReplyTile> createState() => _ReplyTileState();
+}
+
+class _ReplyTileState extends State<ReplyTile> {
+  PostReply get reply => widget.reply;
+
+  Future<void> _showContextMenu([Offset? position]) async {
+    final items = buildContentMenuItems(
+      isMine: widget.isMine,
+      isFavorite: reply.isFavorite,
+      includeReply: true,
+    );
+    final action = position != null
+        ? await showContentMenuAt(context, position, items: items)
+        : await showContentBottomSheet(context, items: items);
+    if (action == null || !mounted) return;
+    await _handleAction(action);
+  }
+
+  Future<void> _handleAction(String action) async {
+    switch (action) {
+      case ContentAction.copyLink:
+        await Clipboard.setData(
+          ClipboardData(text: replyLink(reply.postId, reply.id)),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('linkCopied'.tr())),
+          );
+        }
+      case ContentAction.reply:
+        widget.onReply?.call();
+      case ContentAction.edit:
+        widget.onEdit?.call();
+      case ContentAction.delete:
+        widget.onDelete?.call();
+      case ContentAction.favorite:
+      case ContentAction.unfavorite:
+        await _toggleFavorite();
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    final token = widget.token;
+    if (token == null || token.isEmpty) {
+      widget.onUnauthenticated?.call();
+      return;
+    }
+    try {
+      final api = ApiService();
+      final updated = reply.isFavorite
+          ? await api.unfavoriteReply(reply.postId, reply.id, token)
+          : await api.favoriteReply(reply.postId, reply.id, token);
+      if (!mounted) return;
+      widget.onReplyChanged?.call(updated);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Padding(
+    return GestureDetector(
+      onSecondaryTapDown: (details) => _showContextMenu(details.globalPosition),
+      child: InkWell(
+        onTap: widget.onTap,
+        onLongPress: () => _showContextMenu(),
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             InkWell(
-              onTap: onTapAuthor,
+              onTap: widget.onTapAuthor,
               borderRadius: BorderRadius.circular(16),
               child: CircleAvatar(
                 radius: 16,
@@ -52,7 +135,7 @@ class ReplyTile extends StatelessWidget {
                   Row(
                     children: [
                       InkWell(
-                        onTap: onTapAuthor,
+                        onTap: widget.onTapAuthor,
                         child: VerifiedName(
                           name: reply.authorName,
                           verified: reply.isVerified,
@@ -111,6 +194,7 @@ class ReplyTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

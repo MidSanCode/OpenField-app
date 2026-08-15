@@ -256,6 +256,25 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
         ),
+        const SizedBox(width: 24),
+        InkWell(
+          onTap: () => _openFollowList(FollowListType.friends),
+          child: RichText(
+            text: TextSpan(
+              style: theme.textTheme.bodyMedium,
+              children: [
+                TextSpan(
+                  text: '${user.friendCount}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                TextSpan(
+                  text: ' ${'friends'.tr()}',
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -265,6 +284,33 @@ class _ProfilePageState extends State<ProfilePage> {
     if (auth.accessToken == null) return const SizedBox.shrink();
     final isSelf = auth.user?.id == user.id;
     if (isSelf) return const SizedBox.shrink();
+
+    if (user.isFriend) {
+      return Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Chip(
+              avatar: Icon(Icons.group, size: 16, color: theme.colorScheme.primary),
+              label: Text('friends'.tr()),
+              visualDensity: VisualDensity.compact,
+              backgroundColor: theme.colorScheme.primaryContainer,
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: _followLoading ? null : () => _toggleFollow(false),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(140, 36),
+                side: BorderSide(color: theme.colorScheme.outline),
+              ),
+              child: _followLoading
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text('unfollow'.tr()),
+            ),
+          ],
+        ),
+      );
+    }
 
     if (user.isFollowing) {
       return Center(
@@ -303,6 +349,7 @@ class _ProfilePageState extends State<ProfilePage> {
       _user = _user!.copyWith(
         isFollowing: follow,
         followerCount: _user!.followerCount + followerDelta,
+        isFriend: false,
       );
     });
 

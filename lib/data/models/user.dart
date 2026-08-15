@@ -86,7 +86,9 @@ class User {
   final String verifiedBy;
   final int followerCount;
   final int followingCount;
+  final int friendCount;
   final bool isFollowing;
+  final bool isFriend;
   final int exp;
   final DateTime? lastDailyBonusAt;
   final bool hasPin;
@@ -111,7 +113,9 @@ class User {
     this.verifiedBy = '',
     this.followerCount = 0,
     this.followingCount = 0,
+    this.friendCount = 0,
     this.isFollowing = false,
+    this.isFriend = false,
     this.exp = 0,
     this.lastDailyBonusAt,
     this.hasPin = false,
@@ -138,7 +142,9 @@ class User {
       verifiedBy: json['verified_by'] as String? ?? '',
       followerCount: (json['follower_count'] as num?)?.toInt() ?? 0,
       followingCount: (json['following_count'] as num?)?.toInt() ?? 0,
+      friendCount: (json['friend_count'] as num?)?.toInt() ?? 0,
       isFollowing: json['is_following'] as bool? ?? false,
+      isFriend: json['is_friend'] as bool? ?? false,
       exp: (json['exp'] as num?)?.toInt() ?? 0,
       lastDailyBonusAt: _asDate(json['last_daily_bonus_at']),
       hasPin: json['has_pin'] as bool? ?? false,
@@ -278,7 +284,9 @@ class User {
     String? verifiedBy,
     int? followerCount,
     int? followingCount,
+    int? friendCount,
     bool? isFollowing,
+    bool? isFriend,
     int? exp,
     DateTime? lastDailyBonusAt,
     bool? hasPin,
@@ -303,7 +311,9 @@ class User {
       verifiedBy: verifiedBy ?? this.verifiedBy,
       followerCount: followerCount ?? this.followerCount,
       followingCount: followingCount ?? this.followingCount,
+      friendCount: friendCount ?? this.friendCount,
       isFollowing: isFollowing ?? this.isFollowing,
+      isFriend: isFriend ?? this.isFriend,
       exp: exp ?? this.exp,
       lastDailyBonusAt: lastDailyBonusAt ?? this.lastDailyBonusAt,
       hasPin: hasPin ?? this.hasPin,

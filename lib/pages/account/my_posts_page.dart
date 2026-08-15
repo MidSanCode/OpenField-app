@@ -125,6 +125,15 @@ class _MyPostsPageState extends State<MyPostsPage> {
           return PostCard(
             post: post,
             isMine: true,
+            token: Provider.of<AuthService>(context).accessToken,
+            onPostChanged: (updated) => setState(() {
+              _posts = _posts!.map((p) => p.id == updated.id ? updated : p).toList();
+            }),
+            onUnauthenticated: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('loginWithOIDC'.tr())),
+              );
+            },
             onDelete: () => _deletePost(post),
             onTapAuthor: () {
               Navigator.of(context).push(
@@ -136,7 +145,8 @@ class _MyPostsPageState extends State<MyPostsPage> {
                 MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
               );
             },
-          );        },
+          );
+        },
       );
     }
 

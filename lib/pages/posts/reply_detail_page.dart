@@ -146,48 +146,6 @@ class _ReplyDetailPageState extends State<ReplyDetailPage> {
     setState(() => _replyingTo = reply);
   }
 
-  Future<void> _onReplyLongPress(PostReply reply) async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final token = authService.accessToken;
-    final isMine = reply.userId == authService.user?.id;
-
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.reply_outlined),
-              title: Text('reply'.tr()),
-              onTap: () => Navigator.of(ctx).pop('reply'),
-            ),
-            if (isMine) ...[
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: Text('edit'.tr()),
-                onTap: () => Navigator.of(ctx).pop('edit'),
-              ),
-              ListTile(
-                leading: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error),
-                title: Text('delete'.tr(), style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-                onTap: () => Navigator.of(ctx).pop('delete'),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-    if (action == null) return;
-    if (action == 'reply') {
-      _replyTo(reply);
-    } else if (action == 'edit' && token != null) {
-      await _editReply(reply, token);
-    } else if (action == 'delete' && token != null) {
-      await _deleteReply(reply, token);
-    }
-  }
-
   Future<void> _editReply(PostReply reply, String token) async {
     final controller = TextEditingController(text: reply.content);
     final content = await showDialog<String>(
@@ -281,12 +239,7 @@ class _ReplyDetailPageState extends State<ReplyDetailPage> {
                         margin: const EdgeInsets.only(bottom: 4),
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         color: Theme.of(context).colorScheme.surfaceContainerLow,
-                        child: ReplyTile(
-                          reply: _reply,
-                          onTap: () => _openAuthorProfile(_reply.userId),
-                          onLongPress: () => _onReplyLongPress(_reply),
-                          onTapAuthor: () => _openAuthorProfile(_reply.userId),
-                        ),
+                        child: _buildReplyTile(_reply, onTap: () => _openAuthorProfile(_reply.userId)),
                       ),
                       const Divider(),
                       if (_error != null && _replies.isEmpty)
@@ -300,11 +253,9 @@ class _ReplyDetailPageState extends State<ReplyDetailPage> {
                           ),
                         )
                       else
-                        ..._descendants().map((r) => ReplyTile(
-                              reply: r,
+                        ..._descendants().map((r) => _buildReplyTile(
+                              r,
                               onTap: () => _openReplyDetail(r),
-                              onLongPress: () => _onReplyLongPress(r),
-                              onTapAuthor: () => _openAuthorProfile(r.userId),
                             )),
                       if (_descendants().isEmpty)
                         Padding(
@@ -323,6 +274,32 @@ class _ReplyDetailPageState extends State<ReplyDetailPage> {
   void _openAuthorProfile(int userId) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => ProfilePage(userId: userId)),
+    );
+  }
+
+  /// Builds a [ReplyTile] wired to the page-level reply/edit/delete/favorite
+  /// handlers. Right-click and long-press open the shared context menu.
+  Widget _buildReplyTile(PostReply reply, {required VoidCallback onTap}) {
+    final authService = Provider.of<AuthService>(context);
+    final currentUserId = authService.user?.id;
+    return ReplyTile(
+      reply: reply,
+      onTap: onTap,
+      onReply: () => _replyTo(reply),
+      token: authService.accessToken,
+      isMine: reply.userId == currentUserId,
+      onEdit: () => _editReply(reply, authService.accessToken ?? ''),
+      onDelete: () => _deleteReply(reply, authService.accessToken ?? ''),
+      onReplyChanged: (updated) => setState(() {
+        _replies = _replies.map((r) => r.id == updated.id ? updated : r).toList();
+        if (updated.id == _reply.id) _reply = updated;
+      }),
+      onUnauthenticated: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('loginWithOIDC'.tr())),
+        );
+      },
+      onTapAuthor: () => _openAuthorProfile(reply.userId),
     );
   }
 

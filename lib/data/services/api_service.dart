@@ -669,11 +669,16 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load user posts'));
   }
 
-  Future<Post> createPost(String content, String accessToken, {List<int> attachmentIds = const []}) async {
+  Future<Post> createPost(String content, String accessToken,
+      {List<int> attachmentIds = const [], String visibility = 'public'}) async {
     final response = await _post(
       Uri.parse('$baseUrl/posts'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'content': content, 'attachment_ids': attachmentIds}),
+      body: jsonEncode({
+        'content': content,
+        'attachment_ids': attachmentIds,
+        'visibility': visibility,
+      }),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 201 && data != null) {
@@ -683,11 +688,17 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to create post'));
   }
 
-  Future<Post> updatePost(int postId, String content, String accessToken, {List<int> attachmentIds = const []}) async {
+  Future<Post> updatePost(int postId, String content, String accessToken,
+      {List<int> attachmentIds = const [], String? visibility}) async {
+    final body = <String, dynamic>{
+      'content': content,
+      'attachment_ids': attachmentIds,
+    };
+    if (visibility != null) body['visibility'] = visibility;
     final response = await _put(
       Uri.parse('$baseUrl/posts/$postId'),
       headers: _headers(token: accessToken),
-      body: jsonEncode({'content': content, 'attachment_ids': attachmentIds}),
+      body: jsonEncode(body),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 200 && data != null) {
@@ -797,6 +808,104 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to remove reaction'));
   }
 
+  // ---- Favorites ----
+
+  /// Marks a post as favorited by the current user.
+  Future<Post> favoritePost(int postId, String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/posts/$postId/favorite'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Post.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to favorite post'));
+  }
+
+  /// Removes the current user's favorite from a post.
+  Future<Post> unfavoritePost(int postId, String accessToken) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/posts/$postId/favorite'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Post.fromJson(data);
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to unfavorite post'));
+  }
+
+  /// Marks a reply as favorited by the current user.
+  Future<PostReply> favoriteReply(int postId, int replyId, String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/posts/$postId/replies/$replyId/favorite'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return PostReply.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to favorite reply'));
+  }
+
+  /// Removes the current user's favorite from a reply.
+  Future<PostReply> unfavoriteReply(int postId, int replyId, String accessToken) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/posts/$postId/replies/$replyId/favorite'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return PostReply.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to unfavorite reply'));
+  }
+
+  /// Lists the current user's favorited posts. [userId] must be the current
+  /// user's own id; the server rejects requests for another user's favorites.
+  Future<List<Post>> listFavoritePosts(String accessToken, int userId,
+      {int page = 1, int limit = 20}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/users/$userId/favorites/posts?page=$page&limit=$limit'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['posts'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((p) => Post.fromJson(p)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load favorite posts'));
+  }
+
+  /// Lists the current user's favorited replies. [userId] must be the current
+  /// user's own id; the server rejects requests for another user's favorites.
+  Future<List<PostReply>> listFavoriteReplies(String accessToken, int userId,
+      {int page = 1, int limit = 20}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/users/$userId/favorites/replies?page=$page&limit=$limit'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['replies'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((r) => PostReply.fromJson(r)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load favorite replies'));
+  }
+
   // ---- Follows ----
 
   Future<void> followUser(int userId, String accessToken) async {
@@ -853,6 +962,24 @@ class ApiService {
     }
     throw ApiException(
         response.statusCode, _decodeError(response, 'Failed to load following'));
+  }
+
+  /// Lists the users who mutually follow the given user (friends).
+  Future<List<User>> listFriends(int userId, {String? token, int page = 1, int limit = 50}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/users/$userId/friends?page=$page&limit=$limit'),
+      headers: _headers(token: token, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['users'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((u) => User.fromJson(u)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load friends'));
   }
 
   // ---- Wallet ----
