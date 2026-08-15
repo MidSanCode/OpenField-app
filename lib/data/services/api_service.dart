@@ -15,6 +15,7 @@ import '../models/user.dart';
 import '../models/wallet.dart';
 import '../models/task.dart';
 import '../models/transfer.dart';
+import '../models/membership.dart';
 
 /// Error raised when an API request fails, carrying the HTTP status code when
 /// the server responded, or null for network/parse failures.
@@ -1712,6 +1713,37 @@ class ApiService {
     }
     throw ApiException(response.statusCode,
         _decodeError(response, 'Failed to decline transfer'));
+  }
+
+  /// Fetches the user's membership state and the purchaseable tier catalog.
+  Future<MembershipStatus> getMembership(String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/membership'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return MembershipStatus.fromJson(data);
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to load membership'));
+  }
+
+  /// Purchases a membership tier with wallet coins, authorized by the 6-digit
+  /// payment PIN. Returns the updated membership status.
+  Future<MembershipStatus> purchaseMembership(
+      String accessToken, int level, String pin) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/membership/purchase'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'level': level, 'pin': pin}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return MembershipStatus.fromJson(data);
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to purchase membership'));
   }
 
   /// Fetches the server's public capability matrix (open, no auth).

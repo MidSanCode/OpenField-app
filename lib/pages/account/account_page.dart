@@ -13,6 +13,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
 import 'package:openfield/pages/account/favorites_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
+import 'package:openfield/pages/account/exp_history_page.dart';
+import 'package:openfield/pages/account/membership_page.dart';
 import 'package:openfield/pages/account/tasks_page.dart';
 import 'package:openfield/pages/account/wallet_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
@@ -373,6 +375,17 @@ class _AccountPageState extends State<AccountPage> {
           title: 'walletAndRewards'.tr(),
           children: [
             _NavTile(
+              icon: Icons.workspace_premium_outlined,
+              title: 'memberTitle'.tr(),
+              subtitle: 'memberNavHint'.tr(),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const MembershipPage()),
+                );
+              },
+            ),
+            const Divider(height: 1),
+            _NavTile(
               icon: Icons.account_balance_wallet_outlined,
               title: 'wallet'.tr(),
               subtitle: 'walletHint'.tr(),
@@ -463,7 +476,14 @@ class _AccountPageState extends State<AccountPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ExperienceBar(user: user),
+            ExperienceBar(
+              user: user,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ExpHistoryPage()),
+                );
+              },
+            ),
             const SizedBox(height: 12),
             Row(
               children: [

@@ -91,6 +91,8 @@ class User {
   final bool isFriend;
   final int exp;
   final DateTime? lastDailyBonusAt;
+  final int memberLevel;
+  final DateTime? memberExpiresAt;
   final bool hasPin;
   final DateTime? createdAt;
 
@@ -118,6 +120,8 @@ class User {
     this.isFriend = false,
     this.exp = 0,
     this.lastDailyBonusAt,
+    this.memberLevel = 0,
+    this.memberExpiresAt,
     this.hasPin = false,
     this.createdAt,
   });
@@ -147,6 +151,8 @@ class User {
       isFriend: json['is_friend'] as bool? ?? false,
       exp: (json['exp'] as num?)?.toInt() ?? 0,
       lastDailyBonusAt: _asDate(json['last_daily_bonus_at']),
+      memberLevel: (json['member_level'] as num?)?.toInt() ?? 0,
+      memberExpiresAt: _asDate(json['member_expires_at']),
       hasPin: json['has_pin'] as bool? ?? false,
       createdAt: _asDate(json['created_at']),
     );
@@ -155,6 +161,31 @@ class User {
   bool get hasOAuthBinding => oauth2Provider.isNotEmpty;
 
   String get displayName => nickname.isNotEmpty ? nickname : username;
+
+  /// Whether the user currently holds an active membership (a tier above 0
+  /// whose expiry is still in the future).
+  bool get hasActiveMembership {
+    final expires = memberExpiresAt;
+    return memberLevel > 0 && expires != null && expires.isAfter(DateTime.now());
+  }
+
+  /// The experience multiplier granted by the user's active membership tier
+  /// (2, 2.5, 3, 3.5), or 1 when not a member.
+  double get memberExpMultiplier {
+    final target = hasActiveMembership ? memberLevel : 0;
+    switch (target) {
+      case 1:
+        return 2.0;
+      case 2:
+        return 2.5;
+      case 3:
+        return 3.0;
+      case 4:
+        return 3.5;
+      default:
+        return 1.0;
+    }
+  }
 
   /// Experience-based level, derived with the same cumulative formula as the
   /// server. Total exp must reach the cumulative threshold of level 2 (=100)
@@ -289,6 +320,8 @@ class User {
     bool? isFriend,
     int? exp,
     DateTime? lastDailyBonusAt,
+    int? memberLevel,
+    DateTime? memberExpiresAt,
     bool? hasPin,
     DateTime? createdAt,
   }) {
@@ -316,6 +349,8 @@ class User {
       isFriend: isFriend ?? this.isFriend,
       exp: exp ?? this.exp,
       lastDailyBonusAt: lastDailyBonusAt ?? this.lastDailyBonusAt,
+      memberLevel: memberLevel ?? this.memberLevel,
+      memberExpiresAt: memberExpiresAt ?? this.memberExpiresAt,
       hasPin: hasPin ?? this.hasPin,
       createdAt: createdAt ?? this.createdAt,
     );

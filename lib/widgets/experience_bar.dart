@@ -4,9 +4,13 @@ import 'package:openfield/data/models/user.dart';
 /// Level + tier name + a colour-coded experience bar. The bar takes the colour
 /// (or gradient) of the user's current tier so progress is tinted per tier.
 class ExperienceBar extends StatelessWidget {
-  const ExperienceBar({super.key, required this.user});
+  const ExperienceBar({super.key, required this.user, this.onTap});
 
   final User user;
+
+  /// Optional tap handler (e.g. opens the exp history page). When null the bar
+  /// renders as before without any hit area.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +24,7 @@ class ExperienceBar extends StatelessWidget {
     final expTotal = '${user.exp}';
     final expNext = '${user.totalExpForNextLevel}';
 
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -89,6 +93,17 @@ class ExperienceBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+
+    final onTap = this.onTap;
+    if (onTap == null) return content;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: content,
+      ),
     );
   }
 }

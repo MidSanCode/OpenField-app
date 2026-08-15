@@ -15,6 +15,8 @@ class ClientCapabilities {
     'user.exp_levels',
     'user.daily_bonus',
     'user.adjust_exp',
+    'user.exp_history',
+    'user.membership',
     'chat.private_chat',
     'chat.group_chat',
     'chat.public_groups',
