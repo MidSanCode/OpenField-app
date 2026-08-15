@@ -367,13 +367,6 @@ class _AccountPageState extends State<AccountPage> {
                   if (mounted) setState(() {});
                 },
               ),
-            if (user != null) const Divider(height: 1),
-            _NavTile(
-              icon: Icons.logout,
-              title: 'logout'.tr(),
-              showChevron: false,
-              onTap: _logout,
-            ),
           ],
         ),
         _SettingsSection(
@@ -441,6 +434,13 @@ class _AccountPageState extends State<AccountPage> {
                   MaterialPageRoute(builder: (_) => const SettingsPage()),
                 );
               },
+            ),
+            const Divider(height: 1),
+            _NavTile(
+              icon: Icons.logout,
+              title: 'logout'.tr(),
+              showChevron: false,
+              onTap: _logout,
             ),
           ],
         ),
