@@ -1003,7 +1003,7 @@ class ApiService {
   Future<Wallet> adjustWallet(
     String accessToken, {
     required int userId,
-    required int amount,
+    required double amount,
     String? type,
     String? description,
   }) async {
@@ -1662,7 +1662,7 @@ class ApiService {
   /// authorizes the outgoing payment.
   Future<Transfer> createTransfer(String accessToken,
       {required int recipientId,
-      required int amount,
+      required double amount,
       String note = '',
       String pin = ''}) async {
     final response = await _post(

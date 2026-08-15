@@ -3,7 +3,7 @@ class Transfer {
   final int id;
   final int senderId;
   final int recipientId;
-  final int amount;
+  final double amount;
   final String status;
   final String note;
   final DateTime createdAt;
@@ -35,7 +35,7 @@ class Transfer {
       id: _asInt(json['id']),
       senderId: _asInt(json['sender_id']),
       recipientId: _asInt(json['recipient_id']),
-      amount: _asInt(json['amount']),
+      amount: _asDouble(json['amount']),
       status: json['status'] as String? ?? 'pending',
       note: json['note'] as String? ?? '',
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
@@ -58,6 +58,12 @@ class Transfer {
     if (v is int) return v;
     if (v is num) return v.toInt();
     if (v is String) return int.tryParse(v) ?? 0;
+    return 0;
+  }
+
+  static double _asDouble(Object? v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0;
     return 0;
   }
 

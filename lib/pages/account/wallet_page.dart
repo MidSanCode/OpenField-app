@@ -175,7 +175,7 @@ class _WalletPageState extends State<WalletPage> {
     );
   }
 
-  Widget _buildBalanceCard(BuildContext context, int balance) {
+  Widget _buildBalanceCard(BuildContext context, double balance) {
     final theme = Theme.of(context);
     return Card(
       margin: EdgeInsets.zero,
@@ -347,7 +347,7 @@ class _WalletPageState extends State<WalletPage> {
             children: [
               TextField(
                 controller: controller,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   labelText: 'transferAmount'.tr(),
                   errorText: errorText,
@@ -431,11 +431,10 @@ class _WalletPageState extends State<WalletPage> {
     return selected;
   }
 
-  int? _parseAmount(String text) {
+  double? _parseAmount(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return null;
-    final value = int.tryParse(trimmed);
-    return value;
+    return double.tryParse(trimmed);
   }
 
   String _statusLabel(Transfer t) {
@@ -464,8 +463,10 @@ class _WalletPageState extends State<WalletPage> {
     }
   }
 
-  String _formatAmount(int amount) {
-    return '$amount';
+  String _formatAmount(double amount) {
+    final s = amount.toStringAsFixed(2);
+    final trimmed = s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    return trimmed == '-0' ? '0' : trimmed;
   }
 
   String _formatTime(DateTime time) {
