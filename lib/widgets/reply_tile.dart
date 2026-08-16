@@ -6,6 +6,7 @@ import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/content_context_menu.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 /// A single reply row used in post detail and reply detail pages.
@@ -116,15 +117,12 @@ class _ReplyTileState extends State<ReplyTile> {
             InkWell(
               onTap: widget.onTapAuthor,
               borderRadius: BorderRadius.circular(16),
-              child: CircleAvatar(
+              child: Avatar(
                 radius: 16,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                backgroundImage: (reply.avatarUrl != null && reply.avatarUrl!.isNotEmpty)
-                    ? NetworkImage(reply.avatarUrl!)
-                    : null,
-                child: (reply.avatarUrl == null || reply.avatarUrl!.isEmpty)
-                    ? Text(reply.authorName.substring(0, 1).toUpperCase())
-                    : null,
+                imageUrl: reply.avatarUrl ?? '',
+                initials: reply.authorName.isNotEmpty
+                    ? reply.authorName.substring(0, 1).toUpperCase()
+                    : '',
               ),
             ),
             const SizedBox(width: 12),

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
+
+final Logger _imageLog = Logger('image');
 
 /// A [Image.network] that never renders a blank area.
 ///
@@ -51,6 +54,10 @@ class MediaImage extends StatelessWidget {
         );
       },
       errorBuilder: (context, error, stack) {
+        final status = error is NetworkImageLoadException
+            ? 'HTTP ${error.statusCode}'
+            : error.toString();
+        _imageLog.warning('image load failed: $url ($status)');
         return _MediaErrorPlaceholder(
           statusCode: error is NetworkImageLoadException
               ? error.statusCode

@@ -13,6 +13,7 @@ import 'package:openfield/pages/chat/conversation_page.dart';
 import 'package:openfield/pages/chat/consent_requests_page.dart';
 import 'package:openfield/pages/chat/discover_groups_page.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -521,18 +522,10 @@ class _ConversationTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            CircleAvatar(
+            Avatar(
               radius: 26,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              backgroundImage: conversation.avatarUrl.isNotEmpty
-                  ? NetworkImage(conversation.avatarUrl)
-                  : null,
-              child: conversation.avatarUrl.isEmpty
-                  ? Icon(
-                      conversation.isGroup ? Icons.group : Icons.person,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    )
-                  : null,
+              imageUrl: conversation.avatarUrl,
+              fallbackIcon: conversation.isGroup ? Icons.group : Icons.person,
             ),
             const SizedBox(width: 12),
             Expanded(

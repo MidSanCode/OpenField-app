@@ -10,6 +10,7 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/e2ee_service.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
 import 'package:openfield/widgets/verified_badge.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 
 /// Group chat settings (owner-managed): avatar/icon, name, public visibility,
 /// direct join, end-to-end encryption, group-wide mute and the member list with
@@ -215,14 +216,12 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Theme.of(ctx).colorScheme.primaryContainer,
-                backgroundImage: (member.avatarUrl != null && member.avatarUrl!.isNotEmpty)
-                    ? NetworkImage(member.avatarUrl!)
-                    : null,
-                child: (member.avatarUrl == null || member.avatarUrl!.isEmpty)
-                    ? Text(member.displayName.substring(0, 1).toUpperCase())
-                    : null,
+              leading: Avatar(
+                radius: 22,
+                imageUrl: member.avatarUrl ?? '',
+                initials: member.displayName.isNotEmpty
+                    ? member.displayName.substring(0, 1).toUpperCase()
+                    : '',
               ),
 title: VerifiedName(
                 name: member.displayName,
@@ -696,15 +695,10 @@ title: VerifiedName(
           Stack(
             clipBehavior: Clip.none,
             children: [
-              CircleAvatar(
+              Avatar(
                 radius: 32,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                backgroundImage:
-                    avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                child: avatarUrl.isEmpty
-                    ? Icon(Icons.group,
-                        size: 32, color: theme.colorScheme.onPrimaryContainer)
-                    : null,
+                imageUrl: avatarUrl,
+                fallbackIcon: Icons.group,
               ),
               if (_isOwner)
                 Positioned(
@@ -782,14 +776,12 @@ title: VerifiedName(
       children: [
         for (final m in members)
           ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              backgroundImage: (m.avatarUrl != null && m.avatarUrl!.isNotEmpty)
-                  ? NetworkImage(m.avatarUrl!)
-                  : null,
-              child: (m.avatarUrl == null || m.avatarUrl!.isEmpty)
-                  ? Text(m.displayName.substring(0, 1).toUpperCase())
-                  : null,
+            leading: Avatar(
+              radius: 22,
+              imageUrl: m.avatarUrl ?? '',
+              initials: m.displayName.isNotEmpty
+                  ? m.displayName.substring(0, 1).toUpperCase()
+                  : '',
             ),
 title: Row(
               mainAxisSize: MainAxisSize.min,

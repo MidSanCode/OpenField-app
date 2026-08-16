@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 class AppShell extends StatelessWidget {
@@ -99,9 +100,9 @@ class _AccountAvatarIcon extends StatelessWidget {
         size: size,
       );
     }
-    return CircleAvatar(
+    return Avatar(
       radius: size / 2,
-      backgroundImage: NetworkImage(avatarUrl),
+      imageUrl: avatarUrl,
     );
   }
 }

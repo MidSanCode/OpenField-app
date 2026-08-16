@@ -6,6 +6,7 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/widgets/verified_badge.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 
 enum FollowListType { followers, following, friends }
 
@@ -151,13 +152,10 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
   }
 
   Widget _buildUserRow(User user) {
-    final hasAvatar = user.avatarUrl.isNotEmpty;
     return ListTile(
-      leading: CircleAvatar(
-        backgroundImage: hasAvatar ? NetworkImage(user.avatarUrl) : null,
-        child: hasAvatar
-            ? null
-            : Text(user.username.isNotEmpty ? user.username[0].toUpperCase() : '?'),
+      leading: Avatar(
+        imageUrl: user.avatarUrl,
+        initials: user.username.isNotEmpty ? user.username[0].toUpperCase() : '?',
       ),
       title: VerifiedName(
         name: user.displayName,

@@ -6,6 +6,7 @@ import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/models/wallet.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 class WalletPage extends StatefulWidget {
@@ -598,14 +599,13 @@ class _RecipientPickerState extends State<_RecipientPicker> {
   }
 
   Widget _buildResultTile(BuildContext context, User user) {
-    final theme = Theme.of(context);
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: theme.colorScheme.primaryContainer,
-        backgroundImage: user.avatarUrl.isNotEmpty ? NetworkImage(user.avatarUrl) : null,
-        child: user.avatarUrl.isEmpty
-            ? Text(user.displayName.isEmpty ? '?' : user.displayName[0].toUpperCase())
-            : null,
+      leading: Avatar(
+        radius: 20,
+        imageUrl: user.avatarUrl,
+        initials: user.displayName.isEmpty
+            ? '?'
+            : user.displayName[0].toUpperCase(),
       ),
       title: Text(user.displayName),
       subtitle: Text('@${user.username}'),

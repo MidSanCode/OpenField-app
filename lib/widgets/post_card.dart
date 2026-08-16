@@ -8,6 +8,7 @@ import 'package:openfield/widgets/content_context_menu.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/post_reaction_bar.dart';
 import 'package:openfield/widgets/verified_badge.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 
 class PostCard extends StatefulWidget {
   final Post post;
@@ -132,14 +133,12 @@ class _PostCardState extends State<PostCard> {
                   InkWell(
                     onTap: widget.onTapAuthor,
                     borderRadius: BorderRadius.circular(24),
-                    child: CircleAvatar(
+                    child: Avatar(
                       radius: 20,
-                      backgroundImage: post.avatarUrl != null && post.avatarUrl!.isNotEmpty
-                          ? NetworkImage(post.avatarUrl!)
-                          : null,
-                      child: post.avatarUrl == null || post.avatarUrl!.isEmpty
-                          ? Text(post.authorName.substring(0, 1).toUpperCase())
-                          : null,
+                      imageUrl: post.avatarUrl ?? '',
+                      initials: post.authorName.isNotEmpty
+                          ? post.authorName.substring(0, 1).toUpperCase()
+                          : '',
                     ),
                   ),
                   const SizedBox(width: 12),

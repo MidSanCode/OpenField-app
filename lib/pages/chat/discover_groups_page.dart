@@ -8,6 +8,7 @@ import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/pages/chat/conversation_page.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 
 /// Search and browse public groups. Tapping a group opens it; groups the user
 /// has not joined yet show a "Join" button in place of the composer.
@@ -167,15 +168,11 @@ class _GroupTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            CircleAvatar(
+            Avatar(
               radius: 26,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              backgroundImage: group.avatarUrl.isNotEmpty
-                  ? NetworkImage(group.avatarUrl)
-                  : null,
-              child: group.avatarUrl.isEmpty
-                  ? const Icon(Icons.group, color: Colors.white)
-                  : null,
+              imageUrl: group.avatarUrl,
+              fallbackIcon: Icons.group,
+              foregroundColor: Colors.white,
             ),
             const SizedBox(width: 12),
             Expanded(

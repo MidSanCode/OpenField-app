@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/data/models/consent_request.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 class ConsentRequestsPage extends StatefulWidget {
@@ -128,15 +129,10 @@ class _ConsentRequestsPageState extends State<ConsentRequestsPage> {
         itemBuilder: (context, index) {
           final request = _requests[index];
           return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              backgroundImage: (request.requesterAvatar != null &&
-                      request.requesterAvatar!.isNotEmpty)
-                  ? NetworkImage(request.requesterAvatar!)
-                  : null,
-              child: (request.requesterAvatar == null || request.requesterAvatar!.isEmpty)
-                  ? Icon(Icons.person, color: Theme.of(context).colorScheme.onPrimaryContainer)
-                  : null,
+            leading: Avatar(
+              radius: 22,
+              imageUrl: request.requesterAvatar ?? '',
+              fallbackIcon: Icons.person,
             ),
             title: Text(request.requesterDisplay),
             subtitle: Text(

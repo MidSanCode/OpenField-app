@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/core/widgets/error_dialog.dart';
 import 'package:openfield/core/widgets/media_image.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
@@ -609,11 +610,11 @@ class _AccountPageState extends State<AccountPage> {
                   );
                 }
               },
-              child: CircleAvatar(
+              child: Avatar(
                 radius: avatarRadius,
+                imageUrl: avatarUrl ?? '',
+                fallbackIcon: Icons.person,
                 backgroundColor: theme.colorScheme.surface,
-                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                child: avatarUrl == null ? const Icon(Icons.person, size: 44) : null,
               ),
             ),
           ),

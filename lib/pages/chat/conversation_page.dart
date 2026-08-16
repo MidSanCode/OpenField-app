@@ -20,6 +20,7 @@ import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 
 class ConversationPage extends StatefulWidget {
   final int conversationId;
@@ -1514,17 +1515,12 @@ class _ConversationPageState extends State<ConversationPage> {
           for (final member in _mentionCandidates)
             ListTile(
               dense: true,
-              leading: CircleAvatar(
+              leading: Avatar(
                 radius: 14,
-                backgroundImage: (member.avatarUrl != null &&
-                        member.avatarUrl!.isNotEmpty)
-                    ? NetworkImage(member.avatarUrl!)
-                    : null,
-                child: (member.avatarUrl == null || member.avatarUrl!.isEmpty)
-                    ? Text(member.displayName.isEmpty
-                        ? '?'
-                        : member.displayName.substring(0, 1).toUpperCase())
-                    : null,
+                imageUrl: member.avatarUrl ?? '',
+                initials: member.displayName.isEmpty
+                    ? '?'
+                    : member.displayName.substring(0, 1).toUpperCase(),
               ),
               title: Text(member.groupNickname.isNotEmpty
                   ? member.groupNickname
@@ -1781,17 +1777,12 @@ class _MessageBubble extends StatelessWidget {
                   builder: (_) => ProfilePage(userId: message.senderId),
                 ),
               ),
-              child: CircleAvatar(
+              child: Avatar(
                 radius: 18,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                backgroundImage: (senderAvatar != null && senderAvatar!.isNotEmpty)
-                    ? NetworkImage(senderAvatar!)
-                    : null,
-                child: (senderAvatar == null || senderAvatar!.isEmpty)
-                    ? Text(message.displayName.isEmpty
-                        ? '?'
-                        : message.displayName.substring(0, 1).toUpperCase())
-                    : null,
+                imageUrl: senderAvatar ?? '',
+                initials: message.displayName.isEmpty
+                    ? '?'
+                    : message.displayName.substring(0, 1).toUpperCase(),
               ),
             ),
             const SizedBox(width: 8),
@@ -1967,17 +1958,12 @@ class _MessageBubble extends StatelessWidget {
           ),
           if (isMine) ...[
             const SizedBox(width: 8),
-            CircleAvatar(
+            Avatar(
               radius: 18,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              backgroundImage: (senderAvatar != null && senderAvatar!.isNotEmpty)
-                  ? NetworkImage(senderAvatar!)
-                  : null,
-              child: (senderAvatar == null || senderAvatar!.isEmpty)
-                  ? Text(message.displayName.isEmpty
-                      ? '?'
-                      : message.displayName.substring(0, 1).toUpperCase())
-                  : null,
+              imageUrl: senderAvatar ?? '',
+              initials: message.displayName.isEmpty
+                  ? '?'
+                  : message.displayName.substring(0, 1).toUpperCase(),
             ),
           ],
         ],

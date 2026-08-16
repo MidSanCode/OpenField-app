@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 /// Lets the user search for another user to start a private chat with, or
@@ -225,12 +226,10 @@ class _StartChatPageState extends State<StartChatPage> {
       itemBuilder: (context, index) {
         final user = _users[index];
         return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-            backgroundImage: user.avatarUrl.isNotEmpty ? NetworkImage(user.avatarUrl) : null,
-            child: user.avatarUrl.isEmpty
-                ? Icon(Icons.person, color: Theme.of(context).colorScheme.onPrimaryContainer)
-                : null,
+          leading: Avatar(
+            radius: 22,
+            imageUrl: user.avatarUrl,
+            fallbackIcon: Icons.person,
           ),
           title: Text(user.displayName),
           subtitle: user.username.isNotEmpty && user.username != user.displayName

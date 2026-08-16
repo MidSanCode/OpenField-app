@@ -54,9 +54,24 @@ void _initConsoleLogging() {
   };
   final originalOnError = FlutterError.onError;
   FlutterError.onError = (details) {
+    // Image fetch failures are expected (offline storage, deleted media, ...):
+    // collapse them to a single warning line + URL/HTTP status instead of a
+    // verbose `Flutter error: ...` SEVERE with a full stack. Non-image errors
+    // take the original noisy path so real bugs stay loud.
+    final exception = details.exception;
+    if (exception is NetworkImageLoadException) {
+      Logger.root.warning(
+        'image load failed: ${exception.uri} (HTTP ${exception.statusCode})',
+      );
+      return;
+    }
+    if (exception is SocketException) {
+      Logger.root.warning('image load failed: ${exception.message} (${exception.address}:${exception.port})');
+      return;
+    }
     Logger.root.severe(
-      'Flutter error: ${details.exception}',
-      details.exception,
+      'Flutter error: $exception',
+      exception,
       details.stack,
     );
     originalOnError?.call(details);

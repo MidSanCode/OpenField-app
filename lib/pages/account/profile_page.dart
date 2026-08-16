@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/core/widgets/media_image.dart';
+import 'package:openfield/core/widgets/avatar.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
@@ -135,13 +136,12 @@ class _ProfilePageState extends State<ProfilePage> {
               shape: BoxShape.circle,
               border: Border.all(color: theme.colorScheme.surface, width: 3),
             ),
-            child: CircleAvatar(
+            child: Avatar(
               radius: 44,
+              imageUrl: hasAvatar ? user.avatarUrl : '',
+              fallbackIcon: Icons.person,
               backgroundColor: theme.colorScheme.surface,
-              backgroundImage: hasAvatar ? NetworkImage(user.avatarUrl) : null,
-              child: hasAvatar
-                  ? null
-                  : Icon(Icons.person, size: 44, color: theme.colorScheme.onSurfaceVariant),
+              foregroundColor: theme.colorScheme.onSurfaceVariant,
             ),
           ),
         ),
