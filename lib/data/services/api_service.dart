@@ -437,18 +437,26 @@ class ApiService {
   /// Updates the current user's display-name styling (color, optional gradient
   /// end color, optional animated flag) and the reserved avatar frame, subject
   /// to their membership tier's caps. Returns the updated name-style fields.
+  ///
+  /// [colors] and [direction] are the multi-color gradient fields used by
+  /// Lv.3+ members; the legacy [color]/[colorTo] pair is sent alongside for
+  /// backward compatibility with older servers.
   Future<Map<String, dynamic>> updateNameStyle(
     String accessToken, {
     required String color,
     String colorTo = '',
     bool animated = false,
     String avatarFrame = '',
+    List<String> colors = const [],
+    String direction = '',
   }) async {
     final body = <String, dynamic>{
       'color': color,
       'color_to': colorTo,
       'dynamic': animated,
       'avatar_frame': avatarFrame,
+      'colors': colors,
+      'direction': direction,
     };
     final response = await _put(
       Uri.parse('$baseUrl/users/me/name-style'),
@@ -1787,6 +1795,27 @@ class ApiService {
     }
     throw ApiException(
         response.statusCode, _decodeError(response, 'Failed to load capabilities'));
+  }
+
+  /// Lists the current user's membership purchase/renewal/upgrade history,
+  /// newest first. Returns the page items.
+  Future<List<MembershipPurchase>> getMembershipPurchases(
+      String accessToken,
+      {int page = 1, int limit = 20}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/membership/purchases?page=$page&limit=$limit'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final items = (data['purchases'] as List?) ?? const [];
+      return items
+          .whereType<Map<String, dynamic>>()
+          .map(MembershipPurchase.fromJson)
+          .toList();
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to load membership purchases'));
   }
 
   Future<ChatMessage> editChatMessage(String accessToken, int conversationId, int messageId, String content) async {

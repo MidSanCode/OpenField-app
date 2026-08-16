@@ -101,6 +101,26 @@ class MemberTierBadge extends StatelessWidget {
   }
 }
 
+/// Maps a gradient direction key (as stored by the server) to a begin/end
+/// alignment pair. Unknown or empty values default to left→right.
+(Alignment, Alignment) gradientDirectionOf(String direction) {
+  switch (direction) {
+    case 'right_left':
+      return (Alignment.centerRight, Alignment.centerLeft);
+    case 'top_bottom':
+      return (Alignment.topCenter, Alignment.bottomCenter);
+    case 'bottom_top':
+      return (Alignment.bottomCenter, Alignment.topCenter);
+    case 'top_left_bottom_right':
+      return (Alignment.topLeft, Alignment.bottomRight);
+    case 'bottom_left_top_right':
+      return (Alignment.bottomLeft, Alignment.topRight);
+    case 'left_right':
+    default:
+      return (Alignment.centerLeft, Alignment.centerRight);
+  }
+}
+
 /// Inline row of a display name (optionally coloured / gradient / animated per
 /// the user's membership name styling) followed by the membership tier badge
 /// and the verified badge when enabled.
@@ -112,6 +132,8 @@ class VerifiedName extends StatefulWidget {
   final String memberTierName;
   final String nameColor;
   final String nameColorTo;
+  final List<String> nameColors;
+  final String nameGradientDirection;
   final bool nameDynamic;
   final TextStyle? style;
   final int? maxLines;
@@ -126,6 +148,8 @@ class VerifiedName extends StatefulWidget {
     this.memberTierName = '',
     this.nameColor = '',
     this.nameColorTo = '',
+    this.nameColors = const [],
+    this.nameGradientDirection = '',
     this.nameDynamic = false,
     this.style,
     this.maxLines,
@@ -196,8 +220,20 @@ class _VerifiedNameState extends State<VerifiedName>
     final dynamic = widget.nameDynamic && widget.memberActive;
     final color = nameColorFromHex(widget.nameColor);
     final colorTo = nameColorFromHex(widget.nameColorTo);
-    final hasGradient =
-        widget.memberActive && widget.nameColor.isNotEmpty && colorTo != null;
+
+    // The effective gradient color list: the server-side multi-color array wins
+    // (Lv.3+ gradient), otherwise fall back to the legacy color/color_to pair.
+    List<Color> gradientColors = [];
+    if (widget.memberActive && widget.nameColors.isNotEmpty) {
+      gradientColors = widget.nameColors
+          .map(nameColorFromHex)
+          .whereType<Color>()
+          .toList();
+    } else if (color != null) {
+      gradientColors = [color, ?colorTo];
+    }
+    final hasGradient = widget.memberActive && gradientColors.length >= 2;
+    final beginEnd = gradientDirectionOf(widget.nameGradientDirection);
 
     Widget text = Text(
       widget.name,
@@ -206,28 +242,36 @@ class _VerifiedNameState extends State<VerifiedName>
       style: baseStyle.copyWith(color: color ?? baseStyle.color),
     );
 
-    if (dynamic && color != null) {
+    if (dynamic && gradientColors.isNotEmpty) {
       // Animated gradient name: the color sweep slides sideways in a seamless
       // loop while the membership is active.
-      final end = colorTo ?? _shifted(color);
+      final colors = List<Color>.from(gradientColors);
       text = AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
           return ShaderMask(
             shaderCallback: (bounds) => LinearGradient(
-              colors: [color, end, color, end, color],
-              stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
-              transform: _SlideGradient(-(_controller.value % 1.0) * bounds.width * 0.25),
+              colors: [...colors, ...colors],
+              stops: [
+                for (var i = 0; i < colors.length; i++) i / colors.length / 2,
+                for (var i = 0; i < colors.length; i++)
+                  i / colors.length / 2 + 0.5,
+              ],
+              begin: beginEnd.$1,
+              end: beginEnd.$2,
+              transform: _SlideGradient(-(_controller.value % 1.0) * bounds.width * 0.5),
             ).createShader(bounds),
             blendMode: BlendMode.srcATop,
             child: text,
           );
         },
       );
-    } else if (hasGradient && color != null) {
+    } else if (hasGradient) {
       text = ShaderMask(
         shaderCallback: (bounds) => LinearGradient(
-          colors: [color, colorTo],
+          colors: gradientColors,
+          begin: beginEnd.$1,
+          end: beginEnd.$2,
         ).createShader(bounds),
         blendMode: BlendMode.srcATop,
         child: text,
@@ -254,13 +298,6 @@ class _VerifiedNameState extends State<VerifiedName>
         ],
       ],
     );
-  }
-
-  Color _shifted(Color base) {
-    final brightness = Theme.of(context).colorScheme.brightness;
-    return brightness == Brightness.dark
-        ? Color.alphaBlend(base.withValues(alpha: 0.6), Colors.black)
-        : Color.alphaBlend(base, Colors.white);
   }
 }
 

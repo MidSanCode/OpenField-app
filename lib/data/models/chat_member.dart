@@ -18,6 +18,8 @@ class ChatMember {
   final String nameColor;
   final String nameColorTo;
   final bool nameDynamic;
+  final List<String> nameColors;
+  final String nameGradientDirection;
   final String avatarFrame;
   final String? e2eePublicKey;
 
@@ -45,6 +47,8 @@ class ChatMember {
     this.nameColor = '',
     this.nameColorTo = '',
     this.nameDynamic = false,
+    this.nameColors = const [],
+    this.nameGradientDirection = '',
     this.avatarFrame = '',
     this.e2eePublicKey,
     this.notifyLevel = 'all',
@@ -86,6 +90,8 @@ class ChatMember {
       nameColor: nameColor,
       nameColorTo: nameColorTo,
       nameDynamic: nameDynamic,
+      nameColors: nameColors,
+      nameGradientDirection: nameGradientDirection,
       avatarFrame: avatarFrame,
       e2eePublicKey: e2eePublicKey,
       notifyLevel: notifyLevel ?? this.notifyLevel,
@@ -114,6 +120,8 @@ class ChatMember {
       nameColor: json['name_color'] as String? ?? '',
       nameColorTo: json['name_color_to'] as String? ?? '',
       nameDynamic: json['name_dynamic'] as bool? ?? false,
+      nameColors: _asStringList(json['name_colors']),
+      nameGradientDirection: json['name_gradient_direction'] as String? ?? '',
       avatarFrame: json['avatar_frame'] as String? ?? '',
       e2eePublicKey: json['e2ee_public_key'] as String?,
       notifyLevel: json['notify_level'] as String? ?? 'all',
@@ -137,5 +145,12 @@ class ChatMember {
     } catch (_) {
       return null;
     }
+  }
+
+  static List<String> _asStringList(Object? value) {
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+    return const [];
   }
 }

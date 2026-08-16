@@ -15,6 +15,8 @@ class Post {
   final String nameColor;
   final String nameColorTo;
   final bool nameDynamic;
+  final List<String> nameColors;
+  final String nameGradientDirection;
   final String avatarFrame;
   final List<Attachment> attachments;
   final int replyCount;
@@ -41,6 +43,8 @@ class Post {
     this.nameColor = '',
     this.nameColorTo = '',
     this.nameDynamic = false,
+    this.nameColors = const [],
+    this.nameGradientDirection = '',
     this.avatarFrame = '',
     this.attachments = const [],
     this.replyCount = 0,
@@ -90,6 +94,8 @@ class Post {
       nameColor: json['name_color'] as String? ?? '',
       nameColorTo: json['name_color_to'] as String? ?? '',
       nameDynamic: json['name_dynamic'] as bool? ?? false,
+      nameColors: _asStringList(json['name_colors']),
+      nameGradientDirection: json['name_gradient_direction'] as String? ?? '',
       avatarFrame: json['avatar_frame'] as String? ?? '',
       attachments: attachments,
       replyCount: _asInt(json['reply_count']),
@@ -122,6 +128,13 @@ class Post {
     }
   }
 
+  static List<String> _asStringList(Object? value) {
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+    return const [];
+  }
+
   Post copyWith({
     int? id,
     int? userId,
@@ -137,6 +150,8 @@ class Post {
     String? nameColor,
     String? nameColorTo,
     bool? nameDynamic,
+    List<String>? nameColors,
+    String? nameGradientDirection,
     String? avatarFrame,
     List<Attachment>? attachments,
     int? replyCount,
@@ -163,6 +178,8 @@ class Post {
       nameColor: nameColor ?? this.nameColor,
       nameColorTo: nameColorTo ?? this.nameColorTo,
       nameDynamic: nameDynamic ?? this.nameDynamic,
+      nameColors: nameColors ?? this.nameColors,
+      nameGradientDirection: nameGradientDirection ?? this.nameGradientDirection,
       avatarFrame: avatarFrame ?? this.avatarFrame,
       attachments: attachments ?? this.attachments,
       replyCount: replyCount ?? this.replyCount,

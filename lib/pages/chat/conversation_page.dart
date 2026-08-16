@@ -1816,6 +1816,8 @@ class _MessageBubble extends StatelessWidget {
                             memberActive: message.senderMemberActive,
                             nameColor: message.senderNameColor,
                             nameColorTo: message.senderNameColorTo,
+                            nameColors: message.senderNameColors,
+                            nameGradientDirection: message.senderNameGradientDirection,
                             nameDynamic: message.senderNameDynamic,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.primary,

@@ -18,6 +18,8 @@ class PostReply {
   final String nameColor;
   final String nameColorTo;
   final bool nameDynamic;
+  final List<String> nameColors;
+  final String nameGradientDirection;
   final String avatarFrame;
   final String? parentContent;
   final String? parentName;
@@ -43,6 +45,8 @@ class PostReply {
     this.nameColor = '',
     this.nameColorTo = '',
     this.nameDynamic = false,
+    this.nameColors = const [],
+    this.nameGradientDirection = '',
     this.avatarFrame = '',
     this.parentContent,
     this.parentName,
@@ -78,6 +82,8 @@ class PostReply {
       nameColor: json['name_color'] as String? ?? '',
       nameColorTo: json['name_color_to'] as String? ?? '',
       nameDynamic: json['name_dynamic'] as bool? ?? false,
+      nameColors: _asStringList(json['name_colors']),
+      nameGradientDirection: json['name_gradient_direction'] as String? ?? '',
       avatarFrame: json['avatar_frame'] as String? ?? '',
       parentContent: json['parent_content'] as String?,
       parentName: json['parent_name'] as String?,
@@ -108,5 +114,12 @@ class PostReply {
     } catch (_) {
       return null;
     }
+  }
+
+  static List<String> _asStringList(Object? value) {
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+    return const [];
   }
 }

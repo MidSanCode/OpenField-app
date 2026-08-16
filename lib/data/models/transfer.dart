@@ -10,8 +10,10 @@ class Transfer {
   final DateTime? decidedAt;
   final DateTime? refundedAt;
   final String senderName;
+  final String senderUsername;
   final String senderAvatar;
   final String recipientName;
+  final String recipientUsername;
   final String recipientAvatar;
 
   const Transfer({
@@ -25,8 +27,10 @@ class Transfer {
     this.decidedAt,
     this.refundedAt,
     this.senderName = '',
+    this.senderUsername = '',
     this.senderAvatar = '',
     this.recipientName = '',
+    this.recipientUsername = '',
     this.recipientAvatar = '',
   });
 
@@ -43,8 +47,10 @@ class Transfer {
       decidedAt: _asDate(json['decided_at']),
       refundedAt: _asDate(json['refunded_at']),
       senderName: json['sender_name'] as String? ?? '',
+      senderUsername: json['sender_username'] as String? ?? '',
       senderAvatar: json['sender_avatar'] as String? ?? '',
       recipientName: json['recipient_name'] as String? ?? '',
+      recipientUsername: json['recipient_username'] as String? ?? '',
       recipientAvatar: json['recipient_avatar'] as String? ?? '',
     );
   }

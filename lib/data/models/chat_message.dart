@@ -30,6 +30,8 @@ class ChatMessage {
   final String senderNameColor;
   final String senderNameColorTo;
   final bool senderNameDynamic;
+  final List<String> senderNameColors;
+  final String senderNameGradientDirection;
   final String senderAvatarFrame;
   final List<Attachment> attachments;
 
@@ -70,6 +72,8 @@ class ChatMessage {
     this.senderNameColor = '',
     this.senderNameColorTo = '',
     this.senderNameDynamic = false,
+    this.senderNameColors = const [],
+    this.senderNameGradientDirection = '',
     this.senderAvatarFrame = '',
     this.attachments = const [],
     this.mentions = const [],
@@ -151,6 +155,8 @@ class ChatMessage {
       senderNameColor: senderNameColor,
       senderNameColorTo: senderNameColorTo,
       senderNameDynamic: senderNameDynamic,
+      senderNameColors: senderNameColors,
+      senderNameGradientDirection: senderNameGradientDirection,
       senderAvatarFrame: senderAvatarFrame,
       attachments: attachments,
       mentions: mentions,
@@ -189,6 +195,8 @@ class ChatMessage {
       senderNameColor: json['sender_name_color'] as String? ?? '',
       senderNameColorTo: json['sender_name_color_to'] as String? ?? '',
       senderNameDynamic: json['sender_name_dynamic'] as bool? ?? false,
+      senderNameColors: _asStringList(json['sender_name_colors']),
+      senderNameGradientDirection: json['sender_name_gradient_direction'] as String? ?? '',
       senderAvatarFrame: json['sender_avatar_frame'] as String? ?? '',
       attachments: attachments,
       mentions: _asIntList(json['mentions']),
@@ -218,6 +226,13 @@ class ChatMessage {
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value) ?? 0;
     return 0;
+  }
+
+  static List<String> _asStringList(Object? value) {
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+    return const [];
   }
 
   static DateTime? _asDate(Object? value) {

@@ -82,6 +82,38 @@ class MembershipStatus {
   }
 }
 
+/// One recorded membership purchase/renewal/upgrade row, returned by
+/// GET /membership/purchases.
+class MembershipPurchase {
+  final int id;
+  final int level;
+  final String tierName;
+  final int priceCoins;
+  final String kind; // purchase | renew | upgrade
+  final DateTime createdAt;
+
+  const MembershipPurchase({
+    required this.id,
+    required this.level,
+    required this.tierName,
+    required this.priceCoins,
+    required this.kind,
+    required this.createdAt,
+  });
+
+  factory MembershipPurchase.fromJson(Map<String, dynamic> json) {
+    return MembershipPurchase(
+      id: _asInt(json['id']),
+      level: _asInt(json['level']),
+      tierName: json['tier_name'] as String? ?? '',
+      priceCoins: _asInt(json['price_coins']),
+      kind: json['kind'] as String? ?? 'purchase',
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+}
+
 int _asInt(Object? v) {
   if (v is int) return v;
   if (v is num) return v.toInt();

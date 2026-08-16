@@ -6,7 +6,8 @@ import 'package:openfield/core/widgets/pin_dialog.dart';
 import 'package:openfield/data/models/membership.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
-import 'package:openfield/pages/account/name_style_page.dart';
+import 'package:openfield/pages/account/member_benefits_page.dart';
+import 'package:openfield/pages/account/membership_purchases_page.dart';
 
 /// Membership hub: shows the user's current tier, expiry and exp multiplier
 /// plus the purchaseable catalog. Purchases are paid with wallet coins and
@@ -197,11 +198,21 @@ class _MembershipPageState extends State<MembershipPage> {
             OutlinedButton.icon(
               onPressed: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const NameStylePage()),
+                  MaterialPageRoute(builder: (_) => const MemberBenefitsPage()),
                 );
               },
               icon: const Icon(Icons.palette_outlined, size: 18),
               label: Text('nameStyleTitle'.tr()),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const MembershipPurchasesPage()),
+                );
+              },
+              icon: const Icon(Icons.receipt_long_outlined, size: 18),
+              label: Text('memberPurchasesTitle'.tr()),
             ),
           ],
         ),
@@ -212,7 +223,7 @@ class _MembershipPageState extends State<MembershipPage> {
   Widget _buildTierCard(BuildContext context, MembershipTier tier) {
     final theme = Theme.of(context);
     final status = _status;
-    final isCurrent = status != null && status.active && status.level >= tier.level;
+    final isCurrent = status != null && status.active && status.level == tier.level;
     final buying = _buyingLevel == tier.level;
 
     return Card(
@@ -288,7 +299,7 @@ class _MembershipPageState extends State<MembershipPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'memberPrice'.tr(namedArgs: {'price': '${tier.price}'}),
+                        _priceLabel(tier),
                         style: theme.textTheme.titleMedium,
                       ),
                       Text(
@@ -310,7 +321,7 @@ class _MembershipPageState extends State<MembershipPage> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(isCurrent ? 'memberOwned'.tr() : 'memberBuy'.tr()),
+                      : Text(_buyLabel(tier)),
                 ),
               ],
             ),
@@ -354,6 +365,36 @@ class _MembershipPageState extends State<MembershipPage> {
     return value == value.roundToDouble()
         ? '${value.toInt()}'
         : '$value';
+  }
+
+  /// The coin price shown on a tier card. Active members renewing their current
+  /// tier pay the full price; buying a strictly higher tier only pays the
+  /// difference (upgrade) while keeping the remaining membership time.
+  String _priceLabel(MembershipTier tier) {
+    final status = _status;
+    if (status != null && status.active && status.level > 0) {
+      if (tier.level > status.level) {
+        final diff = tier.price - status.memberPrice;
+        return 'memberUpgradePrice'.tr(
+          namedArgs: {'price': '$diff'},
+        );
+      }
+      if (tier.level == status.level) {
+        return 'memberPrice'.tr(namedArgs: {'price': '${tier.price}'});
+      }
+    }
+    return 'memberPrice'.tr(namedArgs: {'price': '${tier.price}'});
+  }
+
+  /// The buy button label for a tier card: 续费 for the active tier, 升级 for a
+  /// strictly higher tier, 补差价 (from the server's recorded price) otherwise.
+  String _buyLabel(MembershipTier tier) {
+    final status = _status;
+    if (status != null && status.active && status.level > 0) {
+      if (tier.level == status.level) return 'memberRenew'.tr();
+      if (tier.level > status.level) return 'memberUpgrade'.tr();
+    }
+    return 'memberBuy'.tr();
   }
 
   String _formatDate(DateTime time) {

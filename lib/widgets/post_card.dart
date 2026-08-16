@@ -156,6 +156,8 @@ class _PostCardState extends State<PostCard> {
                             memberActive: post.memberActive,
                             nameColor: post.nameColor,
                             nameColorTo: post.nameColorTo,
+                            nameColors: post.nameColors,
+                            nameGradientDirection: post.nameGradientDirection,
                             nameDynamic: post.nameDynamic,
                             style: theme.textTheme.titleMedium,
                           ),

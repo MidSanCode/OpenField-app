@@ -166,6 +166,8 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
         memberActive: user.hasActiveMembership,
         nameColor: user.nameColor,
         nameColorTo: user.nameColorTo,
+        nameColors: user.nameColors,
+        nameGradientDirection: user.nameGradientDirection,
         nameDynamic: user.nameDynamic,
       ),
       subtitle: Text('@${user.username}'),

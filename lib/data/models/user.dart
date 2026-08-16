@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui' show Color;
 
 /// Level-system constants mirrored from the server so the app can derive a
@@ -96,6 +97,8 @@ class User {
   final String nameColor;
   final String nameColorTo;
   final bool nameDynamic;
+  final List<String> nameColors;
+  final String nameGradientDirection;
   final String avatarFrame;
   final bool hasPin;
   final DateTime? createdAt;
@@ -129,6 +132,8 @@ class User {
     this.nameColor = '',
     this.nameColorTo = '',
     this.nameDynamic = false,
+    this.nameColors = const [],
+    this.nameGradientDirection = '',
     this.avatarFrame = '',
     this.hasPin = false,
     this.createdAt,
@@ -164,6 +169,8 @@ class User {
       nameColor: json['name_color'] as String? ?? '',
       nameColorTo: json['name_color_to'] as String? ?? '',
       nameDynamic: json['name_dynamic'] as bool? ?? false,
+      nameColors: _asStringList(json['name_colors']),
+      nameGradientDirection: json['name_gradient_direction'] as String? ?? '',
       avatarFrame: json['avatar_frame'] as String? ?? '',
       hasPin: json['has_pin'] as bool? ?? false,
       createdAt: _asDate(json['created_at']),
@@ -375,6 +382,8 @@ class User {
     String? nameColor,
     String? nameColorTo,
     bool? nameDynamic,
+    List<String>? nameColors,
+    String? nameGradientDirection,
     String? avatarFrame,
     bool? hasPin,
     DateTime? createdAt,
@@ -408,10 +417,27 @@ class User {
       nameColor: nameColor ?? this.nameColor,
       nameColorTo: nameColorTo ?? this.nameColorTo,
       nameDynamic: nameDynamic ?? this.nameDynamic,
+      nameColors: nameColors ?? this.nameColors,
+      nameGradientDirection: nameGradientDirection ?? this.nameGradientDirection,
       avatarFrame: avatarFrame ?? this.avatarFrame,
       hasPin: hasPin ?? this.hasPin,
       createdAt: createdAt ?? this.createdAt,
     );
+  }
+
+  static List<String> _asStringList(Object? value) {
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+    if (value is String && value.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List) {
+          return decoded.map((e) => e.toString()).toList();
+        }
+      } catch (_) {}
+    }
+    return const [];
   }
 
   static DateTime? _asDate(Object? value) {

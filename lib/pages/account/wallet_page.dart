@@ -232,61 +232,77 @@ class _WalletPageState extends State<WalletPage> {
     final isPending = t.isPending;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    isIncoming
-                        ? (t.senderName.isNotEmpty ? t.senderName : 'transferUser'.tr())
-                        : (t.recipientName.isNotEmpty ? t.recipientName : 'transferUser'.tr()),
-                    style: theme.textTheme.titleSmall,
-                  ),
-                ),
-                Text(
-                  '${isIncoming ? '+' : '-'}${_formatAmount(t.amount)}',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: isIncoming ? theme.colorScheme.primary : theme.colorScheme.error,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            if (t.note.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(t.note, style: theme.textTheme.bodySmall),
-            ],
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Text(_statusLabel(t), style: theme.textTheme.bodySmall),
-                const Spacer(),
-                Text(_formatTime(t.createdAt), style: theme.textTheme.bodySmall),
-              ],
-            ),
-            if (isPending && isIncoming) ...[
-              const SizedBox(height: 8),
+      child: InkWell(
+        onTap: () => _showTransferDetail(t),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
-                    onPressed: () => _declineTransfer(t),
-                    child: Text('chatRequestDecline'.tr()),
+                  Expanded(
+                    child: Text(
+                      isIncoming
+                          ? (t.senderName.isNotEmpty ? t.senderName : 'transferUser'.tr())
+                          : (t.recipientName.isNotEmpty ? t.recipientName : 'transferUser'.tr()),
+                      style: theme.textTheme.titleSmall,
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () => _acceptTransfer(t),
-                    child: Text('chatRequestAccept'.tr()),
+                  Text(
+                    '${isIncoming ? '+' : '-'}${_formatAmount(t.amount)}',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: isIncoming ? theme.colorScheme.primary : theme.colorScheme.error,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
+              if (t.note.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(t.note, style: theme.textTheme.bodySmall),
+              ],
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Text(_statusLabel(t), style: theme.textTheme.bodySmall),
+                  const Spacer(),
+                  Text('${'transferOrderId'.tr()}: #${t.id}',
+                      style: theme.textTheme.bodySmall),
+                ],
+              ),
+              if (isPending && isIncoming) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => _declineTransfer(t),
+                      child: Text('chatRequestDecline'.tr()),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () => _acceptTransfer(t),
+                      child: Text('chatRequestAccept'.tr()),
+                    ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
+      ),
+    );
+  }
+
+  /// Opens a detail view for a transfer: order id, both parties (name +
+  /// username), amount, note and every timestamp (created / decided / refunded).
+  void _showTransferDetail(Transfer t) {
+    final isIncoming = t.recipientId == _currentUserId();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TransferDetailPage(transfer: t, isIncoming: isIncoming),
       ),
     );
   }
@@ -595,5 +611,120 @@ class _RecipientPickerState extends State<_RecipientPicker> {
       subtitle: Text('@${user.username}'),
       onTap: () => Navigator.of(context).pop(user),
     );
+  }
+}
+
+/// Detail page for one transfer: order id, both parties (with usernames),
+/// amount, note and the created / decided / refunded timestamps.
+class TransferDetailPage extends StatelessWidget {
+  final Transfer transfer;
+  final bool isIncoming;
+
+  const TransferDetailPage({
+    super.key,
+    required this.transfer,
+    required this.isIncoming,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = transfer;
+    final amountColor = isIncoming ? theme.colorScheme.primary : theme.colorScheme.error;
+    return Scaffold(
+      appBar: AppBar(title: Text('transferDetailTitle'.tr())),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            margin: EdgeInsets.zero,
+            color: theme.colorScheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Text(
+                    '${isIncoming ? '+' : '-'}${_amount(t.amount)}',
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      color: amountColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(_statusLabel(t), style: theme.textTheme.bodyMedium),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _row(context, 'transferOrderId'.tr(), '#${t.id}'),
+          _row(context, 'transferSender'.tr(), _party(t.senderName, t.senderUsername)),
+          _row(context, 'transferRecipient'.tr(), _party(t.recipientName, t.recipientUsername)),
+          if (t.note.isNotEmpty) _row(context, 'transferNote'.tr(), t.note),
+          _row(context, 'transferCreatedAt'.tr(), _time(t.createdAt)),
+          if (t.decidedAt != null)
+            _row(context, 'transferDecidedAt'.tr(), _time(t.decidedAt!)),
+          if (t.refundedAt != null)
+            _row(context, 'transferRefundedAt'.tr(), _time(t.refundedAt!)),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _party(String name, String username) {
+    final parts = <String>[
+      if (name.isNotEmpty) name,
+      if (username.isNotEmpty) '@$username',
+    ];
+    return parts.isNotEmpty ? parts.join(' · ') : '—';
+  }
+
+  String _amount(double amount) {
+    final s = amount.toStringAsFixed(2);
+    return s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  String _time(DateTime time) {
+    final local = time.toLocal();
+    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
+        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _statusLabel(Transfer t) {
+    switch (t.status) {
+      case 'pending':
+        return 'transferStatusPending'.tr();
+      case 'accepted':
+        return 'transferStatusAccepted'.tr();
+      case 'declined':
+        return 'transferStatusDeclined'.tr();
+      case 'refunded':
+        return 'transferStatusRefunded'.tr();
+      default:
+        return t.status;
+    }
   }
 }

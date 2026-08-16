@@ -143,6 +143,8 @@ class _ReplyTileState extends State<ReplyTile> {
                             memberActive: reply.memberActive,
                             nameColor: reply.nameColor,
                             nameColorTo: reply.nameColorTo,
+                            nameColors: reply.nameColors,
+                            nameGradientDirection: reply.nameGradientDirection,
                             nameDynamic: reply.nameDynamic,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.primary,

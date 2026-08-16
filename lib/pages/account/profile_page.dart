@@ -155,6 +155,8 @@ class _ProfilePageState extends State<ProfilePage> {
             memberActive: user.hasActiveMembership,
             nameColor: user.nameColor,
             nameColorTo: user.nameColorTo,
+            nameColors: user.nameColors,
+            nameGradientDirection: user.nameGradientDirection,
             nameDynamic: user.nameDynamic,
             style: theme.textTheme.titleLarge,
           ),

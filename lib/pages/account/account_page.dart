@@ -565,6 +565,8 @@ class _AccountPageState extends State<AccountPage> {
                 memberActive: user?.hasActiveMembership ?? false,
                 nameColor: user?.nameColor ?? '',
                 nameColorTo: user?.nameColorTo ?? '',
+                nameColors: user?.nameColors ?? const [],
+                nameGradientDirection: user?.nameGradientDirection ?? '',
                 nameDynamic: user?.nameDynamic ?? false,
                 style: theme.textTheme.titleLarge,
               ),
