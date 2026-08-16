@@ -152,6 +152,11 @@ class _PostCardState extends State<PostCard> {
                           VerifiedName(
                             name: post.authorName,
                             verified: post.authorVerified,
+                            memberLevel: post.memberLevel,
+                            memberActive: post.memberActive,
+                            nameColor: post.nameColor,
+                            nameColorTo: post.nameColorTo,
+                            nameDynamic: post.nameDynamic,
                             style: theme.textTheme.titleMedium,
                           ),
                           Text(

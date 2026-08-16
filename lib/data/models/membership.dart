@@ -6,6 +6,10 @@ class MembershipTier {
   final int price;
   final double expMultiplier;
   final int durationDays;
+  final int storageBonusMb;
+  final bool allowGradient;
+  final bool allowDynamic;
+  final List<String> presetColors;
 
   const MembershipTier({
     required this.level,
@@ -14,6 +18,10 @@ class MembershipTier {
     required this.price,
     required this.expMultiplier,
     required this.durationDays,
+    this.storageBonusMb = 0,
+    this.allowGradient = false,
+    this.allowDynamic = false,
+    this.presetColors = const [],
   });
 
   factory MembershipTier.fromJson(Map<String, dynamic> json) {
@@ -24,6 +32,12 @@ class MembershipTier {
       price: _asInt(json['price']),
       expMultiplier: (json['exp_multiplier'] as num?)?.toDouble() ?? 1.0,
       durationDays: _asInt(json['duration_days']),
+      storageBonusMb: _asInt(json['storage_bonus_mb']),
+      allowGradient: json['allow_gradient'] as bool? ?? false,
+      allowDynamic: json['allow_dynamic'] as bool? ?? false,
+      presetColors: ((json['preset_colors'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(),
     );
   }
 }

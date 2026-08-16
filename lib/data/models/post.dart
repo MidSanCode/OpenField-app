@@ -10,6 +10,12 @@ class Post {
   final String? nickname;
   final String? avatarUrl;
   final bool? isVerified;
+  final int memberLevel;
+  final bool memberActive;
+  final String nameColor;
+  final String nameColorTo;
+  final bool nameDynamic;
+  final String avatarFrame;
   final List<Attachment> attachments;
   final int replyCount;
   final int viewCount;
@@ -30,6 +36,12 @@ class Post {
     this.nickname,
     this.avatarUrl,
     this.isVerified,
+    this.memberLevel = 0,
+    this.memberActive = false,
+    this.nameColor = '',
+    this.nameColorTo = '',
+    this.nameDynamic = false,
+    this.avatarFrame = '',
     this.attachments = const [],
     this.replyCount = 0,
     this.viewCount = 0,
@@ -73,6 +85,12 @@ class Post {
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool?,
+      memberLevel: _asInt(json['member_level']),
+      memberActive: json['member_active'] as bool? ?? false,
+      nameColor: json['name_color'] as String? ?? '',
+      nameColorTo: json['name_color_to'] as String? ?? '',
+      nameDynamic: json['name_dynamic'] as bool? ?? false,
+      avatarFrame: json['avatar_frame'] as String? ?? '',
       attachments: attachments,
       replyCount: _asInt(json['reply_count']),
       viewCount: _asInt(json['view_count']),
@@ -114,6 +132,12 @@ class Post {
     String? nickname,
     String? avatarUrl,
     bool? isVerified,
+    int? memberLevel,
+    bool? memberActive,
+    String? nameColor,
+    String? nameColorTo,
+    bool? nameDynamic,
+    String? avatarFrame,
     List<Attachment>? attachments,
     int? replyCount,
     int? viewCount,
@@ -134,6 +158,12 @@ class Post {
       nickname: nickname ?? this.nickname,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isVerified: isVerified ?? this.isVerified,
+      memberLevel: memberLevel ?? this.memberLevel,
+      memberActive: memberActive ?? this.memberActive,
+      nameColor: nameColor ?? this.nameColor,
+      nameColorTo: nameColorTo ?? this.nameColorTo,
+      nameDynamic: nameDynamic ?? this.nameDynamic,
+      avatarFrame: avatarFrame ?? this.avatarFrame,
       attachments: attachments ?? this.attachments,
       replyCount: replyCount ?? this.replyCount,
       viewCount: viewCount ?? this.viewCount,

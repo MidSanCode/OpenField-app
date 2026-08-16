@@ -162,6 +162,11 @@ class _FollowListPageState extends State<FollowListPage> with SingleTickerProvid
       title: VerifiedName(
         name: user.displayName,
         verified: user.isVerified,
+        memberLevel: user.memberLevel,
+        memberActive: user.hasActiveMembership,
+        nameColor: user.nameColor,
+        nameColorTo: user.nameColorTo,
+        nameDynamic: user.nameDynamic,
       ),
       subtitle: Text('@${user.username}'),
       onTap: () {

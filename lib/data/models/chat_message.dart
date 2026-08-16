@@ -25,6 +25,12 @@ class ChatMessage {
   final String? senderName;
   final String? senderAvatar;
   final bool senderVerified;
+  final int senderMemberLevel;
+  final bool senderMemberActive;
+  final String senderNameColor;
+  final String senderNameColorTo;
+  final bool senderNameDynamic;
+  final String senderAvatarFrame;
   final List<Attachment> attachments;
 
   /// Server-confirmed user IDs explicitly @-mentioned in this message. The
@@ -59,6 +65,12 @@ class ChatMessage {
     this.senderName,
     this.senderAvatar,
     this.senderVerified = false,
+    this.senderMemberLevel = 0,
+    this.senderMemberActive = false,
+    this.senderNameColor = '',
+    this.senderNameColorTo = '',
+    this.senderNameDynamic = false,
+    this.senderAvatarFrame = '',
     this.attachments = const [],
     this.mentions = const [],
     String? clientId,
@@ -134,6 +146,12 @@ class ChatMessage {
       senderName: senderName,
       senderAvatar: senderAvatar,
       senderVerified: senderVerified,
+      senderMemberLevel: senderMemberLevel,
+      senderMemberActive: senderMemberActive,
+      senderNameColor: senderNameColor,
+      senderNameColorTo: senderNameColorTo,
+      senderNameDynamic: senderNameDynamic,
+      senderAvatarFrame: senderAvatarFrame,
       attachments: attachments,
       mentions: mentions,
       clientId: clientId,
@@ -166,6 +184,12 @@ class ChatMessage {
       senderName: json['sender_name'] as String?,
       senderAvatar: json['sender_avatar'] as String?,
       senderVerified: json['sender_verified'] as bool? ?? false,
+      senderMemberLevel: _asInt(json['sender_member_level']),
+      senderMemberActive: json['sender_member_active'] as bool? ?? false,
+      senderNameColor: json['sender_name_color'] as String? ?? '',
+      senderNameColorTo: json['sender_name_color_to'] as String? ?? '',
+      senderNameDynamic: json['sender_name_dynamic'] as bool? ?? false,
+      senderAvatarFrame: json['sender_avatar_frame'] as String? ?? '',
       attachments: attachments,
       mentions: _asIntList(json['mentions']),
     );

@@ -137,13 +137,18 @@ class _ReplyTileState extends State<ReplyTile> {
                       InkWell(
                         onTap: widget.onTapAuthor,
                         child: VerifiedName(
-                          name: reply.authorName,
-                          verified: reply.isVerified,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.w600,
+                            name: reply.authorName,
+                            verified: reply.isVerified,
+                            memberLevel: reply.memberLevel,
+                            memberActive: reply.memberActive,
+                            nameColor: reply.nameColor,
+                            nameColorTo: reply.nameColorTo,
+                            nameDynamic: reply.nameDynamic,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
                       ),
                       const SizedBox(width: 8),
                       if (reply.parentName != null && reply.parentName!.isNotEmpty)

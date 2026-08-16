@@ -13,6 +13,12 @@ class PostReply {
   final String? nickname;
   final String? avatarUrl;
   final bool isVerified;
+  final int memberLevel;
+  final bool memberActive;
+  final String nameColor;
+  final String nameColorTo;
+  final bool nameDynamic;
+  final String avatarFrame;
   final String? parentContent;
   final String? parentName;
   final List<Attachment> attachments;
@@ -32,6 +38,12 @@ class PostReply {
     this.nickname,
     this.avatarUrl,
     this.isVerified = false,
+    this.memberLevel = 0,
+    this.memberActive = false,
+    this.nameColor = '',
+    this.nameColorTo = '',
+    this.nameDynamic = false,
+    this.avatarFrame = '',
     this.parentContent,
     this.parentName,
     this.attachments = const [],
@@ -61,6 +73,12 @@ class PostReply {
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool? ?? false,
+      memberLevel: _asInt(json['member_level']),
+      memberActive: json['member_active'] as bool? ?? false,
+      nameColor: json['name_color'] as String? ?? '',
+      nameColorTo: json['name_color_to'] as String? ?? '',
+      nameDynamic: json['name_dynamic'] as bool? ?? false,
+      avatarFrame: json['avatar_frame'] as String? ?? '',
       parentContent: json['parent_content'] as String?,
       parentName: json['parent_name'] as String?,
       attachments: (json['attachments'] as List?)

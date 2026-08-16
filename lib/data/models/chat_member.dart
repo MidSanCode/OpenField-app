@@ -13,6 +13,12 @@ class ChatMember {
   final String? nickname;
   final String? avatarUrl;
   final bool isVerified;
+  final int memberLevel;
+  final bool memberActive;
+  final String nameColor;
+  final String nameColorTo;
+  final bool nameDynamic;
+  final String avatarFrame;
   final String? e2eePublicKey;
 
   /// Per-conversation chat notification preference: 'all' (every message),
@@ -34,6 +40,12 @@ class ChatMember {
     this.nickname,
     this.avatarUrl,
     this.isVerified = false,
+    this.memberLevel = 0,
+    this.memberActive = false,
+    this.nameColor = '',
+    this.nameColorTo = '',
+    this.nameDynamic = false,
+    this.avatarFrame = '',
     this.e2eePublicKey,
     this.notifyLevel = 'all',
   });
@@ -69,6 +81,12 @@ class ChatMember {
       nickname: nickname,
       avatarUrl: avatarUrl,
       isVerified: isVerified,
+      memberLevel: memberLevel,
+      memberActive: memberActive,
+      nameColor: nameColor,
+      nameColorTo: nameColorTo,
+      nameDynamic: nameDynamic,
+      avatarFrame: avatarFrame,
       e2eePublicKey: e2eePublicKey,
       notifyLevel: notifyLevel ?? this.notifyLevel,
     );
@@ -91,6 +109,12 @@ class ChatMember {
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool? ?? false,
+      memberLevel: _asInt(json['member_level']),
+      memberActive: json['member_active'] as bool? ?? false,
+      nameColor: json['name_color'] as String? ?? '',
+      nameColorTo: json['name_color_to'] as String? ?? '',
+      nameDynamic: json['name_dynamic'] as bool? ?? false,
+      avatarFrame: json['avatar_frame'] as String? ?? '',
       e2eePublicKey: json['e2ee_public_key'] as String?,
       notifyLevel: json['notify_level'] as String? ?? 'all',
     );

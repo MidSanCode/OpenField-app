@@ -434,6 +434,35 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to update profile'));
   }
 
+  /// Updates the current user's display-name styling (color, optional gradient
+  /// end color, optional animated flag) and the reserved avatar frame, subject
+  /// to their membership tier's caps. Returns the updated name-style fields.
+  Future<Map<String, dynamic>> updateNameStyle(
+    String accessToken, {
+    required String color,
+    String colorTo = '',
+    bool animated = false,
+    String avatarFrame = '',
+  }) async {
+    final body = <String, dynamic>{
+      'color': color,
+      'color_to': colorTo,
+      'dynamic': animated,
+      'avatar_frame': avatarFrame,
+    };
+    final response = await _put(
+      Uri.parse('$baseUrl/users/me/name-style'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode(body),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to update name style'));
+  }
+
   Future<User> uploadAvatar(String filePath, String accessToken) async {
     final data = await _uploadMultipart('$baseUrl/users/me/avatar', filePath, accessToken);
     return User.fromJson(data);

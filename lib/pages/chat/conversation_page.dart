@@ -1812,6 +1812,11 @@ class _MessageBubble extends StatelessWidget {
                           VerifiedName(
                             name: message.displayName,
                             verified: message.senderVerified,
+                            memberLevel: message.senderMemberLevel,
+                            memberActive: message.senderMemberActive,
+                            nameColor: message.senderNameColor,
+                            nameColorTo: message.senderNameColorTo,
+                            nameDynamic: message.senderNameDynamic,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.primary,
                             ),

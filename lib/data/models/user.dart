@@ -93,6 +93,10 @@ class User {
   final DateTime? lastDailyBonusAt;
   final int memberLevel;
   final DateTime? memberExpiresAt;
+  final String nameColor;
+  final String nameColorTo;
+  final bool nameDynamic;
+  final String avatarFrame;
   final bool hasPin;
   final DateTime? createdAt;
 
@@ -122,6 +126,10 @@ class User {
     this.lastDailyBonusAt,
     this.memberLevel = 0,
     this.memberExpiresAt,
+    this.nameColor = '',
+    this.nameColorTo = '',
+    this.nameDynamic = false,
+    this.avatarFrame = '',
     this.hasPin = false,
     this.createdAt,
   });
@@ -153,6 +161,10 @@ class User {
       lastDailyBonusAt: _asDate(json['last_daily_bonus_at']),
       memberLevel: (json['member_level'] as num?)?.toInt() ?? 0,
       memberExpiresAt: _asDate(json['member_expires_at']),
+      nameColor: json['name_color'] as String? ?? '',
+      nameColorTo: json['name_color_to'] as String? ?? '',
+      nameDynamic: json['name_dynamic'] as bool? ?? false,
+      avatarFrame: json['avatar_frame'] as String? ?? '',
       hasPin: json['has_pin'] as bool? ?? false,
       createdAt: _asDate(json['created_at']),
     );
@@ -186,6 +198,44 @@ class User {
         return 1.0;
     }
   }
+
+  /// The display name of the active membership tier (薄雾/篝火/明月/孤星), or
+  /// empty when the user is not currently a member.
+  String get memberTierName {
+    switch (hasActiveMembership ? memberLevel : 0) {
+      case 1:
+        return '薄雾';
+      case 2:
+        return '篝火';
+      case 3:
+        return '明月';
+      case 4:
+        return '孤星';
+      default:
+        return '';
+    }
+  }
+
+  /// The storage-space bonus (bytes) granted by an active membership tier:
+  /// Lv.1 +100MB, Lv.2 +200MB, Lv.3 +400MB, Lv.4 +400MB, else 0.
+  int get memberStorageBonusBytes {
+    switch (hasActiveMembership ? memberLevel : 0) {
+      case 1:
+        return 100 * 1024 * 1024;
+      case 2:
+        return 200 * 1024 * 1024;
+      case 3:
+      case 4:
+        return 400 * 1024 * 1024;
+      default:
+        return 0;
+    }
+  }
+
+  /// The effective storage quota while the membership is active (base quota
+  /// plus the tier bonus). After expiry the bonus reverts to 0, matching the
+  /// server's enforcement.
+  int get effectiveStorageQuota => storageQuota + memberStorageBonusBytes;
 
   /// Experience-based level, derived with the same cumulative formula as the
   /// server. Total exp must reach the cumulative threshold of level 2 (=100)
@@ -322,6 +372,10 @@ class User {
     DateTime? lastDailyBonusAt,
     int? memberLevel,
     DateTime? memberExpiresAt,
+    String? nameColor,
+    String? nameColorTo,
+    bool? nameDynamic,
+    String? avatarFrame,
     bool? hasPin,
     DateTime? createdAt,
   }) {
@@ -351,6 +405,10 @@ class User {
       lastDailyBonusAt: lastDailyBonusAt ?? this.lastDailyBonusAt,
       memberLevel: memberLevel ?? this.memberLevel,
       memberExpiresAt: memberExpiresAt ?? this.memberExpiresAt,
+      nameColor: nameColor ?? this.nameColor,
+      nameColorTo: nameColorTo ?? this.nameColorTo,
+      nameDynamic: nameDynamic ?? this.nameDynamic,
+      avatarFrame: avatarFrame ?? this.avatarFrame,
       hasPin: hasPin ?? this.hasPin,
       createdAt: createdAt ?? this.createdAt,
     );

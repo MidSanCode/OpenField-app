@@ -561,6 +561,11 @@ class _AccountPageState extends State<AccountPage> {
               child: VerifiedName(
                 name: displayName,
                 verified: user?.isVerified ?? false,
+                memberLevel: user?.memberLevel ?? 0,
+                memberActive: user?.hasActiveMembership ?? false,
+                nameColor: user?.nameColor ?? '',
+                nameColorTo: user?.nameColorTo ?? '',
+                nameDynamic: user?.nameDynamic ?? false,
                 style: theme.textTheme.titleLarge,
               ),
             ),

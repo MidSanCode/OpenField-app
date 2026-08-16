@@ -6,6 +6,7 @@ import 'package:openfield/core/widgets/pin_dialog.dart';
 import 'package:openfield/data/models/membership.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/pages/account/name_style_page.dart';
 
 /// Membership hub: shows the user's current tier, expiry and exp multiplier
 /// plus the purchaseable catalog. Purchases are paid with wallet coins and
@@ -192,6 +193,16 @@ class _MembershipPageState extends State<MembershipPage> {
                 color: theme.colorScheme.onPrimaryContainer,
               ),
             ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NameStylePage()),
+                );
+              },
+              icon: const Icon(Icons.palette_outlined, size: 18),
+              label: Text('nameStyleTitle'.tr()),
+            ),
           ],
         ),
       ),
@@ -252,6 +263,24 @@ class _MembershipPageState extends State<MembershipPage> {
               ),
             ),
             const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                if (tier.storageBonusMb > 0)
+                  _perkChip(
+                    theme,
+                    Icons.storage_outlined,
+                    'memberStorageBonus'.tr(namedArgs: {'mb': '${tier.storageBonusMb}'}),
+                  ),
+                _perkChip(theme, Icons.palette_outlined, 'memberNameColorPerk'.tr()),
+                if (tier.allowGradient)
+                  _perkChip(theme, Icons.gradient, 'memberNameGradientPerk'.tr()),
+                if (tier.allowDynamic)
+                  _perkChip(theme, Icons.auto_awesome, 'memberNameDynamicPerk'.tr()),
+              ],
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -287,6 +316,29 @@ class _MembershipPageState extends State<MembershipPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _perkChip(ThemeData theme, IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: theme.colorScheme.primary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -9,6 +9,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/e2ee_service.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
+import 'package:openfield/widgets/verified_badge.dart';
 
 /// Group chat settings (owner-managed): avatar/icon, name, public visibility,
 /// direct join, end-to-end encryption, group-wide mute and the member list with
@@ -223,7 +224,15 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                     ? Text(member.displayName.substring(0, 1).toUpperCase())
                     : null,
               ),
-              title: Text(member.displayName),
+title: VerifiedName(
+                name: member.displayName,
+                verified: member.isVerified,
+                memberLevel: member.memberLevel,
+                memberActive: member.memberActive,
+                nameColor: member.nameColor,
+                nameColorTo: member.nameColorTo,
+                nameDynamic: member.nameDynamic,
+              ),
               subtitle: Text(_roleLabel(member.role)),
             ),
             const Divider(height: 1),
@@ -780,10 +789,21 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                   ? Text(m.displayName.substring(0, 1).toUpperCase())
                   : null,
             ),
-            title: Row(
+title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Flexible(child: Text(m.displayName, overflow: TextOverflow.ellipsis)),
+                Flexible(
+                  child: VerifiedName(
+                    name: m.displayName,
+                    verified: m.isVerified,
+                    memberLevel: m.memberLevel,
+                    memberActive: m.memberActive,
+                    nameColor: m.nameColor,
+                    nameColorTo: m.nameColorTo,
+                    nameDynamic: m.nameDynamic,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 if (m.isMuted) ...[
                   const SizedBox(width: 6),
                   Icon(Icons.volume_off_outlined,
