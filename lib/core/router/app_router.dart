@@ -9,7 +9,7 @@ import 'package:openfield/widgets/app_shell.dart';
 GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigatorKey) {
   return GoRouter(
     navigatorKey: navigatorKey,
-    initialLocation: '/chat',
+    initialLocation: '/posts',
     routes: [
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(
@@ -18,12 +18,12 @@ GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigat
         branches: [
           StatefulShellBranch(
             routes: [
-              GoRoute(path: '/chat', name: 'chat', builder: (context, state) => const ChatPage()),
+              GoRoute(path: '/posts', name: 'posts', builder: (context, state) => const PostsPage()),
             ],
           ),
           StatefulShellBranch(
             routes: [
-              GoRoute(path: '/posts', name: 'posts', builder: (context, state) => const PostsPage()),
+              GoRoute(path: '/chat', name: 'chat', builder: (context, state) => const ChatPage()),
             ],
           ),
           StatefulShellBranch(

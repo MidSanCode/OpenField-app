@@ -414,5 +414,16 @@
   "visibilityFriends": "Friends only",
   "visibilityFriendsHint": "Visible to mutual friends only",
   "visibilityPrivate": "Private",
-  "visibilityPrivateHint": "Visible to you only"
+  "visibilityPrivateHint": "Visible to you only",
+  "relationships": "Relationships",
+  "relationshipsHint": "Friends and follows",
+  "storageBucket": "Storage bucket",
+  "storageBucketCurrent": "Current bucket",
+  "storageBucketDefault": "Default bucket",
+  "storageBucketHint": "Each bucket has its own storage limit. Membership storage bonuses only apply on the default bucket and premium buckets may require a minimum membership tier.",
+  "storageBucketSwitched": "Storage bucket switched",
+  "storageBucketRequiresLevel": "Requires active membership level {level} or higher",
+  "storageBucketLocked": "Bucket locked",
+  "storageBucketLockedHint": "This bucket requires an active membership level {level} or higher. Upgrade your membership to enable it.",
+  "storageQuotaDefault": "Default quota: {quota}"
 }

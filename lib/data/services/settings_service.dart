@@ -32,6 +32,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyBackgroundImagePath = 'settings_background_image_path';
   static const _keyBackgroundVisible = 'settings_background_image_visible';
   static const _keyAccentColor = 'settings_accent_color';
+  static const _keyCardOpacity = 'settings_card_opacity';
   static const _keyTimezone = 'settings_timezone';
   static const _keyRegion = 'settings_region';
   static const _keyRegionLang = 'settings_region_lang';
@@ -143,6 +144,7 @@ class SettingsService extends ChangeNotifier {
   String? _backgroundImagePath;
   bool _backgroundVisible = true;
   Color? _accentColor;
+  double _cardOpacity = 1.0;
   String _timezone = localTimezone;
   String _region = localRegion;
   String _regionLang = '';
@@ -159,6 +161,11 @@ class SettingsService extends ChangeNotifier {
 
   /// The user-selected seed color for the app theme. Null uses the default.
   Color? get accentColor => _accentColor;
+
+  /// Opacity applied to cards app-wide (0.0-1.0). 1.0 keeps the default opaque
+  /// surface so cards read like solid floating panels; lower values let theme /
+  /// background colors bleed through.
+  double get cardOpacity => _cardOpacity;
 
   /// Client-side timezone: empty (follow device) or a fixed UTC offset label
   /// like "UTC+8". Server timestamps are converted to this zone for display.
@@ -203,6 +210,7 @@ class SettingsService extends ChangeNotifier {
     _backgroundVisible = prefs.getBool(_keyBackgroundVisible) ?? true;
     final accent = prefs.getInt(_keyAccentColor);
     _accentColor = accent != null ? Color(accent) : null;
+    _cardOpacity = (prefs.getDouble(_keyCardOpacity) ?? 1.0).clamp(0.0, 1.0);
     _timezone = prefs.getString(_keyTimezone) ?? localTimezone;
     _region = prefs.getString(_keyRegion) ?? localRegion;
     _regionLang = prefs.getString(_keyRegionLang) ?? '';
@@ -350,6 +358,13 @@ class SettingsService extends ChangeNotifier {
     } else {
       await prefs.setInt(_keyAccentColor, color.toARGB32());
     }
+    notifyListeners();
+  }
+
+  Future<void> setCardOpacity(double value) async {
+    _cardOpacity = value.clamp(0.0, 1.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyCardOpacity, _cardOpacity);
     notifyListeners();
   }
 

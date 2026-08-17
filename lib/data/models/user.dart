@@ -79,6 +79,7 @@ class User {
   final bool needsRegistration;
   final int storageQuota;
   final int storageUsed;
+  final String storageBucket;
   final String oauth2Provider;
   final String oauth2Username;
   final String bio;
@@ -114,6 +115,7 @@ class User {
     this.needsRegistration = false,
     this.storageQuota = 0,
     this.storageUsed = 0,
+    this.storageBucket = 'default',
     this.oauth2Provider = '',
     this.oauth2Username = '',
     this.bio = '',
@@ -151,6 +153,7 @@ class User {
       needsRegistration: json['needs_registration'] as bool? ?? false,
       storageQuota: (json['storage_quota'] as num?)?.toInt() ?? 0,
       storageUsed: (json['storage_used'] as num?)?.toInt() ?? 0,
+      storageBucket: json['storage_bucket'] as String? ?? 'default',
       oauth2Provider: json['oauth2_provider'] as String? ?? '',
       oauth2Username: json['oauth2_username'] as String? ?? '',
       bio: json['bio'] as String? ?? '',
@@ -224,7 +227,7 @@ class User {
   }
 
   /// The storage-space bonus (bytes) granted by an active membership tier:
-  /// Lv.1 +100MB, Lv.2 +200MB, Lv.3 +400MB, Lv.4 +400MB, else 0.
+  /// Lv.1 +100MB, Lv.2 +200MB, Lv.3 +400MB, Lv.4 +800MB, else 0.
   int get memberStorageBonusBytes {
     switch (hasActiveMembership ? memberLevel : 0) {
       case 1:
@@ -232,17 +235,20 @@ class User {
       case 2:
         return 200 * 1024 * 1024;
       case 3:
-      case 4:
         return 400 * 1024 * 1024;
+      case 4:
+        return 800 * 1024 * 1024;
       default:
         return 0;
     }
   }
 
-  /// The effective storage quota while the membership is active (base quota
-  /// plus the tier bonus). After expiry the bonus reverts to 0, matching the
-  /// server's enforcement.
-  int get effectiveStorageQuota => storageQuota + memberStorageBonusBytes;
+  /// The effective storage quota while the membership is active and the user is
+  /// on the default storage bucket (base quota plus the tier bonus). On
+  /// non-default buckets the bonus does not apply, matching the server's
+  /// enforcement. After expiry the bonus reverts to 0.
+  int get effectiveStorageQuota =>
+      storageQuota + (storageBucket.isEmpty || storageBucket == 'default' ? memberStorageBonusBytes : 0);
 
   /// Experience-based level, derived with the same cumulative formula as the
   /// server. Total exp must reach the cumulative threshold of level 2 (=100)
@@ -364,6 +370,7 @@ class User {
     bool? needsRegistration,
     int? storageQuota,
     int? storageUsed,
+    String? storageBucket,
     String? oauth2Provider,
     String? oauth2Username,
     String? bio,
@@ -399,6 +406,7 @@ class User {
       needsRegistration: needsRegistration ?? this.needsRegistration,
       storageQuota: storageQuota ?? this.storageQuota,
       storageUsed: storageUsed ?? this.storageUsed,
+      storageBucket: storageBucket ?? this.storageBucket,
       oauth2Provider: oauth2Provider ?? this.oauth2Provider,
       oauth2Username: oauth2Username ?? this.oauth2Username,
       bio: bio ?? this.bio,

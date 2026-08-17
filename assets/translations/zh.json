@@ -418,5 +418,16 @@
   "visibilityFriends": "仅好友",
   "visibilityFriendsHint": "仅互相关注的好友可见",
   "visibilityPrivate": "私密",
-  "visibilityPrivateHint": "仅自己可见"
+  "visibilityPrivateHint": "仅自己可见",
+  "relationships": "关系",
+  "relationshipsHint": "好友与关注",
+  "storageBucket": "存储桶",
+  "storageBucketCurrent": "当前桶",
+  "storageBucketDefault": "默认桶",
+  "storageBucketHint": "每个存储桶拥有独立的储存上限。会员储存加成仅对默认桶生效，高级桶可能需要最低会员等级。",
+  "storageBucketSwitched": "存储桶已切换",
+  "storageBucketRequiresLevel": "需要 {level} 级及以上活跃会员",
+  "storageBucketLocked": "桶未解锁",
+  "storageBucketLockedHint": "此存储桶需要 {level} 级及以上活跃会员。升级会员后即可使用。",
+  "storageQuotaDefault": "默认配额：{quota}"
 }

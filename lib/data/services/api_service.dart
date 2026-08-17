@@ -1550,6 +1550,37 @@ class ApiService {
     }
   }
 
+  /// Fetches the configured storage buckets with their labels, default quotas,
+  /// membership gates and the current user's selected bucket.
+  Future<Map<String, dynamic>> listStorageBuckets(String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/users/storage-buckets'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) return data;
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to load storage buckets'));
+  }
+
+  /// Switches the current user to another storage bucket. Returns the updated
+  /// user.
+  Future<User> setStorageBucket(String accessToken, String bucket) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/users/me/storage-bucket'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'bucket': bucket}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode,
+          _decodeError(response, 'Failed to switch storage bucket'));
+    }
+    final data = _decodeMap(response);
+    final user = data?['user'];
+    if (user is Map<String, dynamic>) return User.fromJson(user);
+    throw ApiException(response.statusCode, 'Invalid response');
+  }
+
   /// Fetches the task catalog with the user's progress, current sign-in streak
   /// and the make-up cost in currency.
   Future<Map<String, dynamic>> listTasks(String accessToken) async {

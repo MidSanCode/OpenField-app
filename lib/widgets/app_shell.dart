@@ -61,14 +61,14 @@ class _Sidebar extends StatelessWidget {
       ),
       destinations: [
         NavigationRailDestination(
-          icon: const Icon(Icons.chat_outlined),
-          selectedIcon: const Icon(Icons.chat),
-          label: Text('chat'.tr()),
-        ),
-        NavigationRailDestination(
           icon: const Icon(Icons.forum_outlined),
           selectedIcon: const Icon(Icons.forum),
           label: Text('posts'.tr()),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.chat_outlined),
+          selectedIcon: const Icon(Icons.chat),
+          label: Text('chat'.tr()),
         ),
         NavigationRailDestination(
           icon: _AccountAvatarIcon(size: 24),
@@ -120,14 +120,14 @@ class _BottomBar extends StatelessWidget {
       onDestinationSelected: onDestinationSelected,
       destinations: [
         NavigationDestination(
-          icon: const Icon(Icons.chat_outlined),
-          selectedIcon: const Icon(Icons.chat),
-          label: 'chat'.tr(),
-        ),
-        NavigationDestination(
           icon: const Icon(Icons.forum_outlined),
           selectedIcon: const Icon(Icons.forum),
           label: 'posts'.tr(),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.chat_outlined),
+          selectedIcon: const Icon(Icons.chat),
+          label: 'chat'.tr(),
         ),
         NavigationDestination(
           icon: const _AccountAvatarIcon(size: 24),

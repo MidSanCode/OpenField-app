@@ -43,6 +43,8 @@ class SettingsPage extends StatelessWidget {
                 const Divider(height: 1),
                 const _BackgroundVisibleTile(),
                 const Divider(height: 1),
+                const _CardOpacityTile(),
+                const Divider(height: 1),
                 _DeveloperModeTile(),
               ],
             ),
@@ -884,6 +886,67 @@ class _AppColorTile extends StatelessWidget {
     } catch (_) {
       return null;
     }
+  }
+}
+
+/// Card opacity: a slider that makes every card in the app translucent so the
+/// theme / background colors show through. 100% is the default opaque surface.
+class _CardOpacityTile extends StatelessWidget {
+  const _CardOpacityTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsService>(context);
+    final opacity = settings.cardOpacity;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.opacity_outlined, size: 24),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('cardOpacity'.tr()),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${'cardOpacityHint'.tr()} ${(opacity * 100).round()}%',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Slider(
+            value: opacity,
+            min: 0.2,
+            max: 1.0,
+            divisions: 16,
+            label: '${(opacity * 100).round()}%',
+            onChanged: (value) => settings.setCardOpacity(value),
+          ),
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: opacity >= 1.0
+                    ? null
+                    : () => settings.setCardOpacity(1.0),
+                icon: const Icon(Icons.restart_alt, size: 18),
+                label: Text('appColorDefault'.tr()),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

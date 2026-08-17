@@ -13,9 +13,11 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
 import 'package:openfield/pages/account/favorites_page.dart';
+import 'package:openfield/pages/account/follow_list_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/account/exp_history_page.dart';
 import 'package:openfield/pages/account/membership_page.dart';
+import 'package:openfield/pages/account/storage_bucket_page.dart';
 import 'package:openfield/pages/account/tasks_page.dart';
 import 'package:openfield/pages/account/wallet_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
@@ -412,19 +414,36 @@ class _AccountPageState extends State<AccountPage> {
         _SettingsSection(
           title: 'myContent'.tr(),
           children: [
-            if (user != null)
-              _NavTile(
-                icon: Icons.attach_file,
-                title: 'myAttachments'.tr(),
-                subtitle: 'manageAttachmentsHint'.tr(),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AttachmentsPage()),
-                  );
-                },
-              ),
-            if (user != null) const Divider(height: 1),
-            _NavTile(
+if (user != null)
+                  _NavTile(
+                    icon: Icons.attach_file,
+                    title: 'myAttachments'.tr(),
+                    subtitle: 'manageAttachmentsHint'.tr(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AttachmentsPage()),
+                      );
+                    },
+                  ),
+                if (user != null) const Divider(height: 1),
+                if (user != null)
+                  _NavTile(
+                    icon: Icons.people_outline,
+                    title: 'relationships'.tr(),
+                    subtitle: 'relationshipsHint'.tr(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => FollowListPage(
+                            userId: user.id,
+                            initialTab: FollowListType.friends,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                if (user != null) const Divider(height: 1),
+                _NavTile(
               icon: Icons.bookmarks_outlined,
               title: 'favorites'.tr(),
               subtitle: 'favoritesPosts'.tr(),
@@ -932,6 +951,33 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                     ),
                   ),
                 ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ---- Storage bucket ----
+          _SectionHeader(title: 'storageBucket'.tr()),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.storage_outlined),
+                  title: Text('storageBucket'.tr()),
+                  subtitle: Text(
+                    user?.storageBucket.isNotEmpty == true
+                        ? '${'storageBucketCurrent'.tr()}: ${user!.storageBucket}'
+                        : 'storageBucketDefault'.tr(),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const StorageBucketPage()),
+                    );
+                  },
+                ),
               ],
             ),
           ),

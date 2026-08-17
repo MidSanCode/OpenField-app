@@ -267,8 +267,10 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
               builder: (context, settings, _) {
                 return MaterialApp.router(
                   title: 'OpenField',
-                  theme: AppTheme.light(settings.accentColor),
-                  darkTheme: AppTheme.dark(settings.accentColor),
+                  theme: AppTheme.light(settings.accentColor,
+                      cardOpacity: settings.cardOpacity),
+                  darkTheme: AppTheme.dark(settings.accentColor,
+                      cardOpacity: settings.cardOpacity),
                   themeMode: settings.themeMode,
                   locale: context.locale,
                   localizationsDelegates: context.localizationDelegates,
