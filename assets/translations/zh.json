@@ -429,5 +429,9 @@
   "storageBucketRequiresLevel": "需要 {level} 级及以上活跃会员",
   "storageBucketLocked": "桶未解锁",
   "storageBucketLockedHint": "此存储桶需要 {level} 级及以上活跃会员。升级会员后即可使用。",
-  "storageQuotaDefault": "默认配额：{quota}"
+  "storageQuotaDefault": "默认配额：{quota}",
+  "privacy": "隐私",
+  "hideFollowLists": "隐藏关注与粉丝列表",
+  "hideFollowListsHint": "将你的关注、粉丝和好友列表设为仅自己可见。",
+  "followListsHidden": "关注与粉丝列表已隐藏"
 }

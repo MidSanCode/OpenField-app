@@ -425,5 +425,9 @@
   "storageBucketRequiresLevel": "Requires active membership level {level} or higher",
   "storageBucketLocked": "Bucket locked",
   "storageBucketLockedHint": "This bucket requires an active membership level {level} or higher. Upgrade your membership to enable it.",
-  "storageQuotaDefault": "Default quota: {quota}"
+  "storageQuotaDefault": "Default quota: {quota}",
+  "privacy": "Privacy",
+  "hideFollowLists": "Hide follow lists",
+  "hideFollowListsHint": "Keep your followers, following and friends lists private.",
+  "followListsHidden": "Follow lists hidden"
 }

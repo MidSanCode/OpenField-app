@@ -91,6 +91,7 @@ class User {
   final int friendCount;
   final bool isFollowing;
   final bool isFriend;
+  final bool hideFollowLists;
   final int exp;
   final DateTime? lastDailyBonusAt;
   final int memberLevel;
@@ -127,6 +128,7 @@ class User {
     this.friendCount = 0,
     this.isFollowing = false,
     this.isFriend = false,
+    this.hideFollowLists = false,
     this.exp = 0,
     this.lastDailyBonusAt,
     this.memberLevel = 0,
@@ -165,6 +167,7 @@ class User {
       friendCount: (json['friend_count'] as num?)?.toInt() ?? 0,
       isFollowing: json['is_following'] as bool? ?? false,
       isFriend: json['is_friend'] as bool? ?? false,
+      hideFollowLists: json['hide_follow_lists'] as bool? ?? false,
       exp: (json['exp'] as num?)?.toInt() ?? 0,
       lastDailyBonusAt: _asDate(json['last_daily_bonus_at']),
       memberLevel: (json['member_level'] as num?)?.toInt() ?? 0,
@@ -382,6 +385,7 @@ class User {
     int? friendCount,
     bool? isFollowing,
     bool? isFriend,
+    bool? hideFollowLists,
     int? exp,
     DateTime? lastDailyBonusAt,
     int? memberLevel,
@@ -418,6 +422,7 @@ class User {
       friendCount: friendCount ?? this.friendCount,
       isFollowing: isFollowing ?? this.isFollowing,
       isFriend: isFriend ?? this.isFriend,
+      hideFollowLists: hideFollowLists ?? this.hideFollowLists,
       exp: exp ?? this.exp,
       lastDailyBonusAt: lastDailyBonusAt ?? this.lastDailyBonusAt,
       memberLevel: memberLevel ?? this.memberLevel,

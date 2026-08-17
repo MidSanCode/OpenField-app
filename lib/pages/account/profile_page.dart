@@ -223,6 +223,24 @@ class _ProfilePageState extends State<ProfilePage> {
     final auth = Provider.of<AuthService>(context, listen: false);
     if (auth.accessToken == null) return const SizedBox.shrink();
 
+    // A target that hides its follow lists shows a lock note instead of the
+    // tappable counts; only the account owner still sees their own numbers.
+    if (user.hideFollowLists && auth.user?.id != user.id) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.lock_outline, size: 16, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text(
+            'followListsHidden'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      );
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

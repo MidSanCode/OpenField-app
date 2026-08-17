@@ -1550,6 +1550,20 @@ class ApiService {
     }
   }
 
+  /// Updates the user's follow-list privacy. When enabled, the followers /
+  /// following / friends lists are hidden from everyone else on the server.
+  Future<void> updatePrivacy(String accessToken, {required bool hideFollowLists}) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/users/me/privacy'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'hide_follow_lists': hideFollowLists}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to update privacy'));
+    }
+  }
+
   /// Fetches the configured storage buckets with their labels, default quotas,
   /// membership gates and the current user's selected bucket.
   Future<Map<String, dynamic>> listStorageBuckets(String accessToken) async {

@@ -820,6 +820,24 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     }
   }
 
+  Future<void> _setHideFollowLists(bool hide) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final token = auth.accessToken;
+    if (token == null) return;
+    try {
+      await _apiService.updatePrivacy(token, hideFollowLists: hide);
+      await auth.fetchCurrentUser();
+      if (mounted) setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('saved'.tr())),
+        );
+      }
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -979,6 +997,25 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   },
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ---- Privacy ----
+          _SectionHeader(title: 'privacy'.tr()),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: SwitchListTile(
+              secondary: const Icon(Icons.visibility_off_outlined),
+              title: Text('hideFollowLists'.tr()),
+              subtitle: Text(
+                'hideFollowListsHint'.tr(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              value: user?.hideFollowLists ?? false,
+              onChanged: (value) => _setHideFollowLists(value),
             ),
           ),
           const SizedBox(height: 16),
