@@ -20,11 +20,12 @@ class ExperienceBar extends StatelessWidget {
     // Progress is the share of exp already earned inside the current level,
     // counted from the previous level's threshold up to the next level:
     // (exp - prev[level]) / (prev[level+1] - prev[level]). This way the bar
-    // fills from empty to full within each level. A minimal sliver keeps the
-    // bar visibly filled even at 0 exp into the level.
+    // fills from empty to full within each level. The numbers keep showing the
+    // real totals: lifetime exp and the cumulative exp needed to reach the
+    // next level. A minimal sliver keeps the bar visibly filled at 0.
     final progress = user.levelProgressWithin.clamp(0.02, 1.0);
-    final expTotal = '${user.expIntoLevel}';
-    final expNext = '${user.expForNextLevel}';
+    final expTotal = '${user.exp}';
+    final expNext = '${user.totalExpForNextLevel}';
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
