@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 
+import 'cached_network_image.dart';
+
 final Logger _imageLog = Logger('image');
 
 /// A [Image.network] that never renders a blank area.
@@ -32,10 +34,12 @@ class MediaImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bg = dark ? Colors.black : theme.colorScheme.surfaceContainerHighest;
-    return Image.network(
-      url,
+    final provider = CachedNetworkImageProvider(url);
+    return Image(
+      image: cacheWidth != null
+          ? ResizeImage(provider, width: cacheWidth)
+          : provider,
       fit: fit,
-      cacheWidth: cacheWidth,
       alignment: alignment,
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;

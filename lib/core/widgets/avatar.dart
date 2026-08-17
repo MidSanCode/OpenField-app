@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 
+import 'cached_network_image.dart';
+
 final Logger _imageLog = Logger('image');
 
 /// A circular avatar backed by a remote image. Unlike [CircleAvatar] with a
@@ -66,8 +68,8 @@ class Avatar extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: Image.network(
-          imageUrl,
+        child: Image(
+          image: CachedNetworkImageProvider(imageUrl),
           fit: BoxFit.cover,
           gaplessPlayback: true,
           loadingBuilder: (context, child, progress) {
