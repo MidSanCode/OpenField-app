@@ -677,9 +677,12 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   /// Decrypts a single message when the conversation is encrypted. System
-  /// messages and already-decrypted messages pass through unchanged.
+  /// messages, already-decrypted messages and plaintext messages (sent before
+  /// encryption was enabled, never wrapped in an envelope) pass through
+  /// unchanged.
   ChatMessage _decryptMessage(ChatMessage m) {
     if (!_isEncrypted || m.isSystem || m.decryptedContent != null) return m;
+    if (!m.isEnvelope) return m;
     final plain =
         E2eeService.instance.decryptMessage(widget.conversationId, m.senderId, m.content);
     if (plain == null) return m;
@@ -1893,21 +1896,24 @@ class _MessageBubble extends StatelessWidget {
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4, right: 6),
-                                child: Icon(
-                                  message.decryptedContent == null
-                                      ? Icons.lock_outline
-                                      : Icons.lock,
-                                  size: 12,
-                                  color: theme.colorScheme.onSurfaceVariant,
+                              if (message.isEnvelope)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4, right: 6),
+                                  child: Icon(
+                                    message.decryptedContent == null
+                                        ? Icons.lock_outline
+                                        : Icons.lock,
+                                    size: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
-                              ),
                               Flexible(
-                                child: message.decryptedContent == null
+                                child: message.isEnvelope &&
+                                        message.decryptedContent == null
                                     ? Text(
                                         'e2eeUndecryptable'.tr(),
-                                        style: theme.textTheme.bodySmall?.copyWith(
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
                                           fontStyle: FontStyle.italic,
                                           color: theme.colorScheme.onSurfaceVariant,
                                         ),
