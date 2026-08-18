@@ -448,6 +448,7 @@ class _ConversationPageState extends State<ConversationPage> {
         _isEncryptedConv = true;
         unawaited(ChatLocalDb.instance.deleteConversation(widget.conversationId));
       }
+      _members = detail.members;
       var display = _mergeMessages(_messages, messages);
       if (encrypted) {
         await _ensureE2EE();
@@ -642,6 +643,26 @@ class _ConversationPageState extends State<ConversationPage> {
               _apiService, token, widget.conversationId, _myUserId);
         } catch (_) {
           // Offline or a transient error: cached group keys still work.
+        }
+        if (!E2eeService.instance.hasGroupKey(widget.conversationId)) {
+          // An encrypted conversation with no group key yet (e.g. a private
+          // chat created as encrypted, or a rotation that never completed):
+          // generate the first key and seal it to every member that has
+          // published an identity key.
+          final members = _members
+              .where((m) =>
+                  m.e2eePublicKey != null && m.e2eePublicKey!.isNotEmpty)
+              .map((m) => (userId: m.userId, publicKey: m.e2eePublicKey!))
+              .toList();
+          if (members.isNotEmpty) {
+            try {
+              await E2eeService.instance.rotateGroupKey(
+                  _apiService, token, widget.conversationId, members);
+            } catch (_) {
+              // Key bootstrap failed (e.g. our own identity key is not
+              // published yet); the pending banner stays and can be retried.
+            }
+          }
         }
       }
     } catch (_) {
