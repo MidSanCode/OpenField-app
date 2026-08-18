@@ -150,6 +150,7 @@
   "e2eeKeysPending": "正在获取加密密钥…",
   "e2eeNoMemberKeys": "尚无成员发布加密密钥",
   "e2eeUndecryptable": "无法解密该消息",
+  "e2eeWaitOtherMember": "正在等待对方连接以交换加密密钥…",
   "edit": "编辑",
   "editPost": "编辑帖子",
   "editProfile": "编辑资料",

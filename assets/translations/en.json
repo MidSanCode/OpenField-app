@@ -150,6 +150,7 @@
   "e2eeKeysPending": "Waiting for encryption keys…",
   "e2eeNoMemberKeys": "No member has published an encryption key yet",
   "e2eeUndecryptable": "Cannot decrypt message",
+  "e2eeWaitOtherMember": "Waiting for the other member to connect…",
   "edit": "Edit",
   "editPost": "Edit Post",
   "editProfile": "Edit Profile",

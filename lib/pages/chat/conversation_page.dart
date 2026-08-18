@@ -48,6 +48,7 @@ class ConversationPage extends StatefulWidget {
 class _ConversationPageState extends State<ConversationPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _inputController = TextEditingController();
+  final FocusNode _inputFocus = FocusNode();
   final ScrollController _scrollController = ScrollController();
 
   Conversation? _conversation;
@@ -65,6 +66,11 @@ class _ConversationPageState extends State<ConversationPage> {
   String? _typingUserId;
   Timer? _typingSendTimer;
   bool _e2eeKeysReady = false;
+
+  /// True when the key is missing because another member has not published an
+  /// identity key yet; lets the pending banner hint that we are waiting on
+  /// them instead of showing a generic "fetching" message.
+  bool _e2eeWaitForMember = false;
 
   /// Confirmed encryption state of this conversation (resolved from the server
   /// detail). Drives which cache store messages are read from and written to.
@@ -128,6 +134,7 @@ class _ConversationPageState extends State<ConversationPage> {
     }
     _typingTimers.clear();
     _inputController.dispose();
+    _inputFocus.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -670,12 +677,33 @@ class _ConversationPageState extends State<ConversationPage> {
             } catch (_) {}
           }
           if (members.isNotEmpty) {
+            // Skip the bootstrap when this is a brand-new conversation whose
+            // epoch has never started AND some member has not published an
+            // identity key yet. Sealing the first key to only the members
+            // present at this moment would strand the others permanently.
+            // Instead wait: the missing member will publish on their first
+            // visit and bootstrap the first key to the whole conversation.
+            var hasEpoch = true;
             try {
-              await E2eeService.instance.rotateGroupKey(
-                  _apiService, token, widget.conversationId, members);
-            } catch (_) {
-              // Key bootstrap failed (e.g. our own identity key is not
-              // published yet); the pending banner stays and can be retried.
+              final data =
+                  await _apiService.getE2EEKeys(token, widget.conversationId);
+              final envelopes = data['envelopes'];
+              hasEpoch = envelopes is List && envelopes.isNotEmpty;
+            } catch (_) {}
+            final allPublished = _members.isNotEmpty &&
+                _members.every((m) =>
+                    m.e2eePublicKey != null && m.e2eePublicKey!.isNotEmpty);
+            if (hasEpoch || allPublished) {
+              _e2eeWaitForMember = false;
+              try {
+                await E2eeService.instance.rotateGroupKey(
+                    _apiService, token, widget.conversationId, members);
+              } catch (_) {
+                // Key bootstrap failed (e.g. our own identity key is not
+                // published yet); the pending banner stays and can be retried.
+              }
+            } else {
+              _e2eeWaitForMember = true;
             }
           }
         }
@@ -809,8 +837,10 @@ class _ConversationPageState extends State<ConversationPage> {
       await _ensureE2EE();
       if (!mounted) return;
       if (!_e2eeKeysReady) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('e2eeKeysPending'.tr())));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_e2eeWaitForMember
+                ? 'e2eeWaitOtherMember'.tr()
+                : 'e2eeKeysPending'.tr())));
         return;
       }
     }
@@ -824,6 +854,9 @@ class _ConversationPageState extends State<ConversationPage> {
       _mentionCandidates = [];
       _mentionShowEveryone = false;
     });
+    // Keep keyboard focus on the composer: on desktop the send button grabs
+    // focus when clicked, otherwise the IME would dismiss after every send.
+    _inputFocus.requestFocus();
 
     // Optimistic send: render the message immediately with a local id +
     // timestamp, then resolve with the server-confirmed message. For encrypted
@@ -852,13 +885,14 @@ class _ConversationPageState extends State<ConversationPage> {
   Future<void> _dispatchSend(ChatMessage local, String token) async {
     _markStatus(local.clientId, MessageStatus.sending);
     try {
-      final msg = await _apiService.sendChatMessage(
+      var msg = await _apiService.sendChatMessage(
         token,
         widget.conversationId,
         local.content,
         replyToId: local.replyToId,
         mentions: local.mentions,
       );
+      if (_isEncrypted) msg = _decryptMessage(msg);
       if (!mounted) return;
       setState(() {
         _messages = _replaceByClientId(local.clientId, msg);
@@ -899,8 +933,14 @@ class _ConversationPageState extends State<ConversationPage> {
     });
   }
 
+  /// Replaces the optimistic message carrying [clientId] with [replacement].
+  /// Also drops any existing copy of the same server id so a late HTTP
+  /// response can never duplicate a message that the WebSocket echo already
+  /// resolved.
   List<ChatMessage> _replaceByClientId(String clientId, ChatMessage replacement) {
-    final resolved = _messages.where((m) => m.clientId != clientId).toList();
+    final resolved = _messages
+        .where((m) => m.clientId != clientId && m.id != replacement.id)
+        .toList();
     return _sorted([...resolved, replacement]);
   }
 
@@ -1651,7 +1691,9 @@ class _ConversationPageState extends State<ConversationPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'e2eeKeysPending'.tr(),
+                  _e2eeWaitForMember
+                      ? 'e2eeWaitOtherMember'.tr()
+                      : 'e2eeKeysPending'.tr(),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -1685,6 +1727,7 @@ class _ConversationPageState extends State<ConversationPage> {
             Expanded(
               child: TextField(
                 controller: _inputController,
+                focusNode: _inputFocus,
                 minLines: 1,
                 maxLines: 5,
                 textCapitalization: TextCapitalization.sentences,
