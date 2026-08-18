@@ -718,26 +718,7 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   ChatMessage _copyWithDecrypted(ChatMessage m, String plain) {
-    return ChatMessage(
-      id: m.id,
-      conversationId: m.conversationId,
-      senderId: m.senderId,
-      content: m.content,
-      kind: m.kind,
-      replyToId: m.replyToId,
-      replyToName: m.replyToName,
-      replyToContent: m.replyToContent,
-      editedAt: m.editedAt,
-      deletedAt: m.deletedAt,
-      createdAt: m.createdAt,
-      senderName: m.senderName,
-      senderAvatar: m.senderAvatar,
-      senderVerified: m.senderVerified,
-      attachments: m.attachments,
-      clientId: m.clientId,
-      status: m.status,
-      decryptedContent: plain,
-    );
+    return m.copyWith(decryptedContent: plain);
   }
 
   /// Decrypts a single message when the conversation is encrypted. System
@@ -913,22 +894,7 @@ class _ConversationPageState extends State<ConversationPage> {
     setState(() {
       _messages = _messages.map((m) {
         if (m.clientId != clientId) return m;
-        return ChatMessage(
-          id: m.id,
-          conversationId: m.conversationId,
-          senderId: m.senderId,
-          content: m.content,
-          kind: m.kind,
-          replyToId: m.replyToId,
-          editedAt: m.editedAt,
-          deletedAt: m.deletedAt,
-          createdAt: m.createdAt,
-          senderName: m.senderName,
-          senderAvatar: m.senderAvatar,
-          senderVerified: m.senderVerified,
-          clientId: m.clientId,
-          status: status,
-        );
+        return m.copyWith(status: status);
       }).toList();
     });
   }
@@ -1973,6 +1939,7 @@ class _MessageBubble extends StatelessWidget {
                           )
                         else if (isEncrypted)
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (message.isEnvelope)

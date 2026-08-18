@@ -30,9 +30,18 @@ class MediaCache {
   /// Upper bound for the in-memory decoded cache (bytes).
   static const int maxMemoryBytes = 50 * 1024 * 1024;
 
+  /// Minimum gap between two network downloads of the same URL. Layout churn
+  /// (window resize, heavy scrolling) rebuilds image widgets in waves; the
+  /// throttle keeps that from hot-looping the server for one URL.
+  static const Duration networkCooldown = Duration(seconds: 3);
+
   final http.Client _client = http.Client();
 
   Directory? _dir;
+
+  // When each URL was last fetched from the network, used to enforce the
+  // [networkCooldown] above.
+  final Map<String, DateTime> _lastDownload = {};
 
   // ---- in-memory decoded cache (LRU) ----
   final LinkedHashMap<String, Uint8List> _memory = LinkedHashMap();
@@ -77,6 +86,17 @@ class MediaCache {
       }
     }
 
+    // Throttle: the same URL is requested again and again during layout churn
+    // (window resize, scrolling). Never hot-loop the server for it - serve the
+    // bytes we fetched within [networkCooldown] and only re-download once the
+    // window elapses.
+    final lastDownload = _lastDownload[url];
+    if (lastDownload != null &&
+        DateTime.now().difference(lastDownload) < networkCooldown) {
+      final mem = _memory[url];
+      if (mem != null) return mem;
+    }
+
     final resp = await _client.get(Uri.parse(url));
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw NetworkImageLoadException(
@@ -85,6 +105,7 @@ class MediaCache {
       );
     }
     final bytes = resp.bodyBytes;
+    _lastDownload[url] = DateTime.now();
     _storeMemory(url, bytes);
     unawaited(_writeDisk(file, bytes));
     return bytes;

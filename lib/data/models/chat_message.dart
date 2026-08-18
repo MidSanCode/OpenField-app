@@ -166,6 +166,73 @@ class ChatMessage {
     );
   }
 
+  /// Sentinel distinguishing "not passed" from an explicit null reset.
+  static const Object _unset = Object();
+
+  /// Copies this message, overriding only the given fields and preserving
+  /// everything else (member styling, reply metadata, attachments, ...).
+  /// Used to stamp send status or decrypted plaintext without losing fields.
+  ChatMessage copyWith({
+    int? id,
+    String? content,
+    String? kind,
+    int? replyToId,
+    String? replyToName,
+    String? replyToContent,
+    DateTime? editedAt,
+    DateTime? deletedAt,
+    DateTime? createdAt,
+    String? senderName,
+    String? senderAvatar,
+    bool? senderVerified,
+    int? senderMemberLevel,
+    bool? senderMemberActive,
+    String? senderNameColor,
+    String? senderNameColorTo,
+    bool? senderNameDynamic,
+    List<String>? senderNameColors,
+    String? senderNameGradientDirection,
+    String? senderAvatarFrame,
+    List<Attachment>? attachments,
+    List<int>? mentions,
+    String? clientId,
+    MessageStatus? status,
+    Object? decryptedContent = _unset,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      conversationId: conversationId,
+      senderId: senderId,
+      content: content ?? this.content,
+      kind: kind ?? this.kind,
+      replyToId: replyToId ?? this.replyToId,
+      replyToName: replyToName ?? this.replyToName,
+      replyToContent: replyToContent ?? this.replyToContent,
+      editedAt: editedAt ?? this.editedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      createdAt: createdAt ?? this.createdAt,
+      senderName: senderName ?? this.senderName,
+      senderAvatar: senderAvatar ?? this.senderAvatar,
+      senderVerified: senderVerified ?? this.senderVerified,
+      senderMemberLevel: senderMemberLevel ?? this.senderMemberLevel,
+      senderMemberActive: senderMemberActive ?? this.senderMemberActive,
+      senderNameColor: senderNameColor ?? this.senderNameColor,
+      senderNameColorTo: senderNameColorTo ?? this.senderNameColorTo,
+      senderNameDynamic: senderNameDynamic ?? this.senderNameDynamic,
+      senderNameColors: senderNameColors ?? this.senderNameColors,
+      senderNameGradientDirection:
+          senderNameGradientDirection ?? this.senderNameGradientDirection,
+      senderAvatarFrame: senderAvatarFrame ?? this.senderAvatarFrame,
+      attachments: attachments ?? this.attachments,
+      mentions: mentions ?? this.mentions,
+      clientId: clientId ?? this.clientId,
+      status: status ?? this.status,
+      decryptedContent: identical(decryptedContent, _unset)
+          ? this.decryptedContent
+          : decryptedContent as String?,
+    );
+  }
+
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final rawAttachments = json['attachments'];
     List<Attachment> attachments = const [];
