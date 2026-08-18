@@ -649,11 +649,26 @@ class _ConversationPageState extends State<ConversationPage> {
           // chat created as encrypted, or a rotation that never completed):
           // generate the first key and seal it to every member that has
           // published an identity key.
-          final members = _members
+          var members = _members
               .where((m) =>
                   m.e2eePublicKey != null && m.e2eePublicKey!.isNotEmpty)
               .map((m) => (userId: m.userId, publicKey: m.e2eePublicKey!))
               .toList();
+          if (members.isEmpty) {
+            // ensureIdentity may have just published our key after the member
+            // list was fetched; re-fetch so the bootstrap can seal the key to
+            // the freshly-published identities.
+            try {
+              final fresh =
+                  await _apiService.getConversation(token, widget.conversationId);
+              if (mounted) _members = fresh.members;
+              members = fresh.members
+                  .where((m) =>
+                      m.e2eePublicKey != null && m.e2eePublicKey!.isNotEmpty)
+                  .map((m) => (userId: m.userId, publicKey: m.e2eePublicKey!))
+                  .toList();
+            } catch (_) {}
+          }
           if (members.isNotEmpty) {
             try {
               await E2eeService.instance.rotateGroupKey(
