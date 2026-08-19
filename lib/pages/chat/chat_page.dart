@@ -14,6 +14,7 @@ import 'package:openfield/pages/chat/consent_requests_page.dart';
 import 'package:openfield/pages/chat/discover_groups_page.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
 import 'package:openfield/core/widgets/avatar.dart';
+import 'package:openfield/core/format/chat_time.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -632,19 +633,8 @@ class _ConversationTile extends StatelessWidget {
   }
 
   String _formatTime(DateTime time, SettingsService settings) {
-    // Timestamps arrive from the server in UTC; render them in the
-    // client-selected timezone (or the device's own zone by default).
-    final local = settings.displayTime(time);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final that = DateTime(local.year, local.month, local.day);
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    if (that == today) return '$h:$m';
-    if (now.difference(that).inDays < 7) {
-      const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return weekdays[local.weekday - 1];
-    }
-    return '${local.month}-${local.day}';
+    // Timestamps arrive from the server in UTC; render them with calendar
+    // context in the client-selected timezone (or the device's own zone).
+    return formatChatTime(time, settings.displayTime, 'timeYesterday'.tr());
   }
 }

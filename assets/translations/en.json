@@ -298,6 +298,7 @@
   "showMore": "Show more",
   "systemMode": "Follow System",
   "theme": "Theme",
+  "timeYesterday": "Yesterday",
   "timezone": "Timezone",
   "timezoneHint": "Show timestamps in a fixed timezone",
   "regionSettings": "Region Settings",

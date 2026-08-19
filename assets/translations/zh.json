@@ -302,6 +302,7 @@
   "showMore": "展开更多",
   "systemMode": "跟随系统",
   "theme": "主题",
+  "timeYesterday": "昨天",
   "timezone": "时区",
   "timezoneHint": "以固定时区显示时间戳",
   "regionSettings": "地区设置",

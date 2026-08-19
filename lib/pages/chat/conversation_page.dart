@@ -21,6 +21,7 @@ import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 import 'package:openfield/core/widgets/avatar.dart';
+import 'package:openfield/core/format/chat_time.dart';
 
 class ConversationPage extends StatefulWidget {
   final int conversationId;
@@ -936,7 +937,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
-    final result = await FilePicker.platform.pickFiles();
+    final result = await FilePicker.platform.pickFiles(type: FileType.any);
     final file = result?.files.single;
     if (file == null || file.path == null) return;
     final local = ChatMessage(
@@ -2024,12 +2025,9 @@ class _MessageBubble extends StatelessWidget {
   }
 
   String _formatTime(SettingsService settings, DateTime time) {
-    // Server timestamps are UTC; render in the client-selected timezone (or the
-    // device's own zone by default).
-    final local = settings.displayTime(time);
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+    // Server timestamps are UTC; render with calendar context in the
+    // client-selected timezone (or the device's own zone by default).
+    return formatChatTime(time, settings.displayTime, 'timeYesterday'.tr());
   }
 
   /// Quote preview: prefers the in-thread message (fresh edits/deletes), then
