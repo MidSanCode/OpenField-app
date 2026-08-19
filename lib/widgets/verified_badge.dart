@@ -250,6 +250,7 @@ class _VerifiedNameState extends State<VerifiedName> {
         for (var i = 0; i < gradientColors.length; i++)
           i / gradientColors.length / 2 + 0.5,
       ];
+      final animatedChild = text;
       text = RepaintBoundary(
         child: AnimatedBuilder(
           animation: _NameGradientClock.instance,
@@ -265,7 +266,7 @@ class _VerifiedNameState extends State<VerifiedName> {
                 ),
               ).createShader(bounds),
               blendMode: BlendMode.srcATop,
-              child: text,
+              child: animatedChild,
             );
           },
         ),
