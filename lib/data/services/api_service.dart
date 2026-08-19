@@ -6,6 +6,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
+import '../../core/config/app_config.dart';
 import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/consent_request.dart';
@@ -30,7 +31,8 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
-/// HTTP client that logs every request/response to the console.
+/// HTTP client that logs every request/response to the console and stamps every
+/// request with a descriptive User-Agent.
 class LoggingClient extends http.BaseClient {
   final http.Client _inner;
 
@@ -38,6 +40,7 @@ class LoggingClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    request.headers['User-Agent'] = userAgent();
     final stopwatch = Stopwatch()..start();
     try {
       final response = await _inner.send(request);
@@ -59,6 +62,25 @@ class LoggingClient extends http.BaseClient {
 
   @override
   void close() => _inner.close();
+}
+
+/// Platform label embedded in the User-Agent (web-safe).
+String _uaPlatform() {
+  if (kIsWeb) return 'Web';
+  if (Platform.isAndroid) return 'Android';
+  if (Platform.isIOS) return 'iOS';
+  if (Platform.isWindows) return 'Windows';
+  if (Platform.isMacOS) return 'macOS';
+  if (Platform.isLinux) return 'Linux';
+  return 'Unknown';
+}
+
+/// The User-Agent sent with every request, e.g. `OpenField-app(Windows) 1.0.0 (1)`.
+String userAgent() {
+  final version = AppConfig.versionLabel;
+  return version.isEmpty
+      ? 'OpenField-app(${_uaPlatform()})'
+      : 'OpenField-app(${_uaPlatform()}) $version';
 }
 
 void _logApi(String message) {
@@ -117,8 +139,8 @@ MediaType _mediaTypeFor(String filePath) {
 String mimeTypeForPath(String filePath) => _mediaTypeFor(filePath).toString();
 
 class ApiService {
-  static const String defaultBaseUrl = 'https://of-api.msc-studio.eu.cc/api/v1';
-  static const String defaultServerHost = 'https://of-api.msc-studio.eu.cc';
+  static const String defaultBaseUrl = 'https://api.openfield.eu.cc/api/v1';
+  static const String defaultServerHost = 'https://api.openfield.eu.cc';
   static String _baseUrl = defaultBaseUrl;
   static String _serverHost = defaultServerHost;
   final http.Client _client;

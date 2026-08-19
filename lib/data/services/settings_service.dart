@@ -36,7 +36,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyTimezone = 'settings_timezone';
   static const _keyRegion = 'settings_region';
   static const _keyRegionLang = 'settings_region_lang';
-  static const String defaultServerHost = 'https://of-api.msc-studio.eu.cc';
+  static const String defaultServerHost = 'https://api.openfield.eu.cc';
 
   /// Sentinels for the client-side timezone setting. Empty means "follow the
   /// device's local timezone"; otherwise an IANA-free UTC offset label such as
