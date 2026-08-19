@@ -1,6 +1,7 @@
 ﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -511,12 +512,27 @@ class ApiService {
 
   /// Uploads a file, transparently switching to chunked upload + resume for
   /// large files. [onProgress] reports a fraction in [0, 1] when provided.
+  ///
+  /// Before sending, the file's SHA-256 is checked against the cloud: when an
+  /// identical file already exists the upload is skipped and the existing link
+  /// is returned. (Images whose GPS metadata is stripped server-side may miss
+  /// the local hash match and fall through to a normal upload, where the server
+  /// deduplicates by the sanitized bytes.)
   Future<Attachment> uploadAttachmentSmart(
     String filePath,
     String accessToken, {
     String visibility = 'public',
     ValueChanged<double>? onProgress,
   }) async {
+    final existing = await _findAttachmentByHash(
+      await _fileSha256(filePath),
+      accessToken,
+    );
+    if (existing != null) {
+      onProgress?.call(1);
+      return existing;
+    }
+
     final file = File(filePath);
     final size = await file.length();
     if (size < chunkedUploadThreshold) {
@@ -524,6 +540,50 @@ class ApiService {
       return uploadAttachment(filePath, accessToken, visibility: visibility);
     }
     return _uploadAttachmentChunked(file, size, accessToken, visibility: visibility, onProgress: onProgress);
+  }
+
+  /// Computes the hex-encoded SHA-256 of a file without loading it fully into
+  /// memory, so even large files can be hashed for upload deduplication.
+  Future<String> _fileSha256(String filePath) async {
+    final file = File(filePath);
+    final raf = await file.open();
+    try {
+      var digests = <Digest>[];
+      final runSink = sha256.startChunkedConversion(
+        ChunkedConversionSink<Digest>.withCallback((chunks) {
+          digests = chunks;
+        }),
+      );
+      const chunkSize = 4 * 1024 * 1024;
+      while (true) {
+        final chunk = await raf.read(chunkSize);
+        if (chunk.isEmpty) break;
+        runSink.add(chunk);
+      }
+      runSink.close();
+      return digests.single.toString();
+    } finally {
+      await raf.close();
+    }
+  }
+
+  /// Looks up an existing attachment with the given content hash. Returns null
+  /// when the cloud has no such file (or the lookup itself fails), in which
+  /// case the caller should upload normally.
+  Future<Attachment?> _findAttachmentByHash(String hash, String accessToken) async {
+    try {
+      final response = await _get(
+        Uri.parse('$baseUrl/attachments/by-hash/$hash'),
+        headers: _headers(token: accessToken, json: false),
+      );
+      if (response.statusCode == 200) {
+        final data = _decodeMap(response);
+        if (data != null) return Attachment.fromJson(data);
+      }
+    } catch (_) {
+      // Network/hash mismatch: fall through to a normal upload.
+    }
+    return null;
   }
 
   Future<Attachment> _uploadAttachmentChunked(

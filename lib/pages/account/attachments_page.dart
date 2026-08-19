@@ -158,18 +158,28 @@ Widget _buildTile(BuildContext context, Attachment attachment, VoidCallback onOp
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: Container(
-              color: theme.colorScheme.surfaceContainerHighest,
-              child: attachment.isImage
-                  ? MediaImage(
-                      url: attachment.url,
-                      fit: BoxFit.cover,
-                    )
-                  : Icon(
-                      iconFor(attachment),
-                      size: 32,
-                      color: theme.colorScheme.primary,
-                    ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: attachment.isImage
+                      ? MediaImage(
+                          url: attachment.url,
+                          fit: BoxFit.cover,
+                        )
+                      : Icon(
+                          iconFor(attachment),
+                          size: 32,
+                          color: theme.colorScheme.primary,
+                        ),
+                ),
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: _DeleteButton(onPressed: onDelete),
+                ),
+              ],
             ),
           ),
           Padding(
@@ -197,4 +207,31 @@ Widget _buildTile(BuildContext context, Attachment attachment, VoidCallback onOp
       ),
     ),
   );
+}
+
+/// A small translucent delete button overlaid on an attachment tile.
+class _DeleteButton extends StatelessWidget {
+  const _DeleteButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.45),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: const Padding(
+          padding: EdgeInsets.all(6),
+          child: Icon(
+            Icons.delete_outline,
+            size: 18,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
 }
