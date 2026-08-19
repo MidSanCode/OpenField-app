@@ -66,10 +66,13 @@ class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
 
   User? get _user => Provider.of<AuthService>(context).user;
 
-  bool get _isMember => _user?.hasActiveMembership ?? false;
+  /// Read-only snapshot for event handlers, which must not subscribe.
+  User? get _userSnapshot => Provider.of<AuthService>(context, listen: false).user;
+
+  bool get _isMember => _userSnapshot?.hasActiveMembership ?? false;
 
   int get _maxColors {
-    final level = _user?.memberLevel ?? 0;
+    final level = _userSnapshot?.memberLevel ?? 0;
     if (_isMember && level >= 3) return memberMaxNameColors;
     return 1;
   }
@@ -376,7 +379,7 @@ class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
   /// Returns the selected "#RRGGBB" string, or null when cancelled.
   Future<String?> _pickColor(BuildContext context, {required String initial}) async {
     final isMember = _isMember;
-    final level = _user?.memberLevel ?? 0;
+    final level = _userSnapshot?.memberLevel ?? 0;
     final presetsOnly = isMember && level == 1;
     final controller = TextEditingController(
       text: (initial.isNotEmpty && initial.startsWith('#')) ? initial.substring(1) : initial,
