@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 /// A small blue verified badge shown next to verified usernames.
@@ -177,39 +178,31 @@ class VerifiedName extends StatefulWidget {
   State<VerifiedName> createState() => _VerifiedNameState();
 }
 
-class _VerifiedNameState extends State<VerifiedName>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+class _VerifiedNameState extends State<VerifiedName> {
+  bool get _shouldAnimate => widget.nameDynamic && widget.memberActive;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    );
-    if (widget.nameDynamic && widget.memberActive) {
-      _controller.repeat();
-    }
+    if (_shouldAnimate) _NameGradientClock.instance.acquire();
   }
 
   @override
   void didUpdateWidget(covariant VerifiedName oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final animate = widget.nameDynamic && widget.memberActive;
-    if (animate != _controller.isAnimating) {
-      if (animate) {
-        _controller.repeat();
+    final wasAnimating = oldWidget.nameDynamic && oldWidget.memberActive;
+    if (_shouldAnimate != wasAnimating) {
+      if (_shouldAnimate) {
+        _NameGradientClock.instance.acquire();
       } else {
-        _controller.stop();
-        _controller.value = 0;
+        _NameGradientClock.instance.release();
       }
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    if (_shouldAnimate) _NameGradientClock.instance.release();
     super.dispose();
   }
 
@@ -244,27 +237,38 @@ class _VerifiedNameState extends State<VerifiedName>
 
     if (dynamic && gradientColors.isNotEmpty) {
       // Animated gradient name: the color sweep slides sideways in a seamless
-      // loop while the membership is active.
-      final colors = List<Color>.from(gradientColors);
-      text = AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          return ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(
-              colors: [...colors, ...colors],
-              stops: [
-                for (var i = 0; i < colors.length; i++) i / colors.length / 2,
-                for (var i = 0; i < colors.length; i++)
-                  i / colors.length / 2 + 0.5,
-              ],
-              begin: beginEnd.$1,
-              end: beginEnd.$2,
-              transform: _SlideGradient(-(_controller.value % 1.0) * bounds.width * 0.5),
-            ).createShader(bounds),
-            blendMode: BlendMode.srcATop,
-            child: text,
-          );
-        },
+      // loop while the membership is active. All animated names share the
+      // single app-wide [_NameGradientClock] ticker (instead of one
+      // AnimationController + ShaderMask rebuild per name, which freezes feeds
+      // full of member names); the gradient config is constant so it is built
+      // once, and the animation is wrapped in a RepaintBoundary so only the
+      // name repaints each tick rather than its whole list row.
+      final colors = [...gradientColors, ...gradientColors];
+      final stops = [
+        for (var i = 0; i < gradientColors.length; i++)
+          i / gradientColors.length / 2,
+        for (var i = 0; i < gradientColors.length; i++)
+          i / gradientColors.length / 2 + 0.5,
+      ];
+      text = RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _NameGradientClock.instance,
+          builder: (context, _) {
+            return ShaderMask(
+              shaderCallback: (bounds) => LinearGradient(
+                colors: colors,
+                stops: stops,
+                begin: beginEnd.$1,
+                end: beginEnd.$2,
+                transform: _SlideGradient(
+                  -(_NameGradientClock.instance.t % 1.0) * bounds.width * 0.5,
+                ),
+              ).createShader(bounds),
+              blendMode: BlendMode.srcATop,
+              child: text,
+            );
+          },
+        ),
       );
     } else if (hasGradient) {
       text = ShaderMask(
@@ -311,5 +315,57 @@ class _SlideGradient extends GradientTransform {
   @override
   Matrix4? transform(Rect bounds, {ui.TextDirection? textDirection}) {
     return Matrix4.identity()..setTranslationRaw(dx, 0, 0);
+  }
+}
+
+/// A single app-wide animation clock for animated gradient names.
+///
+/// Previously every animated [VerifiedName] created its own
+/// `AnimationController` at 60fps, each rebuilding a `ShaderMask` on every
+/// frame. With many member names on screen at once (feed cards, chat, member
+/// lists) that saturated the engine and visibly froze the app. Instead all
+/// animated names subscribe to one lazy ticker: the clock runs only while at
+/// least one animated name is mounted, and every name sweeps in lockstep off
+/// the shared 0..1 progress value.
+class _NameGradientClock extends ChangeNotifier implements TickerProvider {
+  _NameGradientClock._();
+
+  static final _NameGradientClock _instance = _NameGradientClock._();
+
+  /// The shared app-wide clock.
+  static _NameGradientClock get instance => _instance;
+
+  static const Duration period = Duration(seconds: 3);
+
+  Ticker? _ticker;
+  int _users = 0;
+  double _t = 0;
+
+  /// The current 0..1 animation progress.
+  double get t => _t;
+
+  @override
+  Ticker createTicker(TickerCallback onTick) => Ticker(onTick);
+
+  /// Called when an animated name is mounted: starts the shared ticker.
+  void acquire() {
+    _users++;
+    _ticker ??= createTicker(_onTick)..start();
+  }
+
+  /// Called when an animated name is disposed: stops the ticker when the last
+  /// one goes away so the app does not keep a per-frame ticker running idle.
+  void release() {
+    if (_users > 0) _users--;
+    if (_users == 0 && _ticker != null) {
+      _ticker!.dispose();
+      _ticker = null;
+    }
+  }
+
+  void _onTick(Duration elapsed) {
+    _t = (elapsed.inMilliseconds % period.inMilliseconds) /
+        period.inMilliseconds;
+    notifyListeners();
   }
 }
