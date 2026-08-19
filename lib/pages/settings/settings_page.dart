@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/core/config/app_config.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/theme/app_theme.dart';
+import 'package:openfield/core/widgets/color_wheel.dart';
 import 'package:openfield/data/models/client_capabilities.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
@@ -827,6 +828,12 @@ class _AppColorTile extends StatelessWidget {
           Row(
             children: [
               TextButton.icon(
+                onPressed: () => _pickCustom(context, settings),
+                icon: const Icon(Icons.colorize_outlined, size: 18),
+                label: Text('customColor'.tr()),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
                 onPressed: settings.backgroundImagePath == null
                     ? null
                     : () => _pickFromBackground(settings),
@@ -844,6 +851,16 @@ class _AppColorTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _pickCustom(BuildContext context, SettingsService settings) async {
+    final picked = await showColorWheelDialog(
+      context: context,
+      initialColor: settings.accentColor ?? AppTheme.seed,
+      title: 'appColor'.tr(),
+    );
+    if (picked == null || !context.mounted) return;
+    await settings.setAccentColor(picked);
   }
 
   Future<void> _pickFromBackground(SettingsService settings) async {

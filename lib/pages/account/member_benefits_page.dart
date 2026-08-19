@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/core/widgets/error_dialog.dart';
+import 'package:openfield/core/widgets/color_wheel.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
@@ -430,6 +431,25 @@ class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
                     ],
                   ),
                   if (!presetsOnly) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final picked = await showColorWheelDialog(
+                          context: dialogContext,
+                          initialColor:
+                              nameColorFromHex(selected ?? '') ?? Colors.white,
+                          title: 'nameStylePickColor'.tr(),
+                        );
+                        if (picked == null || !dialogContext.mounted) return;
+                        final hex = _hexOf(picked);
+                        setState(() {
+                          selected = hex;
+                          controller.text = hex.substring(1);
+                        });
+                      },
+                      icon: const Icon(Icons.colorize_outlined, size: 18),
+                      label: Text('customColor'.tr()),
+                    ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: controller,
@@ -493,6 +513,14 @@ class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
     if (!s.startsWith('#')) s = '#$s';
     final hex = s.substring(1);
     return RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(hex) ? s.toUpperCase() : '';
+  }
+
+  /// Formats a [Color] as an uppercase "#RRGGBB" string.
+  String _hexOf(Color color) {
+    return '#${(color.r * 255).round().toRadixString(16).padLeft(2, '0')}'
+        '${(color.g * 255).round().toRadixString(16).padLeft(2, '0')}'
+        '${(color.b * 255).round().toRadixString(16).padLeft(2, '0')}'
+        .toUpperCase();
   }
 
   Future<void> _save() async {

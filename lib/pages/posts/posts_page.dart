@@ -114,6 +114,12 @@ class _PostsPageState extends State<PostsPage> {
     );
   }
 
+  void _openPostDetail(Post post) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
+    );
+  }
+
   void _openComposer() {
     final authService = Provider.of<AuthService>(context, listen: false);
     if (!authService.isAuthenticated) {
@@ -314,11 +320,8 @@ class _PostsPageState extends State<PostsPage> {
             onEdit: () => _openEdit(post),
             onDelete: () => _deletePost(post),
             onTapAuthor: () => _openAuthorProfile(post.userId),
-            onTapReply: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
-              );
-            },
+            onTapReply: () => _openPostDetail(post),
+            onTapMore: () => _openPostDetail(post),
             token: authService.accessToken,
             onPostChanged: (updated) {
               setState(() {

@@ -23,6 +23,9 @@ class Post {
   final int viewCount;
   final int uniqueViews;
   final int favoriteCount;
+  /// [tipTotal] is the sum of non-refunded net tips on this post, in cents
+  /// (95% of each tip). The server's tip_total column feeds this field.
+  final int tipTotal;
   final String visibility;
   final bool isFavorite;
   final Map<String, int> reactions;
@@ -51,6 +54,7 @@ class Post {
     this.viewCount = 0,
     this.uniqueViews = 0,
     this.favoriteCount = 0,
+    this.tipTotal = 0,
     this.visibility = 'public',
     this.isFavorite = false,
     this.reactions = const {},
@@ -102,6 +106,7 @@ class Post {
       viewCount: _asInt(json['view_count']),
       uniqueViews: _asInt(json['unique_views']),
       favoriteCount: _asInt(json['favorite_count']),
+      tipTotal: _asInt(json['tip_total']),
       visibility: json['visibility'] as String? ?? 'public',
       isFavorite: json['is_favorite'] as bool? ?? false,
       reactions: reactions,
@@ -158,6 +163,7 @@ class Post {
     int? viewCount,
     int? uniqueViews,
     int? favoriteCount,
+    int? tipTotal,
     String? visibility,
     bool? isFavorite,
     Map<String, int>? reactions,
@@ -186,6 +192,7 @@ class Post {
       viewCount: viewCount ?? this.viewCount,
       uniqueViews: uniqueViews ?? this.uniqueViews,
       favoriteCount: favoriteCount ?? this.favoriteCount,
+      tipTotal: tipTotal ?? this.tipTotal,
       visibility: visibility ?? this.visibility,
       isFavorite: isFavorite ?? this.isFavorite,
       reactions: reactions ?? this.reactions,

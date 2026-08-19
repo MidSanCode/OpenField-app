@@ -52,6 +52,7 @@ class MembershipStatus {
   final double multiplier;
   final int memberDays;
   final int memberPrice;
+  final bool autoRenew;
   final List<MembershipTier> tiers;
 
   const MembershipStatus({
@@ -62,6 +63,7 @@ class MembershipStatus {
     required this.multiplier,
     required this.memberDays,
     required this.memberPrice,
+    this.autoRenew = false,
     required this.tiers,
   });
 
@@ -74,6 +76,7 @@ class MembershipStatus {
       multiplier: (json['exp_multiplier'] as num?)?.toDouble() ?? 1.0,
       memberDays: _asInt(json['member_days']),
       memberPrice: _asInt(json['member_price']),
+      autoRenew: json['auto_renew'] as bool? ?? false,
       tiers: ((json['tiers'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(MembershipTier.fromJson)

@@ -844,6 +844,23 @@ class ApiService {
     }
   }
 
+  /// Tips [amountCoins] coins on a post, authorized by the payment PIN. The
+  /// author's wallet receives 95% of the tip.
+  Future<Map<String, dynamic>> tipPost(
+      int postId, int amountCoins, String accessToken, String pin) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/posts/$postId/tips'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'amount': amountCoins, 'pin': pin}),
+    );
+    final data = _decodeMap(response);
+    if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to tip post'));
+  }
+
   // ---- Post replies ----
 
   Future<List<PostReply>> listReplies(int postId, {String? token, int page = 1, int limit = 50}) async {
@@ -1913,6 +1930,24 @@ class ApiService {
     }
     throw ApiException(response.statusCode,
         _decodeError(response, 'Failed to purchase membership'));
+  }
+
+  /// Toggles the user's membership automatic renewal. Enabling pre-authorizes
+  /// future wallet charges, so it requires the payment PIN; disabling only
+  /// needs the token. Returns the updated membership status.
+  Future<MembershipStatus> setMembershipAutoRenew(
+      String accessToken, bool enabled, String pin) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/membership/auto-renew'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'enabled': enabled, 'pin': pin}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return MembershipStatus.fromJson(data);
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to update auto-renew'));
   }
 
   /// Fetches the server's public capability matrix (open, no auth).

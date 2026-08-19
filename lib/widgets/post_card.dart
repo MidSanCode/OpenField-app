@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:openfield/core/widgets/error_dialog.dart';
+import 'package:openfield/core/widgets/pin_dialog.dart';
 import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/services/api_service.dart';
+import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/content_context_menu.dart';
@@ -21,6 +25,12 @@ class PostCard extends StatefulWidget {
   final ValueChanged<Post>? onPostChanged;
   final String? token;
   final VoidCallback? onUnauthenticated;
+  /// When true, the content is always rendered in full (used by the post
+  /// detail page) and the "view more" affordance is hidden.
+  final bool showFullContent;
+  /// When provided, the "view more" affordance on truncated content navigates
+  /// to the post detail page instead of expanding inline.
+  final VoidCallback? onTapMore;
 
   const PostCard({
     super.key,
@@ -34,6 +44,8 @@ class PostCard extends StatefulWidget {
     this.onPostChanged,
     this.token,
     this.onUnauthenticated,
+    this.showFullContent = false,
+    this.onTapMore,
   });
 
   @override
@@ -49,7 +61,7 @@ class _PostCardState extends State<PostCard> {
   @override
   void initState() {
     super.initState();
-    _expanded = post.content.length <= _truncateLength;
+    _expanded = widget.showFullContent || post.content.length <= _truncateLength;
   }
 
   bool get _isTruncated => post.content.length > _truncateLength;
@@ -112,6 +124,85 @@ class _PostCardState extends State<PostCard> {
         );
       }
     }
+  }
+
+  /// Preset tip amounts (in coins) offered by the tip dialog.
+  static const List<int> _tipPresets = [5, 10, 20, 50, 100];
+
+  Future<void> _tipPost() async {
+    final token = widget.token;
+    if (token == null || token.isEmpty) {
+      widget.onUnauthenticated?.call();
+      return;
+    }
+    final amount = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('tipPostTitle'.tr()),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'tipPostHint'.tr(),
+              style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final n in _tipPresets)
+                  ActionChip(
+                    avatar: const Icon(Icons.monetization_on_outlined,
+                        size: 16),
+                    label: Text('$n'),
+                    onPressed: () => Navigator.of(dialogContext).pop(n),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('cancel'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (amount == null || !mounted) return;
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final api = ApiService();
+    // The payment PIN authorizes the charge (first-time payers must set one).
+    var pin = '';
+    if (!(authService.user?.hasPin ?? false)) {
+      pin = await showPinDialog(context, isSetting: true) ?? '';
+      if (pin.isEmpty || !mounted) return;
+      await api.setPin(token, pin);
+      await authService.fetchCurrentUser();
+    } else {
+      pin = await showPinDialog(context, isSetting: false) ?? '';
+      if (pin.isEmpty || !mounted) return;
+    }
+    try {
+      await api.tipPost(post.id, amount, token, pin);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('tipSuccess'.tr())),
+      );
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    }
+  }
+
+  /// Formats a cents amount as a compact coin figure (e.g. "12" or "12.5").
+  static String _formatCoins(int cents) {
+    if (cents % 100 == 0) return '${cents ~/ 100}';
+    return (cents / 100).toStringAsFixed(1);
   }
 
   @override
@@ -215,12 +306,12 @@ class _PostCardState extends State<PostCard> {
               if (_isTruncated && !_expanded) ...[
                 const SizedBox(height: 4),
                 InkWell(
-                  onTap: () => setState(() => _expanded = true),
+                  onTap: widget.onTapMore ?? () => setState(() => _expanded = true),
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Text(
-                      'showMore'.tr(),
+                      widget.onTapMore != null ? 'viewDetail'.tr() : 'showMore'.tr(),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.w600,
@@ -268,6 +359,33 @@ class _PostCardState extends State<PostCard> {
                         onUnauthenticated: widget.onUnauthenticated,
                       ),
                     ),
+                    if (!widget.isMine)
+                      InkWell(
+                        onTap: _tipPost,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.volunteer_activism_outlined,
+                                size: 18,
+                                color: Colors.orange,
+                              ),
+                              if (post.tipTotal > 0) ...[
+                                const SizedBox(width: 4),
+                                Text(
+                                  _formatCoins(post.tipTotal),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ],

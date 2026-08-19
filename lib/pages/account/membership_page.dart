@@ -88,6 +88,34 @@ class _MembershipPageState extends State<MembershipPage> {
     }
   }
 
+  Future<void> _toggleAutoRenew(bool enabled) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || _status == null) return;
+
+    // Enabling pre-authorizes future wallet charges, so it needs the PIN.
+    var pin = '';
+    if (enabled) {
+      if (!(authService.user?.hasPin ?? false)) {
+        pin = await showPinDialog(context, isSetting: true) ?? '';
+        if (pin.isEmpty || !mounted) return;
+        await _apiService.setPin(token, pin);
+        await authService.fetchCurrentUser();
+      } else {
+        pin = await showPinDialog(context, isSetting: false) ?? '';
+        if (pin.isEmpty || !mounted) return;
+      }
+    }
+    try {
+      final status =
+          await _apiService.setMembershipAutoRenew(token, enabled, pin);
+      if (!mounted) return;
+      setState(() => _status = status);
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -195,6 +223,23 @@ class _MembershipPageState extends State<MembershipPage> {
               ),
             ),
             const SizedBox(height: 12),
+            if (active) ...[
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('memberAutoRenew'.tr()),
+                subtitle: Text(
+                  'memberAutoRenewHint'.tr(
+                    namedArgs: {'days': '${status.memberDays}'},
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                value: status.autoRenew,
+                onChanged: _toggleAutoRenew,
+              ),
+              const SizedBox(height: 8),
+            ],
             OutlinedButton.icon(
               onPressed: () {
                 Navigator.of(context).push(
@@ -224,6 +269,9 @@ class _MembershipPageState extends State<MembershipPage> {
     final theme = Theme.of(context);
     final status = _status;
     final isCurrent = status != null && status.active && status.level == tier.level;
+    // A strictly higher active tier already includes every lower tier's perks,
+    // so buying down is locked.
+    final isLocked = status != null && status.active && tier.level < status.level;
     final buying = _buyingLevel == tier.level;
 
     return Card(
@@ -314,14 +362,16 @@ class _MembershipPageState extends State<MembershipPage> {
                   ),
                 ),
                 FilledButton(
-                  onPressed: isCurrent || buying ? null : () => _purchase(tier),
+                  onPressed: isCurrent || isLocked || buying ? null : () => _purchase(tier),
                   child: buying
                       ? const SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(_buyLabel(tier)),
+                      : isLocked
+                          ? Text('memberLowerLocked'.tr())
+                          : Text(_buyLabel(tier)),
                 ),
               ],
             ),

@@ -285,6 +285,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                             onTapAuthor: () => _openAuthorProfile(_post.userId),
                             onTapReply: () {},
                             showReplies: false,
+                            showFullContent: true,
                             token: Provider.of<AuthService>(context).accessToken,
                             onPostChanged: (updated) => setState(() => _post = updated),
                           ),
