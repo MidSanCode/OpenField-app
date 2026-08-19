@@ -51,6 +51,7 @@ class E2eeService {
   static final Uint8List _chainInfoPrefix = utf8.encode('openfield:e2ee:chain.');
   static final Uint8List _ratchetInfo = utf8.encode('openfield:e2ee:ratchet');
   static final Uint8List _msgInfo = utf8.encode('openfield:e2ee:msg');
+  static final Uint8List _attInfo = utf8.encode('openfield:e2ee:att');
   static final Uint8List _envelopeInfo = utf8.encode('openfield:e2ee:envelope');
   static final Uint8List _chatDbInfo = utf8.encode('openfield:e2ee:chatdb');
 
@@ -371,5 +372,40 @@ class E2eeService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Encrypts attachment [bytes] (the raw file) for [conversationId] under the
+  /// conversation's current group key. Returns the group-key version the file
+  /// was sealed under, the base64url-encoded GCM nonce, and the ciphertext —
+  /// the latter is what gets uploaded to the server. Returns null when no
+  /// group key is cached yet.
+  ({int version, String nonceB64, Uint8List cipher})? encryptAttachment(
+    int conversationId,
+    Uint8List bytes,
+  ) {
+    final version = currentVersion(conversationId);
+    if (version == null) return null;
+    final gk = _groupKeyFor(conversationId, version)!;
+    final key = hkdfSha256(gk, info: _attInfo, length: 32);
+    final nonce = randomBytes(12);
+    final cipher = aes256GcmEncrypt(key: key, nonce: nonce, plaintext: bytes);
+    return (version: version, nonceB64: base64Url.encode(nonce), cipher: cipher);
+  }
+
+  /// Decrypts attachment ciphertext sealed under [version] with the nonce
+  /// returned by [encryptAttachment]. Returns null when the matching group key
+  /// is missing or the data does not authenticate.
+  Uint8List? decryptAttachment(
+    int conversationId,
+    int version,
+    String nonceB64,
+    Uint8List cipher,
+  ) {
+    final gk = _groupKeyFor(conversationId, version);
+    if (gk == null) return null;
+    final key = hkdfSha256(gk, info: _attInfo, length: 32);
+    final nonce = _tryDecode(nonceB64);
+    if (nonce == null || nonce.length != 12) return null;
+    return aes256GcmDecrypt(key: key, nonce: nonce, ciphertext: cipher);
   }
 }

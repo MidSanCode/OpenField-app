@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -722,6 +724,34 @@ class _ConversationPageState extends State<ConversationPage> {
     return m.copyWith(decryptedContent: plain);
   }
 
+  /// When the decrypted payload of an encrypted attachment message is the
+  /// client-generated carrier JSON (`{"att": {...}}`), re-marks the message's
+  /// attachments with the E2EE crypto parameters carried inside and blanks the
+  /// text so the bubble renders the attachment only. Returns null when [plain]
+  /// is not such a carrier.
+  ChatMessage? _applyAttachmentCarrier(ChatMessage m, String plain) {
+    Map<String, dynamic> att;
+    try {
+      final decoded = jsonDecode(plain);
+      if (decoded is! Map<String, dynamic>) return null;
+      final raw = decoded['att'];
+      if (raw is! Map<String, dynamic>) return null;
+      att = raw;
+    } catch (_) {
+      return null;
+    }
+    final version = att['v'];
+    final nonce = att['n'] as String?;
+    final mime = att['m'] as String? ?? '';
+    final name = att['name'] as String? ?? '';
+    if (version is! int || nonce == null || nonce.isEmpty) return null;
+    final attachments = m.attachments.map((a) {
+      if (a.isEncrypted) return a;
+      return a.withCrypto(version: version, nonce: nonce, mime: mime, name: name);
+    }).toList();
+    return m.copyWith(attachments: attachments, decryptedContent: '');
+  }
+
   /// Decrypts a single message when the conversation is encrypted. System
   /// messages, already-decrypted messages and plaintext messages (sent before
   /// encryption was enabled, never wrapped in an envelope) pass through
@@ -732,7 +762,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final plain =
         E2eeService.instance.decryptMessage(widget.conversationId, m.senderId, m.content);
     if (plain == null) return m;
-    return _copyWithDecrypted(m, plain);
+    return _applyAttachmentCarrier(m, plain) ?? _copyWithDecrypted(m, plain);
   }
 
   /// Returns true when [m] looks like an E2EE envelope that could not be
@@ -937,6 +967,19 @@ class _ConversationPageState extends State<ConversationPage> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
+    // For encrypted conversations the file bytes are encrypted before upload,
+    // so the group key must be available up front, just like for text sends.
+    if (_isEncrypted && !_e2eeKeysReady) {
+      await _ensureE2EE();
+      if (!mounted) return;
+      if (!_e2eeKeysReady) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_e2eeWaitForMember
+                ? 'e2eeWaitOtherMember'.tr()
+                : 'e2eeKeysPending'.tr())));
+        return;
+      }
+    }
     final result = await FilePicker.platform.pickFiles(type: FileType.any);
     final file = result?.files.single;
     if (file == null || file.path == null) return;
@@ -954,20 +997,61 @@ class _ConversationPageState extends State<ConversationPage> {
     setState(() => _messages = _sorted([..._messages, local]));
     _scrollToBottom();
     try {
-      final attachment = await _apiService.uploadAttachmentSmart(file.path!, token);
+      final originalName =
+          file.name.isNotEmpty ? file.name : File(file.path!).uri.pathSegments.last;
+      String uploadPath = file.path!;
+      var carrier = '';
+      if (_isEncrypted) {
+        // Encrypt the file bytes with the conversation's group key and upload
+        // only the ciphertext. The real mime/name ride along inside the
+        // encrypted message payload so the recipient can restore them after
+        // decrypting the file.
+        final bytes = await File(file.path!).readAsBytes();
+        final crypto =
+            E2eeService.instance.encryptAttachment(widget.conversationId, bytes);
+        if (crypto == null) {
+          if (mounted) {
+            _markStatus(local.clientId, MessageStatus.failed);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(_e2eeWaitForMember
+                    ? 'e2eeWaitOtherMember'.tr()
+                    : 'e2eeKeysPending'.tr())));
+          }
+          return;
+        }
+        final cipherFile = File(
+          '${file.path!}.ofe',
+        );
+        await cipherFile.writeAsBytes(crypto.cipher, flush: true);
+        uploadPath = cipherFile.path;
+        carrier = jsonEncode({
+          'att': {
+            'v': crypto.version,
+            'n': crypto.nonceB64,
+            'm': mimeTypeForPath(file.path!),
+            'name': originalName,
+          },
+        });
+      }
+      final attachment = await _apiService.uploadAttachmentSmart(uploadPath, token,
+          visibility: _isEncrypted ? 'private' : 'public');
+      final content = carrier.isEmpty
+          ? ''
+          : _encryptOutgoing(carrier);
       final msg = await _apiService.sendChatMessage(
         token,
         widget.conversationId,
-        '',
+        content,
         attachmentIds: [attachment.id],
       );
       if (!mounted) return;
+      final resolved = _isEncrypted ? _decryptMessage(msg) : msg;
       setState(() {
-        _messages = _replaceByClientId(local.clientId, msg);
+        _messages = _replaceByClientId(local.clientId, resolved);
       });
-      _store.upsertMessage(msg);
+      _store.upsertMessage(resolved);
       _scrollToBottom();
-      await _apiService.markConversationRead(token, widget.conversationId, msg.id);
+      await _apiService.markConversationRead(token, widget.conversationId, resolved.id);
     } catch (e) {
       if (!mounted) return;
       _markStatus(local.clientId, MessageStatus.failed);
@@ -1491,6 +1575,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 message: message,
                 isMine: message.senderId == _myUserId,
                 isEncrypted: _isEncrypted,
+                conversationId: widget.conversationId,
                 isMentioned: message.mentionsMe(_myUserId),
                 showSenderName: (_conversation?.isGroup ?? false) && !message.isDeleted,
                 senderAvatar: message.senderAvatar,
@@ -1783,6 +1868,7 @@ class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isMine;
   final bool isEncrypted;
+  final int conversationId;
 
   /// True when this message @-mentions the current user (or @everyone). Renders
   /// a subtle highlight so mentions are easy to spot.
@@ -1798,6 +1884,7 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isMine,
     required this.isEncrypted,
+    required this.conversationId,
     required this.isMentioned,
     required this.showSenderName,
     required this.onLongPress,
@@ -1979,7 +2066,10 @@ class _MessageBubble extends StatelessWidget {
                           ),
                         if (message.attachments.isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          AttachmentView(attachments: message.attachments),
+                          AttachmentView(
+                            attachments: message.attachments,
+                            conversationId: conversationId,
+                          ),
                         ],
                         if (message.isEdited)
                           Text(

@@ -1,9 +1,13 @@
+import 'dart:io';
+
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/data/models/attachment.dart';
+import 'package:openfield/data/services/encrypted_attachment_service.dart';
 import 'package:openfield/pages/media/media_preview_page.dart';
 
 class AttachmentView extends StatelessWidget {
@@ -11,18 +15,172 @@ class AttachmentView extends StatelessWidget {
   final bool interactive;
   final VoidCallback? onOpen;
 
+  /// The conversation the attachments belong to. Required to decrypt E2EE
+  /// attachments (the group key is scoped per conversation).
+  final int? conversationId;
+
   const AttachmentView({
     super.key,
     required this.attachments,
     this.interactive = true,
     this.onOpen,
+    this.conversationId,
   });
 
   @override
   Widget build(BuildContext context) {
     if (attachments.isEmpty) return const SizedBox.shrink();
-    final images = attachments.where((a) => a.isImage).toList();
-    final others = attachments.where((a) => !a.isImage).toList();
+    final encrypted = attachments.where((a) => a.isEncrypted);
+    if (encrypted.isNotEmpty) {
+      if (conversationId == null) {
+        return const SizedBox.shrink();
+      }
+      return _EncryptedAttachmentsView(
+        conversationId: conversationId!,
+        attachments: attachments,
+        interactive: interactive,
+        onOpen: onOpen,
+      );
+    }
+    return _PlainBody(
+      attachments: attachments
+          .map((a) => _ResolvedAtt(attachment: a, fromLocalFile: false))
+          .toList(),
+      interactive: interactive,
+      onOpen: onOpen,
+    );
+  }
+}
+
+/// Renders attachments that must be decrypted locally before they can be shown.
+/// Resolves every encrypted attachment to a temporary local file, then renders
+/// the same grid/tile UI against the recovered files.
+class _EncryptedAttachmentsView extends StatefulWidget {
+  final int conversationId;
+  final List<Attachment> attachments;
+  final bool interactive;
+  final VoidCallback? onOpen;
+
+  const _EncryptedAttachmentsView({
+    required this.conversationId,
+    required this.attachments,
+    required this.interactive,
+    this.onOpen,
+  });
+
+  @override
+  State<_EncryptedAttachmentsView> createState() => _EncryptedAttachmentsViewState();
+}
+
+class _EncryptedAttachmentsViewState extends State<_EncryptedAttachmentsView> {
+  late Future<List<_ResolvedAtt>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _resolve();
+  }
+
+  Future<List<_ResolvedAtt>> _resolve() async {
+    final service = EncryptedAttachmentService.instance;
+    final out = <_ResolvedAtt>[];
+    for (final a in widget.attachments) {
+      if (!a.isEncrypted) {
+        out.add(_ResolvedAtt(attachment: a, fromLocalFile: false));
+        continue;
+      }
+      final path = await service.decryptToFile(widget.conversationId, a);
+      out.add(
+        _ResolvedAtt(
+          attachment: Attachment(
+            id: a.id,
+            originalName: a.originalName,
+            mimeType: a.originalMime.isNotEmpty ? a.originalMime : a.mimeType,
+            sizeBytes: a.sizeBytes,
+            url: path,
+            thumbUrl: '',
+            visibility: a.visibility,
+          ),
+          fromLocalFile: true,
+        ),
+      );
+    }
+    return out;
+  }
+
+  void _retry() {
+    setState(() => _future = _resolve());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<List<_ResolvedAtt>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return Padding(
+            padding: const EdgeInsets.all(12),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.primary),
+              ),
+            ),
+          );
+        }
+        if (snapshot.hasError || snapshot.data == null) {
+          return Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.lock_outline, size: 18, color: theme.colorScheme.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'attachmentDecryptFailed'.tr(),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                TextButton(onPressed: _retry, child: const Text('Retry')),
+              ],
+            ),
+          );
+        }
+        return _PlainBody(
+          attachments: snapshot.data!,
+          interactive: widget.interactive,
+          onOpen: widget.onOpen,
+        );
+      },
+    );
+  }
+}
+
+/// A decrypted attachment (or a plain one passed through). When [fromLocalFile]
+/// is true, [attachment.url] points at a local, decrypted copy of the file.
+class _ResolvedAtt {
+  final Attachment attachment;
+  final bool fromLocalFile;
+  const _ResolvedAtt({required this.attachment, required this.fromLocalFile});
+}
+
+class _PlainBody extends StatelessWidget {
+  final List<_ResolvedAtt> attachments;
+  final bool interactive;
+  final VoidCallback? onOpen;
+
+  const _PlainBody({required this.attachments, required this.interactive, this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final images = attachments.where((a) => a.attachment.isImage).toList();
+    final others = attachments.where((a) => !a.attachment.isImage).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,7 +196,7 @@ class AttachmentView extends StatelessWidget {
 }
 
 class _ImageGrid extends StatelessWidget {
-  final List<Attachment> images;
+  final List<_ResolvedAtt> images;
 
   const _ImageGrid({required this.images});
 
@@ -74,41 +232,61 @@ class _ImageGrid extends StatelessWidget {
 }
 
 class _ImageCell extends StatelessWidget {
-  final Attachment att;
+  final _ResolvedAtt att;
 
   const _ImageCell({required this.att});
 
   @override
   Widget build(BuildContext context) {
+    final attachment = att.attachment;
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        onTap: () => _openAttachment(context, att),
+        onTap: () => _openResolved(context, att),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            MediaImage(
-              url: att.previewUrl,
-              fit: BoxFit.cover,
-              // Cap the decoded image so preview grids never hold the full
-              // original in memory.
-              cacheWidth: 720,
-            ),
-            if (!att.isPublic)
+            if (att.fromLocalFile)
+              Image.file(
+                File(attachment.url),
+                fit: BoxFit.cover,
+                cacheWidth: 720,
+                errorBuilder: (_, _, _) => _imageError(context),
+              )
+            else
+              MediaImage(
+                url: attachment.previewUrl,
+                fit: BoxFit.cover,
+                // Cap the decoded image so preview grids never hold the full
+                // original in memory.
+                cacheWidth: 720,
+              ),
+            if (!attachment.isPublic)
               Positioned(
                 top: 4,
                 right: 4,
-                child: _VisibilityBadge(visibility: att.visibility),
+                child: _VisibilityBadge(visibility: attachment.visibility),
               ),
           ],
         ),
       ),
     );
   }
+
+  Widget _imageError(BuildContext context) {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.image_not_supported_outlined,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
 }
 
 class _OthersList extends StatelessWidget {
-  final List<Attachment> attachments;
+  final List<_ResolvedAtt> attachments;
   final bool interactive;
   final VoidCallback? onOpen;
 
@@ -128,7 +306,7 @@ class _OthersList extends StatelessWidget {
 }
 
 class _AttachmentTile extends StatefulWidget {
-  final Attachment attachment;
+  final _ResolvedAtt attachment;
   final bool interactive;
   final VoidCallback? onOpen;
 
@@ -141,7 +319,9 @@ class _AttachmentTile extends StatefulWidget {
 class _AttachmentTileState extends State<_AttachmentTile> {
   bool _rendering = false;
 
-  Attachment get attachment => widget.attachment;
+  _ResolvedAtt get resolved => widget.attachment;
+
+  Attachment get attachment => resolved.attachment;
 
   bool get _isMedia => attachment.isVideo || attachment.isAudio;
 
@@ -158,7 +338,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
                   if (_isMedia) {
                     setState(() => _rendering = !_rendering);
                   } else {
-                    _openAttachment(context, attachment);
+                    _openResolved(context, resolved);
                   }
                 }
               : null,
@@ -469,7 +649,20 @@ Future<void> _openUrl(BuildContext context, String url) async {
   await openAttachmentUrl(context, url);
 }
 
+void _openResolved(BuildContext context, _ResolvedAtt att) {
+  if (att.fromLocalFile) {
+    _openLocalFile(context, att.attachment.url);
+    return;
+  }
+  _openAttachment(context, att.attachment);
+}
+
 void _openAttachment(BuildContext context, Attachment att) {
+  final local = _localPathIfAny(att.url);
+  if (local != null) {
+    _openLocalFile(context, local);
+    return;
+  }
   if (att.isImage || att.isVideo || att.isAudio) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -479,6 +672,38 @@ void _openAttachment(BuildContext context, Attachment att) {
     return;
   }
   _openUrl(context, att.url);
+}
+
+/// Returns [url] as a local file path when it points at an existing file on
+/// this device (decrypted E2EE attachments live in the temp dir), else null.
+String? _localPathIfAny(String url) {
+  if (url.isEmpty) return null;
+  String path;
+  if (url.startsWith('file:')) {
+    path = Uri.parse(url).toFilePath();
+  } else {
+    path = url;
+  }
+  try {
+    final file = File(path).existsSync();
+    if (file) return path;
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
+Future<void> _openLocalFile(BuildContext context, String path) async {
+  final uri = Uri.file(path);
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    return;
+  }
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Unable to open attachment')),
+    );
+  }
 }
 
 Future<void> openAttachmentUrl(BuildContext context, String url) async {

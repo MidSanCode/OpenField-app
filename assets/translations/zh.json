@@ -138,6 +138,7 @@
   "dailyBonusHint": "领取每日经验奖励",
   "darkMode": "深色模式",
   "delete": "删除",
+  "attachmentDecryptFailed": "无法解密此附件",
   "deleteAttachmentConfirm": "删除这个附件？",
   "deletePostConfirm": "删除这条帖子？",
   "deleteDraftConfirm": "删除这条草稿？",

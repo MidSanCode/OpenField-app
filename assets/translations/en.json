@@ -138,6 +138,7 @@
   "dailyBonusHint": "Claim your daily experience bonus",
   "darkMode": "Dark Mode",
   "delete": "Delete",
+  "attachmentDecryptFailed": "Could not decrypt this attachment",
   "deleteAttachmentConfirm": "Delete this attachment?",
   "deletePostConfirm": "Delete this post?",
   "deleteDraftConfirm": "Delete this draft?",

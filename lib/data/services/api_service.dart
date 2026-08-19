@@ -111,6 +111,11 @@ MediaType _mediaTypeFor(String filePath) {
   return MediaType.parse(map[ext] ?? 'application/octet-stream');
 }
 
+/// Public variant of the upload mime guesser, used by callers that need the
+/// inferred content type for their own purposes (e.g. recording the real mime
+/// of an attachment before it is encrypted).
+String mimeTypeForPath(String filePath) => _mediaTypeFor(filePath).toString();
+
 class ApiService {
   static const String defaultBaseUrl = 'https://of-api.msc-studio.eu.cc/api/v1';
   static const String defaultServerHost = 'https://of-api.msc-studio.eu.cc';

@@ -7,6 +7,16 @@ class Attachment {
   final String thumbUrl;
   final String visibility;
 
+  /// E2EE attachment metadata, populated only for attachments shared in an
+  /// encrypted conversation. The server stores the AES-encrypted file bytes;
+  /// these fields carry the parameters needed to decrypt them locally (the
+  /// group-key version and the GCM nonce) plus the real file's mime/name that
+  /// the upload had to mask. Empty strings / nulls for plain attachments.
+  final int? cryptoVersion;
+  final String cryptoNonce;
+  final String originalMime;
+  final String realName;
+
   Attachment({
     required this.id,
     required this.originalName,
@@ -15,6 +25,10 @@ class Attachment {
     required this.url,
     this.thumbUrl = '',
     this.visibility = 'public',
+    this.cryptoVersion,
+    this.cryptoNonce = '',
+    this.originalMime = '',
+    this.realName = '',
   });
 
   factory Attachment.fromJson(Map<String, dynamic> json) {
@@ -27,6 +41,12 @@ class Attachment {
       url: json['url'] as String? ?? '',
       thumbUrl: json['thumb_url'] as String? ?? '',
       visibility: json['visibility'] as String? ?? 'public',
+      cryptoVersion: json['crypto_version'] is num
+          ? (json['crypto_version'] as num).toInt()
+          : null,
+      cryptoNonce: json['crypto_nonce'] as String? ?? '',
+      originalMime: json['original_mime'] as String? ?? '',
+      realName: json['real_name'] as String? ?? '',
     );
   }
 
@@ -39,7 +59,35 @@ class Attachment {
       'url': url,
       'thumb_url': thumbUrl,
       'visibility': visibility,
+      if (cryptoVersion != null) 'crypto_version': cryptoVersion,
+      if (cryptoNonce.isNotEmpty) 'crypto_nonce': cryptoNonce,
+      if (originalMime.isNotEmpty) 'original_mime': originalMime,
+      if (realName.isNotEmpty) 'real_name': realName,
     };
+  }
+
+  /// A copy marked as E2EE-encrypted. The server only ever sees the ciphertext
+  /// URL, so the original name/mime are recovered from [name]/[mime] for local
+  /// rendering after decryption.
+  Attachment withCrypto({
+    required int version,
+    required String nonce,
+    required String mime,
+    required String name,
+  }) {
+    return Attachment(
+      id: id,
+      originalName: name,
+      mimeType: mime,
+      sizeBytes: sizeBytes,
+      url: url,
+      thumbUrl: '',
+      visibility: visibility,
+      cryptoVersion: version,
+      cryptoNonce: nonce,
+      originalMime: mime,
+      realName: name,
+    );
   }
 
   /// The URL to load for a compact preview; falls back to the original when no
@@ -54,6 +102,11 @@ class Attachment {
   bool get isPublic => visibility == 'public';
   bool get isPrivate => visibility == 'private';
   bool get isRestricted => visibility == 'restricted';
+
+  /// True when the attachment's file bytes were AES-encrypted before upload
+  /// (only possible in E2EE conversations). Such attachments must be decrypted
+  /// locally before they can be previewed or opened.
+  bool get isEncrypted => cryptoVersion != null && cryptoNonce.isNotEmpty;
 
   /// True when the mime type starts with [prefix], or when the stored mime type
   /// is generic (e.g. application/octet-stream) but the URL/name extension
