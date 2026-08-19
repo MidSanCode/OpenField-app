@@ -358,8 +358,10 @@ class _NameGradientClock extends ChangeNotifier implements TickerProvider {
   }
 
   void _onTick(Duration elapsed) {
-    _t = (elapsed.inMilliseconds % period.inMilliseconds) /
-        period.inMilliseconds;
+    final cycleMs = 2 * period.inMilliseconds;
+    final phase = elapsed.inMilliseconds % cycleMs;
+    final fraction = phase / period.inMilliseconds;
+    _t = fraction <= 1 ? fraction : 2 - fraction;
     notifyListeners();
   }
 }
