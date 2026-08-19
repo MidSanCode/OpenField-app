@@ -211,6 +211,7 @@ class _WalletPageState extends State<WalletPage> {
     final credit = txn.isCredit;
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      onTap: () => _showTransactionDetail(context, txn),
       leading: Icon(
         credit ? Icons.add_circle_outline : Icons.remove_circle_outline,
         color: credit ? theme.colorScheme.primary : theme.colorScheme.error,
@@ -223,6 +224,16 @@ class _WalletPageState extends State<WalletPage> {
           color: credit ? theme.colorScheme.primary : theme.colorScheme.error,
           fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+
+  /// Opens a detail view for a wallet transaction: order id, type, description,
+  /// the balance after the change and the time it happened.
+  void _showTransactionDetail(BuildContext context, WalletTransaction txn) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TransactionDetailPage(transaction: txn),
       ),
     );
   }
@@ -725,6 +736,103 @@ class TransferDetailPage extends StatelessWidget {
         return 'transferStatusRefunded'.tr();
       default:
         return t.status;
+    }
+  }
+}
+
+/// Detail page for one wallet transaction: amount, type, description, the
+/// balance after the change and the time it happened.
+class TransactionDetailPage extends StatelessWidget {
+  final WalletTransaction transaction;
+
+  const TransactionDetailPage({super.key, required this.transaction});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = transaction;
+    final credit = t.isCredit;
+    final amountColor =
+        credit ? theme.colorScheme.primary : theme.colorScheme.error;
+    return Scaffold(
+      appBar: AppBar(title: Text('txnDetailTitle'.tr())),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            margin: EdgeInsets.zero,
+            color: theme.colorScheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Text(
+                    '${credit ? '+' : ''}${_amount(t.amount)}',
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      color: amountColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(_typeLabel(t.type), style: theme.textTheme.bodyMedium),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _row(context, 'txnDetailOrderId'.tr(), '#${t.id}'),
+          _row(context, 'txnDetailType'.tr(), _typeLabel(t.type)),
+          if (t.description.isNotEmpty)
+            _row(context, 'txnDetailDescription'.tr(), t.description),
+          _row(context, 'txnDetailBalanceAfter'.tr(), _amount(t.balanceAfter)),
+          _row(context, 'txnDetailTime'.tr(), _time(t.createdAt)),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _amount(double amount) {
+    final s = amount.toStringAsFixed(2);
+    return s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  String _time(DateTime time) {
+    final local = time.toLocal();
+    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
+        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'recharge':
+        return 'walletTypeRecharge'.tr();
+      case 'deduct':
+        return 'walletTypeDeduct'.tr();
+      default:
+        return type;
     }
   }
 }
