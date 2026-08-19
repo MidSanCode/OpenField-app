@@ -243,13 +243,6 @@ class _VerifiedNameState extends State<VerifiedName> {
       // full of member names); the gradient config is constant so it is built
       // once, and the animation is wrapped in a RepaintBoundary so only the
       // name repaints each tick rather than its whole list row.
-      final colors = [...gradientColors, ...gradientColors];
-      final stops = [
-        for (var i = 0; i < gradientColors.length; i++)
-          i / gradientColors.length / 2,
-        for (var i = 0; i < gradientColors.length; i++)
-          i / gradientColors.length / 2 + 0.5,
-      ];
       final animatedChild = text;
       text = RepaintBoundary(
         child: AnimatedBuilder(
@@ -257,13 +250,13 @@ class _VerifiedNameState extends State<VerifiedName> {
           builder: (context, _) {
             return ShaderMask(
               shaderCallback: (bounds) => LinearGradient(
-                colors: colors,
-                stops: stops,
+                colors: gradientColors,
                 begin: beginEnd.$1,
                 end: beginEnd.$2,
                 transform: _SlideGradient(
-                  -(_NameGradientClock.instance.t % 1.0) * bounds.width * 0.5,
+                  -(_NameGradientClock.instance.t % 1.0) * bounds.width,
                 ),
+                tileMode: TileMode.repeated,
               ).createShader(bounds),
               blendMode: BlendMode.srcATop,
               child: animatedChild,
