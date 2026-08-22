@@ -57,9 +57,10 @@ class PushEvent {
 /// a stable link is never torn down by the failure budget.
 ///
 /// Uses [WebSocketChannel] from `web_socket_channel`, which works on both
-/// native and web. Browsers cannot set custom headers on WebSocket connections,
-/// so the access token is passed as a `token` query parameter instead; the
-/// gateway validates it before forwarding the upgrade.
+/// native and web. Browsers cannot set custom headers on WebSocket upgrade
+/// requests, so the client never puts its long-lived JWT in the URL (it would
+/// leak into proxy/access logs): it first POSTs `/ws` with the Bearer token to
+/// mint a single-use ticket, then connects with `?ticket=` within the TTL.
 class RealtimeService extends ChangeNotifier {
   static final RealtimeService instance = RealtimeService();
 
@@ -147,7 +148,15 @@ class RealtimeService extends ChangeNotifier {
     final token = _token;
     if (token == null) return;
     try {
-      final wsUri = _wsUri(token);
+      // Exchange the long-lived JWT for a short-lived single-use ticket; the
+      // ticket (not the token) travels in the upgrade URL.
+      final ticketData = await ApiService().createWsTicket(token);
+      final ticket = ticketData['ticket'];
+      if (ticket is! String || ticket.isEmpty) {
+        throw ApiException(null, 'Empty connection ticket');
+      }
+      if (!_shouldRun || _disposed) return;
+      final wsUri = _wsUri(ticket);
       final channel = WebSocketChannel.connect(wsUri);
       await channel.ready;
       if (!_shouldRun || _disposed) {
@@ -234,12 +243,13 @@ class RealtimeService extends ChangeNotifier {
     }
   }
 
-  static Uri _wsUri(String token) {
+  static Uri _wsUri(String ticket) {
     final base = ApiService.baseUrl;
     final host = base.replaceFirst('http://', '').replaceFirst('https://', '');
     final path = host.contains('/') ? host.substring(host.indexOf('/')) : '/';
     final authority = host.contains('/') ? host.substring(0, host.indexOf('/')) : host;
     final scheme = base.startsWith('https') ? 'wss' : 'ws';
-    return Uri.parse('$scheme://$authority$path/ws?token=$token');
+    final query = Uri(queryParameters: {'ticket': ticket}).query;
+    return Uri.parse('$scheme://$authority$path/ws?$query');
   }
 }

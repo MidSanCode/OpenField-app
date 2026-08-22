@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/e2ee_crypto.dart';
+import 'package:openfield/data/services/secure_kv.dart';
 
 /// Thrown when a synchronous E2EE operation cannot run because the service has
 /// not been initialised or the conversation has no usable group key.
@@ -55,7 +55,7 @@ class E2eeService {
   static final Uint8List _envelopeInfo = utf8.encode('openfield:e2ee:envelope');
   static final Uint8List _chatDbInfo = utf8.encode('openfield:e2ee:chatdb');
 
-  SharedPreferences? _prefs;
+  bool _initialized = false;
   Uint8List? _identityPrivate;
   String? _identityPublic;
   final Map<int, Map<int, Uint8List>> _groupKeys = {};
@@ -65,21 +65,19 @@ class E2eeService {
   String? get identityPublicKey => _identityPublic;
 
   Future<void> _init() async {
-    if (_prefs != null) return;
-    final prefs = await SharedPreferences.getInstance();
-    _prefs = prefs;
-    _identityPrivate = _tryDecode(prefs.getString(_keyIdentityPrivate));
-    _identityPublic = prefs.getString(_keyIdentityPublic);
+    if (_initialized) return;
+    await SecureKV.migrate();
     // Load all cached group keys into memory: `e2ee_group_keys_<convId>`
     // stores a JSON object mapping key-version -> base64 group key.
-    for (final key in prefs.getKeys()) {
-      if (!key.startsWith(_keyGroupKeysPrefix)) continue;
-      final convId = int.tryParse(key.substring(_keyGroupKeysPrefix.length));
+    final stored = await SecureKV.readAll();
+    _identityPrivate = _tryDecode(stored[_keyIdentityPrivate]);
+    _identityPublic = stored[_keyIdentityPublic];
+    for (final entry in stored.entries) {
+      if (!entry.key.startsWith(_keyGroupKeysPrefix)) continue;
+      final convId = int.tryParse(entry.key.substring(_keyGroupKeysPrefix.length));
       if (convId == null) continue;
-      final raw = prefs.getString(key);
-      if (raw == null) continue;
       try {
-        final decoded = jsonDecode(raw);
+        final decoded = jsonDecode(entry.value);
         if (decoded is Map<String, dynamic>) {
           final versions = <int, Uint8List>{};
           for (final e in decoded.entries) {
@@ -91,6 +89,7 @@ class E2eeService {
         }
       } catch (_) {}
     }
+    _initialized = true;
   }
 
   Uint8List? _tryDecode(String? b64) {
@@ -122,13 +121,13 @@ class E2eeService {
       final (priv, pub) = generateX25519Keypair();
       _identityPrivate = priv;
       _identityPublic = base64Url.encode(pub);
-      await _prefs!.setString(_keyIdentityPrivate, base64Url.encode(priv));
-      await _prefs!.setString(_keyIdentityPublic, _identityPublic!);
+      await SecureKV.write(_keyIdentityPrivate, base64Url.encode(priv));
+      await SecureKV.write(_keyIdentityPublic, _identityPublic!);
     } else if (_identityPublic == null) {
       final pub = x25519PublicKey(_identityPrivate!);
       if (pub != null) {
         _identityPublic = base64Url.encode(pub);
-        await _prefs!.setString(_keyIdentityPublic, _identityPublic!);
+        await SecureKV.write(_keyIdentityPublic, _identityPublic!);
       }
     }
     if (_identityPublic != null) {
@@ -254,7 +253,7 @@ class E2eeService {
     _groupKeys.putIfAbsent(conversationId, () => {})[version] = gk;
     final raw = _groupKeys[conversationId]!
         .map((v, key) => MapEntry('$v', base64Url.encode(key)));
-    _prefs?.setString('$_keyGroupKeysPrefix$conversationId', jsonEncode(raw));
+    unawaited(SecureKV.write('$_keyGroupKeysPrefix$conversationId', jsonEncode(raw)));
   }
 
   Uint8List _chainRoot(Uint8List gk, int senderId) =>

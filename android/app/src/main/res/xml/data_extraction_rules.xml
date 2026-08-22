@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep session tokens and E2EE key material out of cloud backups and
+     device-to-device transfers. flutter_secure_storage values live in the
+     Android Keystore system and never migrate with backups anyway; these
+     rules additionally exclude the legacy SharedPreferences file so no stale
+     plaintext copies can be restored onto a new device. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="." />
+    </device-transfer>
+</data-extraction-rules>

@@ -319,6 +319,24 @@ class ApiService {
     throw ApiException(response.statusCode, 'OIDC callback failed');
   }
 
+  /// Mints a short-lived single-use WebSocket connection ticket. Browsers
+  /// cannot set custom headers during the upgrade handshake, and putting the
+  /// long-lived JWT in the URL would leak it into proxy/access logs, so the
+  /// realtime client exchanges its Bearer token for this one-time ticket and
+  /// then connects with `?ticket=` instead.
+  Future<Map<String, dynamic>> createWsTicket(String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/ws'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null && data['ticket'] is String) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to create connection ticket'));
+  }
+
   /// Starts the OIDC account-binding flow for the authenticated user.
   Future<String> getOIDCBindUrl(String accessToken) async {
     final response = await _post(

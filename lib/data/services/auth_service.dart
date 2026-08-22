@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
+import 'package:openfield/data/services/secure_kv.dart';
 
 class AuthService extends ChangeNotifier {
   static const _keyAccessToken = 'access_token';
@@ -13,14 +14,14 @@ class AuthService extends ChangeNotifier {
   static const _keyAvatarUrl = 'avatar_url';
   static const _keyBoundHost = 'bound_host';
 
-  static const _sessionFields = [
+  // Fields persisted per server host under 'session.<host>.<field>'. Tokens
+  // and expiry live in secure storage; profile metadata stays in prefs.
+  static const _sessionTokenFields = [
     'access_token',
     'refresh_token',
     'access_expires_at',
-    'username',
-    'email',
-    'avatar_url',
   ];
+  static const _sessionProfileFields = ['username', 'email', 'avatar_url'];
 
   final ApiService _api = ApiService();
 
@@ -61,11 +62,15 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _load() async {
+    // Move legacy plaintext tokens from SharedPreferences into the platform
+    // credential store before reading anything.
+    await SecureKV.migrate();
     final prefs = await SharedPreferences.getInstance();
     _boundHost = prefs.getString(_keyBoundHost);
-    _accessToken = prefs.getString(_keyAccessToken);
-    _refreshToken = prefs.getString(_keyRefreshToken);
-    final expMs = prefs.getInt(_keyAccessExpiresAt);
+    _accessToken = await SecureKV.read(_keyAccessToken);
+    _refreshToken = await SecureKV.read(_keyRefreshToken);
+    final expRaw = await SecureKV.read(_keyAccessExpiresAt);
+    final expMs = expRaw != null ? int.tryParse(expRaw) : null;
     _accessExpiresAt =
         expMs != null ? DateTime.fromMillisecondsSinceEpoch(expMs) : null;
     _username = prefs.getString(_keyUsername);
@@ -131,11 +136,12 @@ class AuthService extends ChangeNotifier {
     // the user switches back to this server host.
     _boundHost = ApiService.serverHost;
     await prefs.setString(_keyBoundHost, _boundHost!);
-    await prefs.setString(_keyAccessToken, accessToken);
+    await SecureKV.write(_keyAccessToken, accessToken);
     if (_refreshToken != null) {
-      await prefs.setString(_keyRefreshToken, _refreshToken!);
+      await SecureKV.write(_keyRefreshToken, _refreshToken!);
     }
-    await prefs.setInt(_keyAccessExpiresAt, _accessExpiresAt!.millisecondsSinceEpoch);
+    await SecureKV.write(
+        _keyAccessExpiresAt, _accessExpiresAt!.millisecondsSinceEpoch.toString());
     _startRefreshLoop();
     notifyListeners();
   }
@@ -289,12 +295,12 @@ class AuthService extends ChangeNotifier {
     _avatarUrl = null;
     _user = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyAccessToken);
-    await prefs.remove(_keyRefreshToken);
-    await prefs.remove(_keyAccessExpiresAt);
     await prefs.remove(_keyUsername);
     await prefs.remove(_keyEmail);
     await prefs.remove(_keyAvatarUrl);
+    await SecureKV.delete(_keyAccessToken);
+    await SecureKV.delete(_keyRefreshToken);
+    await SecureKV.delete(_keyAccessExpiresAt);
     // Forgetting the session also forgets the account saved for this server,
     // so switching back does not silently restore a logged-out account.
     await _removeSessionForHost(prefs, _boundHost);
@@ -341,13 +347,13 @@ class AuthService extends ChangeNotifier {
     _username = s.username;
     _email = s.email;
     _avatarUrl = s.avatarUrl;
+    if (s.accessToken != null) {
+      await SecureKV.write(_keyAccessToken, s.accessToken!);
+    }
+    await SecureKV.write(_keyRefreshToken, s.refreshToken ?? '');
+    await SecureKV.write(_keyAccessExpiresAt,
+        (s.accessExpiresAt?.millisecondsSinceEpoch ?? 0).toString());
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyAccessToken, s.accessToken ?? '');
-    await prefs.setString(_keyRefreshToken, s.refreshToken ?? '');
-    await prefs.setInt(
-      _keyAccessExpiresAt,
-      s.accessExpiresAt?.millisecondsSinceEpoch ?? 0,
-    );
     await prefs.setString(_keyUsername, s.username ?? '');
     await prefs.setString(_keyEmail, s.email ?? '');
     await prefs.setString(_keyAvatarUrl, s.avatarUrl ?? '');
@@ -362,32 +368,50 @@ class AuthService extends ChangeNotifier {
       await _removeSessionForHost(prefs, host);
       return;
     }
-    await prefs.setString(_sessionKey(host, 'access_token'), _accessToken!);
-    await prefs.setString(_sessionKey(host, 'refresh_token'), _refreshToken ?? '');
-    await prefs.setInt(
-      _sessionKey(host, 'access_expires_at'),
-      _accessExpiresAt?.millisecondsSinceEpoch ?? 0,
-    );
+    for (final field in _sessionTokenFields) {
+      final value = _sessionTokenField(field);
+      if (value != null) {
+        await SecureKV.write(_sessionKey(host, field), value);
+      } else {
+        await SecureKV.delete(_sessionKey(host, field));
+      }
+    }
     await prefs.setString(_sessionKey(host, 'username'), _username ?? '');
     await prefs.setString(_sessionKey(host, 'email'), _email ?? '');
     await prefs.setString(_sessionKey(host, 'avatar_url'), _avatarUrl ?? '');
   }
 
+  String? _sessionTokenField(String field) {
+    switch (field) {
+      case 'access_token':
+        return _accessToken;
+      case 'refresh_token':
+        return _refreshToken;
+      case 'access_expires_at':
+        return _accessExpiresAt?.millisecondsSinceEpoch.toString();
+    }
+    return null;
+  }
+
   Future<void> _removeSessionForHost(SharedPreferences prefs, String? host) async {
     if (host == null || host.isEmpty) return;
-    for (final field in _sessionFields) {
+    for (final field in _sessionTokenFields) {
+      await SecureKV.delete(_sessionKey(host, field));
+    }
+    for (final field in _sessionProfileFields) {
       await prefs.remove(_sessionKey(host, field));
     }
   }
 
   Future<_SavedSession?> _loadSessionForHost(String host) async {
     final prefs = await SharedPreferences.getInstance();
-    final access = prefs.getString(_sessionKey(host, 'access_token'));
+    final access = await SecureKV.read(_sessionKey(host, 'access_token'));
     if (access == null || access.isEmpty) return null;
-    final expMs = prefs.getInt(_sessionKey(host, 'access_expires_at'));
+    final expRaw = await SecureKV.read(_sessionKey(host, 'access_expires_at'));
+    final expMs = expRaw != null ? int.tryParse(expRaw) : null;
     return _SavedSession(
       accessToken: access,
-      refreshToken: prefs.getString(_sessionKey(host, 'refresh_token')),
+      refreshToken: await SecureKV.read(_sessionKey(host, 'refresh_token')),
       accessExpiresAt:
           expMs != null ? DateTime.fromMillisecondsSinceEpoch(expMs) : null,
       username: prefs.getString(_sessionKey(host, 'username')),
