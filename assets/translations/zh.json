@@ -455,6 +455,8 @@
   "pinInvalid": "请输入 6 位数字",
   "pinMismatch": "两次输入不一致",
   "pinSave": "保存",
+  "pinChangeTitle": "修改支付PIN",
+  "pinChanged": "支付PIN已更新",
   "confirm": "确定",
   "addFavorite": "收藏",
   "removeFavorite": "取消收藏",

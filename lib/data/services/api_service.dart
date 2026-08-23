@@ -1928,6 +1928,19 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to set PIN'));
   }
 
+  /// Replaces an existing payment PIN. The current PIN must be presented.
+  Future<void> changePin(
+      String accessToken, String oldPin, String pin) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/users/me/pin'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'old_pin': oldPin, 'pin': pin}),
+    );
+    if (response.statusCode == 200) return;
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to change PIN'));
+  }
+
   /// Verifies a payment PIN against the stored hash.
   Future<bool> verifyPin(String accessToken, String pin) async {
     final response = await _post(

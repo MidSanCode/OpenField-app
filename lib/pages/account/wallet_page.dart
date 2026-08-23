@@ -80,9 +80,50 @@ class _WalletPageState extends State<WalletPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('wallet'.tr())),
+      appBar: AppBar(
+        title: Text('wallet'.tr()),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.password_outlined),
+            tooltip: 'pinChangeTitle'.tr(),
+            onPressed: _changePin,
+          ),
+        ],
+      ),
       body: _buildBody(),
     );
+  }
+
+  /// Change-payment-PIN flow: verify the current PIN first, then enter and
+  /// confirm the new one. Users without a PIN simply set one (no old PIN).
+  Future<void> _changePin() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      var oldPin = '';
+      if (!(authService.user?.hasPin ?? false)) {
+        // No PIN yet: this is a first-time set, no old PIN needed.
+        final pin = await showPinDialog(context, isSetting: true) ?? '';
+        if (pin.isEmpty || !mounted) return;
+        await _apiService.setPin(token, pin);
+        await authService.fetchCurrentUser();
+        messenger.showSnackBar(SnackBar(content: Text('pinChanged'.tr())));
+        return;
+      }
+      oldPin = await showPinDialog(context, isSetting: false) ?? '';
+      if (oldPin.isEmpty || !mounted) return;
+      final pin = await showPinDialog(context, isSetting: true) ?? '';
+      if (pin.isEmpty || !mounted) return;
+      await _apiService.changePin(token, oldPin, pin);
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('pinChanged'.tr())));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   Widget _buildBody() {

@@ -451,6 +451,8 @@
   "pinInvalid": "Enter a 6-digit PIN",
   "pinMismatch": "PINs do not match",
   "pinSave": "Save",
+  "pinChangeTitle": "Change payment PIN",
+  "pinChanged": "Payment PIN updated",
   "confirm": "Confirm",
   "addFavorite": "Favorite",
   "removeFavorite": "Remove favorite",
