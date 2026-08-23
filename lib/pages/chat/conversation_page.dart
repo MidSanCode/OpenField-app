@@ -21,6 +21,7 @@ import 'package:openfield/pages/chat/chat_search_page.dart';
 import 'package:openfield/pages/chat/group_settings_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
+import 'package:openfield/widgets/check_card.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 import 'package:openfield/core/widgets/avatar.dart';
@@ -967,6 +968,54 @@ class _ConversationPageState extends State<ConversationPage> {
     }
   }
 
+  /// Composes a check (red packet) and sends it as a dedicated message.
+  Future<void> _sendCheck() async {
+    if (!_canSend) {
+      _showMutedSnackBar();
+      return;
+    }
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+
+    final checkId = await showCheckComposeDialog(context);
+    if (checkId == null || !mounted) return;
+
+    // Optimistic bubble: the card renders as soon as the check is created.
+    final local = ChatMessage(
+      id: -DateTime.now().millisecondsSinceEpoch,
+      conversationId: widget.conversationId,
+      senderId: _myUserId,
+      content: '',
+      kind: 'check',
+      checkId: checkId,
+      createdAt: DateTime.now(),
+      senderName: authService.user?.nickname ?? authService.username,
+      senderAvatar: authService.user?.avatarUrl ?? authService.avatarUrl,
+      clientId: generateClientId(),
+      status: MessageStatus.sending,
+    );
+    setState(() => _messages = _sorted([..._messages, local]));
+    _scrollToBottom();
+    try {
+      var msg = await _apiService.sendChatMessage(
+        token,
+        widget.conversationId,
+        '',
+        checkId: checkId,
+      );
+      if (_isEncrypted) msg = _decryptMessage(msg);
+      if (!mounted) return;
+      setState(() => _messages = _replaceByClientId(local.clientId, msg));
+      _store.upsertMessage(msg);
+    } catch (e) {
+      if (!mounted) return;
+      _markStatus(local.clientId, MessageStatus.failed);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   void _markStatus(String clientId, MessageStatus status) {
     if (!mounted) return;
     setState(() {
@@ -1832,6 +1881,11 @@ class _ConversationPageState extends State<ConversationPage> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             IconButton(
+              onPressed: _sendCheck,
+              icon: const Icon(Icons.redeem),
+              tooltip: 'checkSend'.tr(),
+            ),
+            IconButton(
               onPressed: _pickAndSendAttachment,
               icon: const Icon(Icons.attach_file),
               tooltip: 'attachFile'.tr(),
@@ -2077,7 +2131,12 @@ class _MessageBubble extends StatelessWidget {
                             ),
                           ),
                         ],
-                        if (message.isDeleted)
+                        if (message.isCheck)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: CheckCard(checkId: message.checkId),
+                          )
+                        else if (message.isDeleted)
                           Text(
                             'messageDeleted'.tr(),
                             style: theme.textTheme.bodyMedium?.copyWith(

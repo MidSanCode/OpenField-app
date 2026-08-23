@@ -1,4 +1,5 @@
 import 'attachment.dart';
+import 'check.dart';
 
 class Post {
   final int id;
@@ -31,6 +32,9 @@ class Post {
   final Map<String, int> reactions;
   final String myReaction;
 
+  /// The check attached to this post, when present (null otherwise).
+  final Check? check;
+
   Post({
     required this.id,
     required this.userId,
@@ -59,6 +63,7 @@ class Post {
     this.isFavorite = false,
     this.reactions = const {},
     this.myReaction = '',
+    this.check,
   });
 
   String get authorName => (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
@@ -111,6 +116,9 @@ class Post {
       isFavorite: json['is_favorite'] as bool? ?? false,
       reactions: reactions,
       myReaction: json['my_reaction'] as String? ?? '',
+      check: json['check'] is Map<String, dynamic>
+          ? Check.fromJson(json['check'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -168,6 +176,7 @@ class Post {
     bool? isFavorite,
     Map<String, int>? reactions,
     String? myReaction,
+    Check? check,
   }) {
     return Post(
       id: id ?? this.id,
@@ -197,6 +206,7 @@ class Post {
       isFavorite: isFavorite ?? this.isFavorite,
       reactions: reactions ?? this.reactions,
       myReaction: myReaction ?? this.myReaction,
+      check: check ?? this.check,
     );
   }
 }

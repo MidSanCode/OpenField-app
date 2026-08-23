@@ -13,6 +13,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
+import 'package:openfield/widgets/check_card.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 
 /// A media item in the composer: either an existing server attachment
@@ -45,8 +46,18 @@ class _PostsPageState extends State<PostsPage> {
   List<Post> _posts = [];
   bool _isLoading = true;
   bool _isPosting = false;
+  bool _searchActive = false;
   String? _error;
   String _query = '';
+
+  // Advanced search filters (combined with the keyword server-side).
+  String _authorFilter = '';
+  DateTime? _fromFilter;
+  DateTime? _toFilter;
+
+  bool get _hasFilters =>
+      _authorFilter.isNotEmpty || _fromFilter != null || _toFilter != null;
+
   StreamSubscription<PushEvent>? _realtimeSub;
 
   @override
@@ -73,6 +84,135 @@ class _PostsPageState extends State<PostsPage> {
     });
   }
 
+  /// Toggles the AppBar search field. Closing it clears the active query and
+  /// restores the full feed.
+  void _toggleSearch() {
+    setState(() {
+      _searchActive = !_searchActive;
+      if (!_searchActive) {
+        _searchController.clear();
+        _searchDebounce?.cancel();
+        _query = '';
+      }
+    });
+    _loadPosts();
+  }
+
+  /// Opens the advanced filter sheet: author name substring + created-at date
+  /// range. Applied filters re-run the current search immediately.
+  Future<void> _openPostFilters() async {
+    final authorController =
+        TextEditingController(text: _authorFilter);
+    DateTime? from = _fromFilter;
+    DateTime? to = _toFilter;
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('postFilterTitle'.tr(),
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: authorController,
+                  decoration: InputDecoration(
+                    labelText: 'postFilterAuthor'.tr(),
+                    hintText: 'postFilterAuthorHint'.tr(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.date_range_outlined),
+                  title: Text('postFilterFrom'.tr()),
+                  subtitle: () {
+                    final f = from;
+                    return f != null
+                        ? Text('${f.year}/${f.month}/${f.day}')
+                        : null;
+                  }(),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: from ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now().add(const Duration(days: 1)),
+                    );
+                    if (picked != null) setSheetState(() => from = picked);
+                  },
+                  trailing: from != null
+                      ? IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () => setSheetState(() => from = null),
+                        )
+                      : null,
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.date_range_outlined),
+                  title: Text('postFilterTo'.tr()),
+                  subtitle: () {
+                    final t = to;
+                    return t != null
+                        ? Text('${t.year}/${t.month}/${t.day}')
+                        : null;
+                  }(),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: to ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now().add(const Duration(days: 1)),
+                    );
+                    if (picked != null) setSheetState(() => to = picked);
+                  },
+                  trailing: to != null
+                      ? IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () => setSheetState(() => to = null),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        authorController.clear();
+                        setSheetState(() {
+                          from = null;
+                          to = null;
+                        });
+                      },
+                      child: Text('chatSearchClearFilters'.tr()),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(true),
+                      child: Text('apply'.tr()),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (result != true || !mounted) return;
+    setState(() {
+      _authorFilter = authorController.text.trim();
+      _fromFilter = from;
+      _toFilter = to;
+    });
+    _loadPosts();
+  }
+
   /// Prepends freshly created posts (broadcast by the push service) to the feed.
   void _onRealtimeEvent(PushEvent event) {
     if (event.type != 'post.created' || !mounted) return;
@@ -93,7 +233,13 @@ class _PostsPageState extends State<PostsPage> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final posts = await _apiService.getPosts(token: authService.accessToken, query: _query);
+      final posts = await _apiService.getPosts(
+        token: authService.accessToken,
+        query: _query,
+        author: _authorFilter,
+        from: _fromFilter,
+        to: _toFilter,
+      );
       if (!mounted) return;
       setState(() {
         _posts = posts;
@@ -132,7 +278,8 @@ class _PostsPageState extends State<PostsPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => _ComposerDialog(
-        onSubmit: (content, media, visibility) => _submitPost(content, media, visibility: visibility),
+        onSubmit: (content, media, visibility, checkId) =>
+            _submitPost(content, media, visibility: visibility, checkId: checkId),
         isPosting: _isPosting,
       ),
     );
@@ -149,7 +296,8 @@ class _PostsPageState extends State<PostsPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => _ComposerDialog(
-        onSubmit: (content, items, visibility) => _submitPost(content, items, postId: post.id, visibility: visibility),
+        onSubmit: (content, items, visibility, _) =>
+            _submitPost(content, items, postId: post.id, visibility: visibility),
         isPosting: _isPosting,
         initialContent: post.content,
         initialMedia: media,
@@ -160,7 +308,7 @@ class _PostsPageState extends State<PostsPage> {
   }
 
   Future<bool> _submitPost(String content, List<ComposerMedia> media,
-      {int? postId, String visibility = 'public'}) async {
+      {int? postId, String visibility = 'public', int checkId = 0}) async {
     if (content.trim().isEmpty && media.isEmpty) return false;
 
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -178,7 +326,7 @@ class _PostsPageState extends State<PostsPage> {
       }
       if (postId == null) {
         await _apiService.createPost(content, token,
-            attachmentIds: attachmentIds, visibility: visibility);
+            attachmentIds: attachmentIds, visibility: visibility, checkId: checkId);
       } else {
         await _apiService.updatePost(postId, content, token,
             attachmentIds: attachmentIds, visibility: visibility);
@@ -235,50 +383,41 @@ class _PostsPageState extends State<PostsPage> {
     final currentUserId = Provider.of<AuthService>(context).user?.id;
 
     return Scaffold(
-      appBar: AppBar(title: Text('appTitle'.tr())),
+      appBar: AppBar(
+        title: _searchActive
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                onChanged: _onSearchChanged,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'searchPosts'.tr(),
+                  border: InputBorder.none,
+                ),
+              )
+            : Text('appTitle'.tr()),
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.tune,
+              color: _hasFilters ? Theme.of(context).colorScheme.primary : null,
+            ),
+            tooltip: 'postFilterTitle'.tr(),
+            onPressed: _openPostFilters,
+          ),
+          IconButton(
+            icon: Icon(_searchActive ? Icons.close : Icons.search),
+            tooltip: 'searchPosts'.tr(),
+            onPressed: _toggleSearch,
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _openComposer,
         tooltip: 'createPost'.tr(),
         child: const Icon(Icons.edit),
       ),
-      body: _buildBody(currentUserId),
-    );
-  }
-
-  Widget _buildBody(int? currentUserId) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-          child: TextField(
-            controller: _searchController,
-            onChanged: _onSearchChanged,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: 'searchPosts'.tr(),
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        _onSearchChanged('');
-                      },
-                    ),
-              isDense: true,
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(24),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            ),
-          ),
-        ),
-        Expanded(child: _buildFeed(currentUserId)),
-      ],
+      body: _buildFeed(currentUserId),
     );
   }
 
@@ -302,14 +441,15 @@ class _PostsPageState extends State<PostsPage> {
 
     if (_posts.isEmpty) {
       return Center(
-        child: Text(_query.isNotEmpty ? 'noSearchResults'.tr() : 'noPosts'.tr()),
+        child: Text(
+            _query.isNotEmpty || _hasFilters ? 'noSearchResults'.tr() : 'noPosts'.tr()),
       );
     }
 
     return RefreshIndicator(
       onRefresh: _loadPosts,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 88),
         itemCount: _posts.length,
         itemBuilder: (context, index) {
           final post = _posts[index];
@@ -321,7 +461,7 @@ class _PostsPageState extends State<PostsPage> {
             onDelete: () => _deletePost(post),
             onTapAuthor: () => _openAuthorProfile(post.userId),
             onTapReply: () => _openPostDetail(post),
-            onTapMore: () => _openPostDetail(post),
+            onTap: () => _openPostDetail(post),
             token: authService.accessToken,
             onPostChanged: (updated) {
               setState(() {
@@ -341,7 +481,7 @@ class _PostsPageState extends State<PostsPage> {
 }
 
 class _ComposerDialog extends StatefulWidget {
-  final Future<bool> Function(String content, List<ComposerMedia> media, String visibility) onSubmit;
+  final Future<bool> Function(String content, List<ComposerMedia> media, String visibility, int checkId) onSubmit;
   final bool isPosting;
   final String initialContent;
   final List<ComposerMedia> initialMedia;
@@ -368,6 +508,11 @@ class _ComposerDialogState extends State<_ComposerDialog> {
   late String _visibility;
   String? _currentDraftId;
   bool _isSubmitting = false;
+
+  /// Check created via the compose dialog and attached to this post on
+  /// submit. A check left unattached (composer cancelled) simply expires and
+  /// refunds to the wallet.
+  int? _pendingCheckId;
 
   @override
   void initState() {
@@ -454,7 +599,8 @@ class _ComposerDialogState extends State<_ComposerDialog> {
 
   Future<void> _submit() async {
     setState(() => _isSubmitting = true);
-    final success = await widget.onSubmit(_controller.text.trim(), _media, _visibility);
+    final success = await widget.onSubmit(
+        _controller.text.trim(), _media, _visibility, _pendingCheckId ?? 0);
     if (mounted && success) {
       final draftId = _currentDraftId;
       if (draftId != null) {
@@ -463,6 +609,12 @@ class _ComposerDialogState extends State<_ComposerDialog> {
       if (mounted) Navigator.of(context).pop();
     }
     if (mounted) setState(() => _isSubmitting = false);
+  }
+
+  Future<void> _attachCheck() async {
+    final id = await showCheckComposeDialog(context);
+    if (!mounted || id == null) return;
+    setState(() => _pendingCheckId = id);
   }
 
   void _showPreview() {
@@ -574,12 +726,40 @@ class _ComposerDialogState extends State<_ComposerDialog> {
                   ),
                 ),
               const SizedBox(height: 12),
+              if (_pendingCheckId != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.redeem,
+                          size: 18, color: theme.colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text('checkAttached'.tr())),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: 'removeAttachment'.tr(),
+                        onPressed: () =>
+                            setState(() => _pendingCheckId = null),
+                      ),
+                    ],
+                  ),
+                ),
               Row(
                 children: [
                   IconButton(
                     onPressed: isBusy ? null : _pickImages,
                     icon: const Icon(Icons.attach_file),
                     tooltip: 'addImages'.tr(),
+                  ),
+                  IconButton(
+                    onPressed: isBusy ? null : _attachCheck,
+                    icon: Icon(
+                      Icons.redeem,
+                      color: _pendingCheckId != null
+                          ? theme.colorScheme.primary
+                          : null,
+                    ),
+                    tooltip: 'checkAttach'.tr(),
                   ),
                   IconButton(
                     onPressed: isBusy ? null : _saveDraft,

@@ -588,6 +588,8 @@ class _ConversationTile extends StatelessWidget {
     String text;
     if (last.isDeleted) {
       text = 'messageDeleted'.tr();
+    } else if (last.isCheck) {
+      text = '[${'checkSend'.tr()}]';
     } else if (last.isSystem) {
       final name = last.displayName.isEmpty
           ? 'chatGroupSomeone'.tr()

@@ -9,6 +9,7 @@ import 'package:http_parser/http_parser.dart' show MediaType;
 import '../../core/config/app_config.dart';
 import '../models/attachment.dart';
 import '../models/chat_message.dart';
+import '../models/check.dart';
 import '../models/consent_request.dart';
 import '../models/conversation.dart';
 import '../models/post.dart';
@@ -763,13 +764,95 @@ class ApiService {
         _decodeError(response, 'Upload failed (${response.statusCode})'));
   }
 
+  // ---- Checks (red packets) ----
+
+  /// Escrows [amountCoins] into a new check with [shares] shares expiring
+  /// after [expiresInHours]. The payment PIN authorizes the charge.
+  Future<Check> createCheck(
+    String accessToken, {
+    required double amountCoins,
+    required int shares,
+    String mode = 'random',
+    int expiresInHours = 24,
+    required String pin,
+  }) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/checks'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        'amount': amountCoins,
+        'shares': shares,
+        'mode': mode,
+        'expires_in_hours': expiresInHours,
+        'pin': pin,
+      }),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 201 && data != null) {
+      return Check.fromJson(data['check'] as Map<String, dynamic>);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to create check'));
+  }
+
+  Future<Check> getCheck(int checkId, {String? token}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/checks/$checkId'),
+      headers: _headers(token: token, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Check.fromJson(data['check'] as Map<String, dynamic>);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load check'));
+  }
+
+  Future<CheckClaim> claimCheck(String accessToken, int checkId) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/checks/$checkId/claim'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return CheckClaim.fromJson(data['claim'] as Map<String, dynamic>);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to claim check'));
+  }
+
   // ---- Posts ----
 
-  Future<List<Post>> getPosts({int page = 1, int limit = 20, String? token, String? query}) async {
-    final uri = query != null && query.trim().isNotEmpty
-        ? Uri.parse('$baseUrl/posts?page=$page&limit=$limit&q=${Uri.encodeQueryComponent(query.trim())}')
-        : Uri.parse('$baseUrl/posts?page=$page&limit=$limit');
-    final response = await _get(uri, headers: _headers(token: token, json: false));
+  /// Loads posts with optional advanced filters: a content keyword, an author
+  /// (user id or name substring) and an inclusive date range. All combine
+  /// with AND server-side.
+  Future<List<Post>> getPosts({
+    int page = 1,
+    int limit = 20,
+    String? token,
+    String? query,
+    int? authorId,
+    String? author,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final params = <String>[
+      'page=$page',
+      'limit=$limit',
+      if (query != null && query.trim().isNotEmpty)
+        'q=${Uri.encodeQueryComponent(query.trim())}',
+      if (authorId != null && authorId > 0) 'author_id=$authorId',
+      if (author != null && author.trim().isNotEmpty)
+        'author=${Uri.encodeQueryComponent(author.trim())}',
+      if (from != null)
+        'from=${(from.millisecondsSinceEpoch ~/ 1000)}',
+      if (to != null)
+        'to=${(to.millisecondsSinceEpoch ~/ 1000) + 86399}',
+    ];
+    final response = await _get(
+      Uri.parse('$baseUrl/posts?${params.join('&')}'),
+      headers: _headers(token: token, json: false),
+    );
     if (response.statusCode == 200) {
       final data = _decodeMap(response);
       final postsList = data?['posts'];
@@ -813,7 +896,7 @@ class ApiService {
   }
 
   Future<Post> createPost(String content, String accessToken,
-      {List<int> attachmentIds = const [], String visibility = 'public'}) async {
+      {List<int> attachmentIds = const [], String visibility = 'public', int checkId = 0}) async {
     final response = await _post(
       Uri.parse('$baseUrl/posts'),
       headers: _headers(token: accessToken),
@@ -821,6 +904,7 @@ class ApiService {
         'content': content,
         'attachment_ids': attachmentIds,
         'visibility': visibility,
+        if (checkId > 0) 'check_id': checkId,
       }),
     );
     final data = _decodeMap(response);
@@ -1653,11 +1737,13 @@ class ApiService {
     int? replyToId,
     List<int> attachmentIds = const [],
     List<int> mentions = const [],
+    int checkId = 0,
   }) async {
     final body = <String, dynamic>{
       'content': content,
       'reply_to_id': replyToId,
       'attachment_ids': attachmentIds,
+      if (checkId > 0) 'check_id': checkId,
     };
     if (mentions.isNotEmpty) body['mentions'] = mentions;
     final response = await _post(

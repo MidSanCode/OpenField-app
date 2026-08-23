@@ -8,6 +8,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/widgets/attachment_view.dart';
+import 'package:openfield/widgets/check_card.dart';
 import 'package:openfield/widgets/content_context_menu.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/post_reaction_bar.dart';
@@ -28,9 +29,11 @@ class PostCard extends StatefulWidget {
   /// When true, the content is always rendered in full (used by the post
   /// detail page) and the "view more" affordance is hidden.
   final bool showFullContent;
-  /// When provided, the "view more" affordance on truncated content navigates
-  /// to the post detail page instead of expanding inline.
-  final VoidCallback? onTapMore;
+  /// Card-wide onTap: any blank area of the card (content, attachments and
+  /// padding) not already claimed by an inner control opens the post detail
+  /// page. Inner controls (author, reply, reactions, tip and the menu) keep
+  /// their own handlers.
+  final VoidCallback? onTap;
 
   const PostCard({
     super.key,
@@ -45,7 +48,7 @@ class PostCard extends StatefulWidget {
     this.token,
     this.onUnauthenticated,
     this.showFullContent = false,
-    this.onTapMore,
+    this.onTap,
   });
 
   @override
@@ -210,6 +213,7 @@ class _PostCardState extends State<PostCard> {
     final theme = Theme.of(context);
 
     return GestureDetector(
+      onTap: widget.onTap,
       onLongPress: () => _showContextMenu(),
       onSecondaryTapDown: (details) => _showContextMenu(details.globalPosition),
       child: Card(
@@ -306,12 +310,12 @@ class _PostCardState extends State<PostCard> {
               if (_isTruncated && !_expanded) ...[
                 const SizedBox(height: 4),
                 InkWell(
-                  onTap: widget.onTapMore ?? () => setState(() => _expanded = true),
+                  onTap: widget.onTap ?? () => setState(() => _expanded = true),
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Text(
-                      widget.onTapMore != null ? 'viewDetail'.tr() : 'showMore'.tr(),
+                      widget.onTap != null ? 'viewDetail'.tr() : 'showMore'.tr(),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.w600,
@@ -323,6 +327,10 @@ class _PostCardState extends State<PostCard> {
               if (post.attachments.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 AttachmentView(attachments: post.attachments),
+              ],
+              if (post.check != null) ...[
+                const SizedBox(height: 12),
+                CheckCard(checkId: post.check!.id, token: widget.token),
               ],
               if (widget.showReplies) ...[
                 const SizedBox(height: 8),

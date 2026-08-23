@@ -22,6 +22,10 @@ class ChatMessage {
   final DateTime? editedAt;
   final DateTime? deletedAt;
   final DateTime createdAt;
+
+  /// For kind == 'check' messages: the id of the attached check. Fetch the
+  /// full check (amount, claims, status) from /checks/:id before rendering.
+  final int checkId;
   final String? senderName;
   final String? senderAvatar;
   final bool senderVerified;
@@ -59,6 +63,7 @@ class ChatMessage {
     required this.content,
     this.kind = 'text',
     required this.createdAt,
+    this.checkId = 0,
     this.replyToId,
     this.replyToName,
     this.replyToContent,
@@ -116,6 +121,7 @@ class ChatMessage {
   bool get isDeleted => deletedAt != null;
   bool get isEdited => editedAt != null;
   bool get isSystem => kind.startsWith('system.');
+  bool get isCheck => kind == 'check' && checkId > 0;
   bool get isJoin => kind == 'system.join';
   bool get isLeave => kind == 'system.leave';
   bool get isLocal => id <= 0;
@@ -248,6 +254,7 @@ class ChatMessage {
       senderId: _asInt(json['sender_id']),
       content: json['content'] as String? ?? '',
       kind: json['kind'] as String? ?? 'text',
+      checkId: _asInt(json['check_id']),
       replyToId: json['reply_to_id'] is num ? (json['reply_to_id'] as num).toInt() : null,
       replyToName: json['reply_to_name'] as String?,
       replyToContent: json['reply_to_content'] as String?,
