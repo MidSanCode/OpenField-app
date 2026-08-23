@@ -17,6 +17,7 @@ import 'package:openfield/data/services/encrypted_chat_db.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:openfield/pages/chat/chat_search_page.dart';
 import 'package:openfield/pages/chat/group_settings_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
@@ -94,6 +95,11 @@ class _ConversationPageState extends State<ConversationPage> {
   List<ChatMember> _mentionCandidates = [];
   bool _mentionShowEveryone = false;
   int _mentionTokenStart = 0;
+
+  /// History-search jump state. While [_jumpTargetId] is set the matching
+  /// message carries [_jumpKey] so it can be scrolled into view once rendered.
+  final GlobalKey _jumpKey = GlobalKey();
+  int? _jumpTargetId;
 
   @override
   void initState() {
@@ -555,6 +561,47 @@ class _ConversationPageState extends State<ConversationPage> {
       if (!mounted) return;
       setState(() => _loadingOlder = false);
     }
+  }
+
+  /// Opens the history-search page; when the user picks a result, older pages
+  /// are loaded until the message is available locally, then scrolled to.
+  Future<void> _openSearch() async {
+    final msg = await Navigator.of(context, rootNavigator: true)
+        .push<ChatMessage>(
+      MaterialPageRoute(
+        builder: (_) => ChatSearchPage(
+          conversationId: widget.conversationId,
+          members: _members,
+          encrypted: _isEncryptedConv,
+        ),
+      ),
+    );
+    if (msg == null || !mounted) return;
+    const maxPages = 20;
+    var pages = 0;
+    while (!_messages.any((m) => m.id == msg.id) && _hasOlder && pages < maxPages) {
+      pages++;
+      await _loadOlder();
+      if (!mounted) return;
+    }
+    if (!_messages.any((m) => m.id == msg.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('chatSearchJumpMissing'.tr())),
+      );
+      return;
+    }
+    setState(() => _jumpTargetId = msg.id);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _jumpKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      if (mounted) setState(() => _jumpTargetId = null);
+    });
   }
 
   /// Whether the current user is blocked from sending because of a personal
@@ -1463,6 +1510,11 @@ class _ConversationPageState extends State<ConversationPage> {
             : null,
         title: Text(conv?.title ?? ''),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'search'.tr(),
+            onPressed: _openSearch,
+          ),
           PopupMenuButton<String>(
             onSelected: (value) {
               switch (value) {
@@ -1565,31 +1617,39 @@ class _ConversationPageState extends State<ConversationPage> {
               }
               final msgIndex = index - (_hasOlder ? 1 : 0);
               final message = _messages[msgIndex];
+              Widget child;
               if (message.isSystem) {
-                return _SystemMessage(message: message);
+                child = _SystemMessage(message: message);
+              } else {
+                final replyTo = message.replyToId != null
+                    ? _messages.where((m) => m.id == message.replyToId).firstOrNull
+                    : null;
+                child = _MessageBubble(
+                  message: message,
+                  isMine: message.senderId == _myUserId,
+                  isEncrypted: _isEncrypted,
+                  conversationId: widget.conversationId,
+                  isMentioned: message.mentionsMe(_myUserId),
+                  showSenderName: (_conversation?.isGroup ?? false) && !message.isDeleted,
+                  senderAvatar: message.senderAvatar,
+                  senderTitle: _members
+                      .where((m) => m.userId == message.senderId)
+                      .firstOrNull
+                      ?.title ??
+                      '',
+                  replyPreview: replyTo,
+                  onLongPress: () => _onMessageLongPress(message),
+                  onRetry: (message.isFailed && authToken != null)
+                      ? () => _dispatchSend(message, authToken)
+                      : null,
+                );
               }
-              final replyTo = message.replyToId != null
-                  ? _messages.where((m) => m.id == message.replyToId).firstOrNull
-                  : null;
-              return _MessageBubble(
-                message: message,
-                isMine: message.senderId == _myUserId,
-                isEncrypted: _isEncrypted,
-                conversationId: widget.conversationId,
-                isMentioned: message.mentionsMe(_myUserId),
-                showSenderName: (_conversation?.isGroup ?? false) && !message.isDeleted,
-                senderAvatar: message.senderAvatar,
-                senderTitle: _members
-                    .where((m) => m.userId == message.senderId)
-                    .firstOrNull
-                    ?.title ??
-                    '',
-                replyPreview: replyTo,
-                onLongPress: () => _onMessageLongPress(message),
-                onRetry: (message.isFailed && authToken != null)
-                    ? () => _dispatchSend(message, authToken)
-                    : null,
-              );
+              // The jump target from history search carries a GlobalKey so it
+              // can be scrolled into view after the frame renders.
+              if (message.id == _jumpTargetId) {
+                return KeyedSubtree(key: _jumpKey, child: child);
+              }
+              return child;
             },
           ),
         ),

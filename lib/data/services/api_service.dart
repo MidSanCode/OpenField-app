@@ -1600,6 +1600,52 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load messages'));
   }
 
+  /// Searches chat history in a conversation. All filters are optional and
+  /// combined with AND by the server: [query] matches content, [senderId]
+  /// restricts the author, [from]/[to] bound the time range inclusively,
+  /// [hasAttachments] keeps only messages with files and [fileName] matches
+  /// attachment original names. Returns newest-first matches.
+  Future<List<ChatMessage>> searchMessages(
+    String accessToken,
+    int conversationId, {
+    String query = '',
+    int? senderId,
+    DateTime? from,
+    DateTime? to,
+    bool hasAttachments = false,
+    String fileName = '',
+    int limit = 50,
+  }) async {
+    final params = <String, String>{
+      if (query.trim().isNotEmpty) 'q': query.trim(),
+      if (senderId != null && senderId > 0) 'sender_id': '$senderId',
+      if (from != null)
+        'from': (from.millisecondsSinceEpoch ~/ 1000).toString(),
+      if (to != null) 'to': (to.millisecondsSinceEpoch ~/ 1000).toString(),
+      if (hasAttachments || fileName.trim().isNotEmpty) 'has_attachment': 'true',
+      if (fileName.trim().isNotEmpty) 'file_name': fileName.trim(),
+      'limit': '$limit',
+    };
+    final qs = params.entries
+        .map((e) =>
+            '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    final response = await _get(
+      Uri.parse('$baseUrl/conversations/$conversationId/messages/search?$qs'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['messages'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((m) => ChatMessage.fromJson(m)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to search messages'));
+  }
+
   Future<ChatMessage> sendChatMessage(
     String accessToken,
     int conversationId,
