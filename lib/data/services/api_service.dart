@@ -764,6 +764,22 @@ class ApiService {
         _decodeError(response, 'Upload failed (${response.statusCode})'));
   }
 
+  // ---- Service health ----
+
+  /// Aggregated backend health from the gateway (public, no token needed):
+  /// `all_healthy` plus a per-service map of status/latency/details.
+  Future<Map<String, dynamic>> getServicesHealth() async {
+    final response = await _get(
+      Uri.parse('$baseUrl/health'),
+      headers: _headers(json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) return data;
+    if (response.statusCode == 503 && data != null) return data;
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to check services'));
+  }
+
   // ---- Checks (red packets) ----
 
   /// Escrows [amountCoins] into a new check with [shares] shares expiring

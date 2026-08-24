@@ -16,6 +16,7 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/pages/settings/permissions_page.dart';
+import 'package:openfield/pages/settings/service_status_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -91,6 +92,19 @@ class SettingsPage extends StatelessWidget {
                       Text('aboutDeveloper'.tr()),
                     ],
                   ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.monitor_heart_outlined),
+                  title: Text('serviceStatus'.tr()),
+                  subtitle: Text('serviceStatusHint'.tr()),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const ServiceStatusPage()),
+                    );
+                  },
                 ),
                 const Divider(height: 1),
                 ListTile(
