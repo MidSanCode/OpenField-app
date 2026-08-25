@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
@@ -2194,6 +2194,84 @@ class ApiService {
     await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/typing'),
       headers: _headers(token: accessToken, json: false),
+    );
+  }
+
+  // ---- plugins (store) ----
+
+  /// Lists published plugins from the store. Works signed-out; a token only
+  /// personalizes the response.
+  Future<List<StorePlugin>> listStorePlugins([String? token]) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/plugins'),
+      headers: _headers(token: token, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final items = (data['plugins'] as List?) ?? const [];
+      return items
+          .whereType<Map<String, dynamic>>()
+          .map(StorePlugin.fromJson)
+          .toList();
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load plugins'));
+  }
+
+  /// Downloads one plugin bundle. Requires sign-in so installs are auditable
+  /// per user.
+  Future<List<int>> downloadStorePlugin(String accessToken, String id) async {
+    final response = await _client.get(
+      Uri.parse('$baseUrl/plugins/$id/download'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode == 200) {
+      return response.bodyBytes;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to download plugin'));
+  }
+}
+
+/// One plugin listed by the store (server-side row of the catalog).
+class StorePlugin {
+  final String id;
+  final String name;
+  final String version;
+  final String author;
+  final String description;
+
+  /// Raw permission keys requested by the bundle's manifest.
+  final List<String> permissions;
+  final String minAppVersion;
+  final bool verified;
+  final int downloads;
+
+  const StorePlugin({
+    required this.id,
+    required this.name,
+    required this.version,
+    this.author = '',
+    this.description = '',
+    this.permissions = const [],
+    this.minAppVersion = '',
+    this.verified = false,
+    this.downloads = 0,
+  });
+
+  factory StorePlugin.fromJson(Map<String, dynamic> json) {
+    String asString(Object? v) => v?.toString() ?? '';
+    final perms = json['permissions'];
+    return StorePlugin(
+      id: asString(json['id']),
+      name: asString(json['name']),
+      version: asString(json['version']),
+      author: asString(json['author']),
+      description: asString(json['description']),
+      permissions: perms is List ? perms.map(asString).toList() : const [],
+      minAppVersion: asString(json['min_app_version']),
+      verified: json['verified'] == true,
+      downloads: json['downloads'] is num ? (json['downloads'] as num).toInt() : 0,
     );
   }
 }

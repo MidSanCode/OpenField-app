@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/chat_unread_service.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
 
@@ -66,8 +67,8 @@ class _Sidebar extends StatelessWidget {
           label: Text('posts'.tr()),
         ),
         NavigationRailDestination(
-          icon: const Icon(Icons.chat_outlined),
-          selectedIcon: const Icon(Icons.chat),
+          icon: const _ChatTabIcon(),
+          selectedIcon: const _ChatTabIcon(selected: true),
           label: Text('chat'.tr()),
         ),
         NavigationRailDestination(
@@ -107,6 +108,52 @@ class _AccountAvatarIcon extends StatelessWidget {
   }
 }
 
+/// Chat tab icon with a small red dot / count badge whenever the chat list
+/// reports unread messages. Used by both the bottom NavigationBar and the
+/// NavigationRail destination.
+class _ChatTabIcon extends StatelessWidget {
+  final bool selected;
+  const _ChatTabIcon({this.selected = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final unread = context.select<ChatUnreadService, int>((s) => s.totalUnread);
+    final icon = Icon(selected ? Icons.chat : Icons.chat_outlined);
+    if (unread <= 0) return icon;
+    final theme = Theme.of(context);
+    final label = unread > 99 ? '99+' : '$unread';
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        icon,
+        Positioned(
+          right: -8,
+          top: -6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.error,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: theme.colorScheme.surface, width: 1.5),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: theme.colorScheme.onError,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                height: 1.2,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _BottomBar extends StatelessWidget {
   const _BottomBar({required this.selectedIndex, required this.onDestinationSelected});
 
@@ -125,8 +172,8 @@ class _BottomBar extends StatelessWidget {
           label: 'posts'.tr(),
         ),
         NavigationDestination(
-          icon: const Icon(Icons.chat_outlined),
-          selectedIcon: const Icon(Icons.chat),
+          icon: const _ChatTabIcon(),
+          selectedIcon: const _ChatTabIcon(selected: true),
           label: 'chat'.tr(),
         ),
         NavigationDestination(

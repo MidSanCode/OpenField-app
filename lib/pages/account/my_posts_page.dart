@@ -145,6 +145,11 @@ class _MyPostsPageState extends State<MyPostsPage> {
                 MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
               );
             },
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
+              );
+            },
           );
         },
       );

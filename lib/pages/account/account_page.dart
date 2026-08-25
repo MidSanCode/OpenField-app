@@ -17,6 +17,8 @@ import 'package:openfield/pages/account/follow_list_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/account/exp_history_page.dart';
 import 'package:openfield/pages/account/membership_page.dart';
+import 'package:openfield/pages/plugins/plugins_page.dart';
+import 'package:openfield/pages/account/my_posts_page.dart';
 import 'package:openfield/pages/account/storage_bucket_page.dart';
 import 'package:openfield/pages/account/tasks_page.dart';
 import 'package:openfield/pages/account/wallet_page.dart';
@@ -409,14 +411,37 @@ class _AccountPageState extends State<AccountPage> {
                 );
               },
             ),
+            const Divider(height: 1),
+            _NavTile(
+              icon: Icons.extension_outlined,
+              title: 'plugins'.tr(),
+              subtitle: 'pluginEntryHint'.tr(),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const PluginsPage()),
+                );
+              },
+            ),
           ],
         ),
         _SettingsSection(
           title: 'myContent'.tr(),
           children: [
-if (user != null)
-                  _NavTile(
-                    icon: Icons.attach_file,
+            if (user != null)
+              _NavTile(
+                icon: Icons.article_outlined,
+                title: 'myPosts'.tr(),
+                subtitle: 'myPostsHint'.tr(),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => MyPostsPage(userId: user.id)),
+                  );
+                },
+              ),
+            if (user != null) const Divider(height: 1),
+            if (user != null)
+              _NavTile(
+                icon: Icons.attach_file,
                     title: 'myAttachments'.tr(),
                     subtitle: 'manageAttachmentsHint'.tr(),
                     onTap: () {

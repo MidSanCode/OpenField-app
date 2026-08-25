@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart';
 import 'package:openfield/data/models/chat_member.dart';
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
@@ -24,6 +27,7 @@ import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/check_card.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
+import 'package:openfield/widgets/voice_message.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 import 'package:openfield/core/format/chat_time.dart';
 
@@ -102,6 +106,14 @@ class _ConversationPageState extends State<ConversationPage> {
   final GlobalKey _jumpKey = GlobalKey();
   int? _jumpTargetId;
 
+  /// Voice recording state. A tap on the mic starts recording; the input bar
+  /// is replaced by a recording bar with cancel/send actions.
+  final Record _recorder = Record();
+  bool _recording = false;
+  int _recordSeconds = 0;
+  Timer? _recordTimer;
+  String? _recordPath;
+
   @override
   void initState() {
     super.initState();
@@ -143,6 +155,8 @@ class _ConversationPageState extends State<ConversationPage> {
       t.cancel();
     }
     _typingTimers.clear();
+    _recordTimer?.cancel();
+    _recorder.dispose();
     _inputController.dispose();
     _inputFocus.dispose();
     _scrollController.dispose();
@@ -561,6 +575,178 @@ class _ConversationPageState extends State<ConversationPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingOlder = false);
+    }
+  }
+
+  /// Starts voice recording (mic button). The recording bar replaces the
+  /// input row until the user sends or cancels.
+  Future<void> _startVoiceRecording() async {
+    if (!_canSend) {
+      _showMutedSnackBar();
+      return;
+    }
+    if (_isEncrypted && !_e2eeKeysReady) {
+      await _ensureE2EE();
+      if (!mounted || !_e2eeKeysReady) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_e2eeWaitForMember
+                ? 'e2eeWaitOtherMember'.tr()
+                : 'e2eeKeysPending'.tr())));
+        return;
+      }
+    }
+    try {
+      if (!await _recorder.hasPermission()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('voicePermissionDenied'.tr())),
+          );
+        }
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      final path =
+          '${dir.path}${Platform.pathSeparator}of_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final started = await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 64000,
+          sampleRate: 44100,
+          numChannels: 1,
+        ),
+        path: path,
+      );
+      if (!started) throw Exception('recorder failed to start');
+      _recordPath = path;
+      _recordSeconds = 0;
+      setState(() => _recording = true);
+      _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _recordSeconds++);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  /// Stops recording and discards the file.
+  Future<void> _cancelVoiceRecording() async {
+    _recordTimer?.cancel();
+    try {
+      final path = await _recorder.stop();
+      if (path != null) {
+        final f = File(path);
+        if (f.existsSync()) f.deleteSync();
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _recording = false;
+        _recordPath = null;
+      });
+    }
+  }
+
+  /// Stops recording, uploads the clip (encrypting it first in E2EE chats)
+  /// and sends it as an audio attachment message.
+  Future<void> _sendVoiceRecording() async {
+    if (!_recording) return;
+    _recordTimer?.cancel();
+    final path = await _recorder.stop();
+    if (mounted) {
+      setState(() {
+        _recording = false;
+        _recordPath = null;
+      });
+    }
+    if (path == null) return;
+    if (_recordSeconds < 1) {
+      try {
+        final f = File(path);
+        if (f.existsSync()) f.deleteSync();
+      } catch (_) {}
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('voiceTooShort'.tr())));
+      }
+      return;
+    }
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || !mounted) return;
+
+    final local = ChatMessage(
+      id: -DateTime.now().millisecondsSinceEpoch,
+      conversationId: widget.conversationId,
+      senderId: _myUserId,
+      content: '',
+      createdAt: DateTime.now(),
+      senderName: authService.user?.nickname ?? authService.username,
+      senderAvatar: authService.user?.avatarUrl ?? authService.avatarUrl,
+      clientId: generateClientId(),
+      status: MessageStatus.sending,
+    );
+    setState(() => _messages = _sorted([..._messages, local]));
+    _scrollToBottom();
+
+    String? uploadPath = path;
+    var carrier = '';
+    try {
+      if (_isEncrypted) {
+        // Same scheme as regular attachments: upload only ciphertext and let
+        // the recipient recover mime/name from the encrypted payload.
+        final bytes = await File(path).readAsBytes();
+        final crypto =
+            E2eeService.instance.encryptAttachment(widget.conversationId, bytes);
+        if (crypto == null) {
+          throw Exception(_e2eeWaitForMember
+              ? 'e2eeWaitOtherMember'.tr()
+              : 'e2eeKeysPending'.tr());
+        }
+        final cipherFile = File('$path.ofe');
+        await cipherFile.writeAsBytes(crypto.cipher, flush: true);
+        uploadPath = cipherFile.path;
+        carrier = jsonEncode({
+          'att': {
+            'v': crypto.version,
+            'n': crypto.nonceB64,
+            'm': mimeTypeForPath(path),
+            'name': '${'voiceMessage'.tr()}.m4a',
+          },
+        });
+      }
+      final attachment =
+          await _apiService.uploadAttachmentSmart(uploadPath!, token,
+              visibility: _isEncrypted ? 'private' : 'public');
+      final content =
+          carrier.isEmpty ? '' : _encryptOutgoing(carrier);
+      final msg = await _apiService.sendChatMessage(
+        token,
+        widget.conversationId,
+        content,
+        attachmentIds: [attachment.id],
+      );
+      if (!mounted) return;
+      final resolved = _isEncrypted ? _decryptMessage(msg) : msg;
+      setState(() => _messages = _replaceByClientId(local.clientId, resolved));
+      _store.upsertMessage(resolved);
+      await _apiService.markConversationRead(token, widget.conversationId, resolved.id);
+    } catch (e) {
+      if (!mounted) return;
+      _markStatus(local.clientId, MessageStatus.failed);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      // Clean up temp files regardless of the outcome.
+      for (final p in [path, '$path.ofe']) {
+        try {
+          final f = File(p);
+          if (f.existsSync()) f.deleteSync();
+        } catch (_) {}
+      }
     }
   }
 
@@ -1869,7 +2055,59 @@ class _ConversationPageState extends State<ConversationPage> {
         ),
       );
     }
-    return _buildInputBar();
+    return _recording ? _buildRecordingBar() : _buildInputBar();
+  }
+
+  /// Full-width recording bar shown while a voice message is being captured:
+  /// pulsing mic, elapsed seconds and cancel/send actions.
+  Widget _buildRecordingBar() {
+    final theme = Theme.of(context);
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.redAccent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(Icons.mic, size: 20, color: theme.colorScheme.onErrorContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${'voiceRecording'.tr()} · ${_recordSeconds}s',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: _cancelVoiceRecording,
+              icon: const Icon(Icons.close),
+              tooltip: 'cancel'.tr(),
+            ),
+            IconButton.filled(
+              onPressed: _sendVoiceRecording,
+              icon: const Icon(Icons.send),
+              tooltip: 'send'.tr(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildInputBar() {
@@ -1880,6 +2118,12 @@ class _ConversationPageState extends State<ConversationPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            if (!kIsWeb)
+              IconButton(
+                onPressed: _startVoiceRecording,
+                icon: const Icon(Icons.mic_none),
+                tooltip: 'voiceSend'.tr(),
+              ),
             IconButton(
               onPressed: _sendCheck,
               icon: const Icon(Icons.redeem),
@@ -2183,12 +2427,27 @@ class _MessageBubble extends StatelessWidget {
                             data: message.displayContent,
                             padding: EdgeInsets.zero,
                           ),
-                        if (message.attachments.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          AttachmentView(
-                            attachments: message.attachments,
-                            conversationId: conversationId,
-                          ),
+                        if (!message.isDeleted) ...[
+                          // Voice messages get a dedicated play/seek bubble;
+                          // any remaining attachments render as usual.
+                          for (final audio in message.attachments
+                              .where((a) => a.isAudio))
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2, bottom: 2),
+                              child: VoiceMessageBubble(
+                                attachment: audio,
+                                conversationId: conversationId,
+                              ),
+                            ),
+                          if (message.attachments.any((a) => !a.isAudio)) ...[
+                            const SizedBox(height: 8),
+                            AttachmentView(
+                              attachments: message.attachments
+                                  .where((a) => !a.isAudio)
+                                  .toList(),
+                              conversationId: conversationId,
+                            ),
+                          ],
                         ],
                         if (message.isEdited)
                           Text(

@@ -1,0 +1,14 @@
+{
+  "id": "com.openfield.hello",
+  "name": "Hello OpenField",
+  "version": "1.0.0",
+  "author": "OpenField Team",
+  "description": "Minimal example plugin: counts launches and greets you with a toast.",
+  "entry": "main.js",
+  "permissions": [
+    "storage",
+    "log",
+    "ui.toast"
+  ],
+  "min_app_version": "0.0.0"
+}

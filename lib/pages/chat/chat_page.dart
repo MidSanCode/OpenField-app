@@ -6,6 +6,7 @@ import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/chat_unread_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -79,6 +80,7 @@ class _ChatPageState extends State<ChatPage> {
         _conversations = conversations;
         _requests = requests;
       });
+      _publishUnreadTotal();
     } catch (_) {
       // Ignore transient failures on background refreshes.
     }
@@ -92,6 +94,7 @@ class _ChatPageState extends State<ChatPage> {
         _isLoading = false;
         _conversations = [];
       });
+      _publishUnreadTotal();
       return;
     }
     setState(() {
@@ -107,12 +110,29 @@ class _ChatPageState extends State<ChatPage> {
         _requests = requests;
         _isLoading = false;
       });
+      _publishUnreadTotal();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  /// Pushes the latest unread total to the global [ChatUnreadService] so the
+  /// bottom navigation badge and any other consumer stay in sync. Safe to call
+  /// before the widget is mounted (no-op when [Provider] cannot be reached).
+  void _publishUnreadTotal() {
+    if (!mounted) return;
+    final total = _conversations.fold<int>(
+      0,
+      (sum, c) => sum + (c.unread > 0 ? c.unread : 0),
+    );
+    try {
+      Provider.of<ChatUnreadService>(context, listen: false).setTotal(total);
+    } catch (_) {
+      // Provider not yet wired in tests / during teardown.
     }
   }
 
@@ -153,6 +173,40 @@ class _ChatPageState extends State<ChatPage> {
       MaterialPageRoute(builder: (_) => const DiscoverGroupsPage()),
     );
     if (mounted) _load();
+  }
+
+  /// Marks every conversation with unread messages as read in one tap.
+  Future<void> _markAllRead() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    final targets = _conversations
+        .where((c) => c.unread > 0 && (c.lastMessage?.id ?? 0) > 0)
+        .toList(growable: false);
+    if (targets.isEmpty) {
+      // Already clear locally — still tell the badge service so it can reset.
+      try {
+        Provider.of<ChatUnreadService>(context, listen: false).clear();
+      } catch (_) {}
+      return;
+    }
+    for (final conv in targets) {
+      try {
+        await _apiService.markConversationRead(
+          token,
+          conv.id,
+          conv.lastMessage!.id,
+        );
+      } catch (_) {
+        // Keep going: partial success is better than aborting the sweep.
+      }
+    }
+    await _reloadSilently();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('chatMarkAllReadDone'.tr())),
+      );
+    }
   }
 
   /// FAB action: start a new private chat or create a group from one button.
@@ -234,6 +288,10 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    final totalUnread = _conversations.fold<int>(
+      0,
+      (sum, c) => sum + (c.unread > 0 ? c.unread : 0),
+    );
     return Scaffold(
       appBar: AppBar(
         title: Text('chat'.tr()),
@@ -247,9 +305,59 @@ class _ChatPageState extends State<ChatPage> {
       ),
       body: Column(
         children: [
+          if (totalUnread > 0) _buildUnreadSummary(totalUnread),
           _buildRealtimeBanner(),
           Expanded(child: _isWide ? _buildSplitBody() : _buildBody()),
         ],
+      ),
+    );
+  }
+
+  /// Slim strip under the AppBar that shows the total number of unread
+  /// messages across all conversations and a one-tap "Mark all read" button.
+  Widget _buildUnreadSummary(int total) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.55),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.error,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                total > 99 ? '99+' : '$total',
+                style: TextStyle(
+                  color: theme.colorScheme.onError,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'chatUnreadCount'.tr(args: [total.toString()]),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _markAllRead,
+              icon: const Icon(Icons.done_all, size: 18),
+              label: Text('chatMarkAllRead'.tr()),
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -306,8 +414,9 @@ class _ChatPageState extends State<ChatPage> {
                     child: Text(
                       'chatRealtimeConnecting'.tr(),
                       style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 12),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -590,6 +699,10 @@ class _ConversationTile extends StatelessWidget {
       text = 'messageDeleted'.tr();
     } else if (last.isCheck) {
       text = '[${'checkSend'.tr()}]';
+    } else if (!last.isSystem &&
+        last.displayContent.isEmpty &&
+        last.attachments.any((a) => a.isAudio)) {
+      text = '[${'voiceMessage'.tr()}]';
     } else if (last.isSystem) {
       final name = last.displayName.isEmpty
           ? 'chatGroupSomeone'.tr()

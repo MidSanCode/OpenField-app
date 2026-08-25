@@ -129,6 +129,7 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
           token: Provider.of<AuthService>(context).accessToken,
           onTapAuthor: () => _openAuthor(_posts[index].userId),
           onTapReply: () => _openPost(_posts[index]),
+          onTap: () => _openPost(_posts[index]),
           onPostChanged: (updated) => setState(() {
             _posts = _posts.map((p) => p.id == updated.id ? updated : p).toList();
           }),

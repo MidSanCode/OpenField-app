@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,10 +18,13 @@ import 'package:openfield/core/web/history_stub.dart'
 import 'package:openfield/core/windows/protocol_registration.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/chat_unread_service.dart';
 import 'package:openfield/data/services/permission_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/core/theme/app_theme.dart';
+import 'package:openfield/plugins/plugin_gate.dart';
+import 'package:openfield/plugins/plugin_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +92,7 @@ class OpenFieldApp extends StatefulWidget {
 class _OpenFieldAppState extends State<OpenFieldApp> {
   final AuthService _authService = AuthService();
   final SettingsService _settingsService = SettingsService();
+  final ChatUnreadService _chatUnreadService = ChatUnreadService();
   late final GoRouter _router;
   StreamSubscription<Uri>? _linkSubscription;
   bool _deepLinkHandled = false;
@@ -115,6 +120,11 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => PermissionService.requestOnLaunch(),
     );
+    // Secure-boot gate for plugins: probe the server, then boot/stop plugin
+    // runtimes as connectivity changes. The auth accessor lets engines act
+    // with the signed-in identity without holding a Provider reference.
+    PluginManager.attachAuthProvider(() => _authService);
+    PluginManager.instance.ensureInitialized();
   }
 
   /// Connects the realtime WebSocket while authenticated, disconnecting it
@@ -211,7 +221,6 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
         uri.queryParameters.containsKey('bind');
     if (!isOAuthUri && !hasOAuthParams) return;
     if (_deepLinkHandled) return;
-    _deepLinkHandled = true;
 
     final accessToken = uri.queryParameters['access_token'];
     if (accessToken == null) return;
@@ -262,6 +271,9 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
             providers: [
               ChangeNotifierProvider.value(value: _authService),
               ChangeNotifierProvider.value(value: _settingsService),
+              ChangeNotifierProvider.value(value: _chatUnreadService),
+              ChangeNotifierProvider.value(value: PluginGate.instance),
+              ChangeNotifierProvider.value(value: PluginManager.instance),
             ],
             child: Consumer<SettingsService>(
               builder: (context, settings, _) {
@@ -312,6 +324,32 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
                               // can see the background did not load.
                               errorBuilder: (_, _, _) => ColoredBox(
                                 color: Theme.of(context).colorScheme.surface,
+                              ),
+                            ),
+                          ),
+                          Positioned.fill(
+                            // Dim + desaturate the background so bright photos
+                            // don't drown out chat text. Saturation drops the
+                            // colors toward grey; the dark layer lifts contrast
+                            // for foreground content without hiding the image
+                            // entirely.
+                            child: IgnorePointer(
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(
+                                  sigmaX: 1.5,
+                                  sigmaY: 1.5,
+                                ),
+                                child: ColorFiltered(
+                                  colorFilter: const ColorFilter.matrix([
+                                    0.35, 0.35, 0.35, 0, 0,
+                                    0.35, 0.35, 0.35, 0, 0,
+                                    0.35, 0.35, 0.35, 0, 0,
+                                    0,    0,    0,    1, 0,
+                                  ]),
+                                  child: ColoredBox(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                  ),
+                                ),
                               ),
                             ),
                           ),

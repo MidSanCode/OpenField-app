@@ -39,6 +39,8 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>OpenField needs microphone access so you can record voice messages in chats.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>OpenField needs access to your photo library so you can pick images for your profile, posts and group chats.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

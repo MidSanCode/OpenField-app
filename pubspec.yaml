@@ -31,10 +31,13 @@ dependencies:
   sqflite: ^2.4.3
   sqflite_common_ffi: ^2.4.2
   path: ^1.9.1
+  record: ^5.1.2
   web_socket_channel: ^3.0.3
   pointycastle: ^4.0.0
   crypto: ^3.0.3
   package_info_plus: ^9.0.1
+  flutter_js: ^0.8.3
+  archive: ^3.6.1
 
 dev_dependencies:
   flutter_test:
