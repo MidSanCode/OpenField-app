@@ -712,7 +712,8 @@ class _ConversationPageState extends State<ConversationPage> {
       }
       final attachment =
           await _apiService.uploadAttachmentSmart(uploadPath, token,
-              visibility: _isEncrypted ? 'private' : 'public');
+              visibility: _isEncrypted ? 'private' : 'public',
+              onProgress: (p) => _updateUploadProgress(local.clientId, p));
       final content =
           carrier.isEmpty ? '' : _encryptOutgoing(carrier);
       final msg = await _apiService.sendChatMessage(
@@ -1204,6 +1205,23 @@ class _ConversationPageState extends State<ConversationPage> {
     });
   }
 
+  /// Updates the attachment-upload progress shown on an optimistic bubble.
+  /// Progress callbacks fire often; skip near-duplicate values so the frame
+  /// budget is not spent on sub-1% repaints.
+  void _updateUploadProgress(String clientId, double progress) {
+    if (!mounted) return;
+    final clamped = progress.clamp(0.0, 1.0);
+    final current =
+        _messages.where((m) => m.clientId == clientId).map((m) => m.uploadProgress).firstOrNull;
+    if (current != null && clamped < 1 && clamped - current < 0.01) return;
+    setState(() {
+      _messages = _messages.map((m) {
+        if (m.clientId != clientId) return m;
+        return m.copyWith(uploadProgress: clamped);
+      }).toList();
+    });
+  }
+
   /// Replaces the optimistic message carrying [clientId] with [replacement].
   /// Also drops any existing copy of the same server id so a late HTTP
   /// response can never duplicate a message that the WebSocket echo already
@@ -1308,7 +1326,8 @@ class _ConversationPageState extends State<ConversationPage> {
         });
       }
       final attachment = await _apiService.uploadAttachmentSmart(uploadPath, token,
-          visibility: _isEncrypted ? 'private' : 'public');
+          visibility: _isEncrypted ? 'private' : 'public',
+          onProgress: (p) => _updateUploadProgress(local.clientId, p));
       final content = carrier.isEmpty
           ? ''
           : _encryptOutgoing(carrier);
@@ -2442,6 +2461,45 @@ class _MessageBubble extends StatelessWidget {
                             ),
                           ],
                         ],
+                        // Attachment upload progress on optimistic bubbles:
+                        // the file is still leaving this device.
+                        if (message.isPending &&
+                            message.uploadProgress != null &&
+                            message.uploadProgress! < 1)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.cloud_upload_outlined,
+                                    size: 13,
+                                    color: theme.colorScheme.onSurfaceVariant),
+                                const SizedBox(width: 6),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: SizedBox(
+                                    width: 110,
+                                    height: 4,
+                                    child: LinearProgressIndicator(
+                                      value: message.uploadProgress,
+                                      minHeight: 4,
+                                      backgroundColor: theme
+                                          .colorScheme.onSurfaceVariant
+                                          .withValues(alpha: 0.2),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${(message.uploadProgress! * 100).round()}%',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontSize: 10,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         if (message.isEdited)
                           Text(
                             'chatEdited'.tr(),
@@ -2618,8 +2676,9 @@ class _TypingDotsState extends State<_TypingDots>
   }
 }
 
-/// Small inline indicator for local send state: a spinner while sending, a
-/// retry button when the send failed.
+/// Small inline indicator for local send state: a progress fraction while the
+/// attachment is still uploading, a spinner for plain sends, a retry button
+/// when the send failed.
 class _SendStatusIndicator extends StatelessWidget {
   final ChatMessage message;
   final VoidCallback? onRetry;
@@ -2630,6 +2689,22 @@ class _SendStatusIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (message.isPending) {
+      final upload = message.uploadProgress;
+      if (upload != null && upload < 1) {
+        return SizedBox(
+          width: 34,
+          height: 12,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: upload,
+              minHeight: 3,
+              backgroundColor:
+                  theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.25),
+            ),
+          ),
+        );
+      }
       return const SizedBox(
         width: 12,
         height: 12,

@@ -57,6 +57,11 @@ class ChatMessage {
   /// ciphertext envelope (for encrypted conversations).
   final String? decryptedContent;
 
+  /// Transient attachment-upload progress for optimistic messages, in [0, 1].
+  /// Never serialized or persisted: it only lives on the locally created
+  /// message while its file is still uploading.
+  final double? uploadProgress;
+
   const ChatMessage({
     required this.id,
     required this.conversationId,
@@ -87,6 +92,7 @@ class ChatMessage {
     String? clientId,
     this.status = MessageStatus.sent,
     this.decryptedContent,
+    this.uploadProgress,
   }) : clientId = clientId ?? '';
 
   /// The sentinel user id stored in [mentions] for an @everyone mention.
@@ -208,6 +214,7 @@ class ChatMessage {
     String? clientId,
     MessageStatus? status,
     Object? decryptedContent = _unset,
+    Object? uploadProgress = _unset,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -241,6 +248,9 @@ class ChatMessage {
       decryptedContent: identical(decryptedContent, _unset)
           ? this.decryptedContent
           : decryptedContent as String?,
+      uploadProgress: identical(uploadProgress, _unset)
+          ? this.uploadProgress
+          : uploadProgress as double?,
     );
   }
 

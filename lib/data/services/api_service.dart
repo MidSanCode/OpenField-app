@@ -130,6 +130,9 @@ MediaType _mediaTypeFor(String filePath) {
     'csv': 'text/csv',
     'json': 'application/json',
     'pdf': 'application/pdf',
+    // OpenField E2EE ciphertext container (.ofe): AES-GCM encrypted file
+    // bytes uploaded for encrypted conversations.
+    'ofe': 'application/x-openfield-encrypted',
   };
   return MediaType.parse(map[ext] ?? 'application/octet-stream');
 }
@@ -530,7 +533,12 @@ class ApiService {
 
   // ---- Storage ----
 
-  Future<Attachment> uploadAttachment(String filePath, String accessToken, {String visibility = 'public'}) async {
+  Future<Attachment> uploadAttachment(
+    String filePath,
+    String accessToken, {
+    String visibility = 'public',
+    ValueChanged<double>? onProgress,
+  }) async {
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/attachments'));
     request.headers['Authorization'] = 'Bearer $accessToken';
     request.files.add(await http.MultipartFile.fromPath(
@@ -539,7 +547,7 @@ class ApiService {
       contentType: _mediaTypeFor(filePath),
     ));
     request.fields['visibility'] = visibility;
-    final response = await _send(request);
+    final response = await _sendMultipartProgressed(request, onProgress);
     final data = _decodeMap(response);
     if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
       return Attachment.fromJson(data);
@@ -547,6 +555,95 @@ class ApiService {
     throw ApiException(
         response.statusCode,
         _decodeError(response, 'Upload failed (${response.statusCode})'));
+  }
+
+  /// Sends a multipart request while reporting byte-level upload progress as
+  /// a fraction in [0, 1]. Falls back to the plain path when no [onProgress]
+  /// is given. The body is re-piped through a counting stream so progress
+  /// reflects actual bytes handed to the socket.
+  Future<http.Response> _sendMultipartProgressed(
+    http.MultipartRequest request,
+    ValueChanged<double>? onProgress,
+  ) async {
+    if (onProgress == null) return _send(request);
+
+    final byteStream = request.finalize();
+    final total = request.contentLength;
+    var sent = 0;
+
+    final streamed = http.StreamedRequest(request.method, request.url)
+      ..followRedirects = request.followRedirects
+      ..persistentConnection = request.persistentConnection
+      ..headers.addAll(request.headers)
+      ..contentLength = total;
+
+    byteStream
+        .map((chunk) {
+          sent += chunk.length;
+          if (total > 0) onProgress(sent / total);
+          return chunk;
+        })
+        .listen(streamed.sink.add,
+            onError: streamed.sink.addError,
+            onDone: streamed.sink.close,
+            cancelOnError: true);
+
+    try {
+      final response = await _client.send(streamed);
+      return await http.Response.fromStream(response);
+    } on http.ClientException catch (e) {
+      throw ApiException(0, e.message);
+    }
+  }
+
+  /// Streams [url] to the local file [savePath], reporting progress. Returns
+  /// the save path. Not supported on the web build (no file system).
+  Future<String> downloadToFile(
+    String url,
+    String savePath, {
+    void Function(int receivedBytes, int? totalBytes)? onProgress,
+  }) async {
+    if (kIsWeb) {
+      throw ApiException(0, 'Downloads are not supported on the web build');
+    }
+    final request = http.Request('GET', Uri.parse(url));
+    final response = await _client.send(request);
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode, 'Download failed (${response.statusCode})');
+    }
+    final sink = File(savePath).openWrite();
+    var received = 0;
+    try {
+      await for (final chunk in response.stream) {
+        received += chunk.length;
+        sink.add(chunk);
+        onProgress?.call(received, response.contentLength);
+      }
+      await sink.flush();
+    } catch (e) {
+      try {
+        await sink.close();
+      } catch (_) {}
+      if (File(savePath).existsSync()) File(savePath).deleteSync();
+      rethrow;
+    } finally {
+      await sink.close();
+    }
+    return savePath;
+  }
+
+  /// Per-bucket storage statistics for the signed-in user.
+  Future<StorageUsage> fetchStorageUsage(String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/storage/usage'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return StorageUsage.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load usage'));
   }
 
   /// Default chunk size (4 MiB) used for large-file uploads.
@@ -582,8 +679,8 @@ class ApiService {
     final file = File(filePath);
     final size = await file.length();
     if (size < chunkedUploadThreshold) {
-      onProgress?.call(1);
-      return uploadAttachment(filePath, accessToken, visibility: visibility);
+      return uploadAttachment(filePath, accessToken,
+          visibility: visibility, onProgress: onProgress);
     }
     return _uploadAttachmentChunked(file, size, accessToken, visibility: visibility, onProgress: onProgress);
   }
@@ -674,10 +771,18 @@ class ApiService {
     }
 
     final raf = await file.open();
+    var completedBytes = 0;
+    // Chunks restored from a previous session count towards progress.
+    for (final index in uploaded) {
+      final start = (index - 1) * chunkSizeBytes;
+      completedBytes += (start + chunkSizeBytes > fileSize)
+          ? fileSize - start
+          : chunkSizeBytes;
+    }
     try {
       for (var index = 1; index <= totalChunks; index++) {
         if (uploaded.contains(index)) {
-          onProgress?.call(index / totalChunks);
+          onProgress?.call(completedBytes / fileSize);
           continue;
         }
         final start = (index - 1) * chunkSizeBytes;
@@ -693,11 +798,11 @@ class ApiService {
         );
         request.headers['Authorization'] = 'Bearer $accessToken';
         request.files.add(http.MultipartFile.fromBytes('chunk', chunk));
-        final response = await _send(request);
-        if (response.statusCode != 200) {
-          throw ApiException(response.statusCode, _decodeError(response, 'Chunk upload failed'));
-        }
-        onProgress?.call(index / totalChunks);
+        await _sendMultipartProgressed(request, (fraction) {
+          onProgress?.call((completedBytes + fraction * length) / fileSize);
+        });
+        completedBytes += length;
+        onProgress?.call(completedBytes / fileSize);
       }
     } finally {
       raf.close();
@@ -2380,6 +2485,84 @@ class StorePlugin {
       minAppVersion: asString(json['min_app_version']),
       verified: json['verified'] == true,
       downloads: json['downloads'] is num ? (json['downloads'] as num).toInt() : 0,
+    );
+  }
+}
+
+/// Storage statistics for the signed-in user, from GET /storage/usage.
+class StorageUsage {
+  final int totalCount;
+  final int totalBytes;
+
+  /// Optional quota block; null when the server runs without quotas.
+  final int? quotaBaseBytes;
+  final int? quotaBonusBytes;
+  final int? quotaEffectiveBytes;
+
+  /// Per-bucket breakdown sorted by size (server-side).
+  final List<BucketUsage> buckets;
+
+  const StorageUsage({
+    required this.totalCount,
+    required this.totalBytes,
+    this.quotaBaseBytes,
+    this.quotaBonusBytes,
+    this.quotaEffectiveBytes,
+    this.buckets = const [],
+  });
+
+  factory StorageUsage.fromJson(Map<String, dynamic> json) {
+    int asInt(Object? v) => v is num ? v.toInt() : 0;
+    final bucketList = json['buckets'];
+    final quota = json['quota'];
+    return StorageUsage(
+      totalCount: asInt(json['total_count']),
+      totalBytes: asInt(json['total_bytes']),
+      quotaBaseBytes:
+          quota is Map<String, dynamic> && quota['base_bytes'] is num
+              ? (quota['base_bytes'] as num).toInt()
+              : null,
+      quotaBonusBytes:
+          quota is Map<String, dynamic> && quota['bonus_bytes'] is num
+              ? (quota['bonus_bytes'] as num).toInt()
+              : null,
+      quotaEffectiveBytes:
+          quota is Map<String, dynamic> && quota['effective_bytes'] is num
+              ? (quota['effective_bytes'] as num).toInt()
+              : null,
+      buckets: bucketList is List
+          ? bucketList
+              .whereType<Map<String, dynamic>>()
+              .map(BucketUsage.fromJson)
+              .toList()
+          : const [],
+    );
+  }
+
+  double get quotaFraction =>
+      quotaEffectiveBytes != null && quotaEffectiveBytes! > 0
+          ? (totalBytes / quotaEffectiveBytes!).clamp(0.0, 1.0)
+          : 0.0;
+}
+
+/// Attachment count and size for one storage bucket.
+class BucketUsage {
+  final String bucket;
+  final int count;
+  final int sizeBytes;
+
+  const BucketUsage({
+    required this.bucket,
+    required this.count,
+    required this.sizeBytes,
+  });
+
+  factory BucketUsage.fromJson(Map<String, dynamic> json) {
+    int asInt(Object? v) => v is num ? v.toInt() : 0;
+    return BucketUsage(
+      bucket: json['bucket']?.toString() ?? '',
+      count: asInt(json['count']),
+      sizeBytes: asInt(json['size_bytes']),
     );
   }
 }

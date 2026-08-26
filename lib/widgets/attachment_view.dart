@@ -4,9 +4,11 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/data/models/attachment.dart';
+import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/encrypted_attachment_service.dart';
 import 'package:openfield/pages/media/media_preview_page.dart';
 
@@ -319,6 +321,12 @@ class _AttachmentTile extends StatefulWidget {
 class _AttachmentTileState extends State<_AttachmentTile> {
   bool _rendering = false;
 
+  /// Download state for "save to device": null = idle, otherwise fraction in
+  /// [0, 1]. While downloading, the action slot shows the progress instead of
+  /// the open button.
+  double? _downloadProgress;
+  bool _downloadFailed = false;
+
   _ResolvedAtt get resolved => widget.attachment;
 
   Attachment get attachment => resolved.attachment;
@@ -401,18 +409,55 @@ class _AttachmentTileState extends State<_AttachmentTile> {
                         ),
                       ),
                     ),
-                  InkResponse(
-                    radius: 18,
-                    onTap: () => _openAttachment(context, attachment),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.open_in_new,
-                        size: 18,
-                        color: theme.colorScheme.onSurfaceVariant,
+                  if (_downloadProgress != null)
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            value:
+                                _downloadProgress! <= 0 ? null : _downloadProgress!,
+                            strokeWidth: 2.2,
+                          ),
+                          Text(
+                            '${(_downloadProgress! * 100).round()}',
+                            style: const TextStyle(fontSize: 7),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    InkResponse(
+                      radius: 18,
+                      onTap: _downloadToDevice,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          _downloadFailed
+                              ? Icons.error_outline
+                              : Icons.download_outlined,
+                          size: 18,
+                          color: _downloadFailed
+                              ? theme.colorScheme.error
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
-                  ),
+                    InkResponse(
+                      radius: 18,
+                      onTap: () => _openAttachment(context, attachment),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.open_in_new,
+                          size: 18,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -434,6 +479,50 @@ class _AttachmentTileState extends State<_AttachmentTile> {
     if (attachment.isVideo) return 'video';
     if (attachment.isText) return 'text';
     return 'file';
+  }
+
+  /// Downloads the attachment to the device temp dir with a progress ring,
+  /// then opens it with an external app. Encrypted attachments already live
+  /// locally after decryption, so they skip the download.
+  Future<void> _downloadToDevice() async {
+    if (resolved.fromLocalFile || _localPathIfAny(attachment.url) != null) {
+      _openResolved(context, resolved);
+      return;
+    }
+    setState(() {
+      _downloadProgress = 0;
+      _downloadFailed = false;
+    });
+    try {
+      final dir = await getTemporaryDirectory();
+      final safeName = attachment.originalName.isNotEmpty
+          ? attachment.originalName
+          : 'attachment-${attachment.id}';
+      final savePath =
+          '${dir.path}${Platform.pathSeparator}of_dl_${DateTime.now().millisecondsSinceEpoch}_$safeName';
+      await ApiService().downloadToFile(
+        attachment.url,
+        savePath,
+        onProgress: (received, total) {
+          if (!mounted) return;
+          setState(() {
+            _downloadProgress = total != null && total > 0 ? received / total : 0.5;
+          });
+        },
+      );
+      if (!mounted) return;
+      setState(() => _downloadProgress = null);
+      _openLocalFile(context, savePath);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _downloadProgress = null;
+        _downloadFailed = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
   IconData _iconFor(Attachment att) {

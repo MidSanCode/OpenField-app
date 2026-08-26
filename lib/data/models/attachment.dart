@@ -17,6 +17,12 @@ class Attachment {
   final String originalMime;
   final String realName;
 
+  /// Logical storage bucket the object lives on (server-reported).
+  final String bucket;
+
+  /// When the attachment was uploaded (server timestamp).
+  final DateTime? createdAt;
+
   Attachment({
     required this.id,
     required this.originalName,
@@ -29,6 +35,8 @@ class Attachment {
     this.cryptoNonce = '',
     this.originalMime = '',
     this.realName = '',
+    this.bucket = '',
+    this.createdAt,
   });
 
   factory Attachment.fromJson(Map<String, dynamic> json) {
@@ -47,6 +55,10 @@ class Attachment {
       cryptoNonce: json['crypto_nonce'] as String? ?? '',
       originalMime: json['original_mime'] as String? ?? '',
       realName: json['real_name'] as String? ?? '',
+      bucket: json['bucket'] as String? ?? '',
+      createdAt: json['created_at'] is String
+          ? DateTime.tryParse(json['created_at'] as String)
+          : null,
     );
   }
 

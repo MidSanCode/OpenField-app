@@ -1,4 +1,4 @@
-﻿import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/data/models/attachment.dart';
@@ -28,6 +28,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
   List<PostReply> _replies = [];
   bool _isLoading = true;
   bool _isSending = false;
+  double? _uploadProgress;
   String? _error;
   PostReply? _replyingTo;
   Attachment? _pendingAttachment;
@@ -103,7 +104,13 @@ class _PostDetailPageState extends State<PostDetailPage> {
     try {
       int? attachmentId;
       if (_pendingAttachment != null) {
-        final att = await _apiService.uploadAttachmentSmart(_pendingAttachment!.url, token);
+        final att = await _apiService.uploadAttachmentSmart(
+          _pendingAttachment!.url,
+          token,
+          onProgress: (p) {
+            if (mounted) setState(() => _uploadProgress = p);
+          },
+        );
         attachmentId = att.id;
       }
       final reply = await _apiService.createReply(
@@ -118,13 +125,17 @@ class _PostDetailPageState extends State<PostDetailPage> {
       setState(() {
         _replies = [..._replies, reply];
         _isSending = false;
+        _uploadProgress = null;
         _replyingTo = null;
         _pendingAttachment = null;
         _post = _post.copyWith(replyCount: _post.replyCount + 1);
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isSending = false);
+      setState(() {
+        _isSending = false;
+        _uploadProgress = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
@@ -372,6 +383,28 @@ class _PostDetailPageState extends State<PostDetailPage> {
                       icon: const Icon(Icons.close, size: 16),
                       onPressed: () => setState(() => _pendingAttachment = null),
                     ),
+                  ],
+                ),
+              ),
+            if (_isSending && _uploadProgress != null && _uploadProgress! < 1)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: _uploadProgress,
+                          minHeight: 4,
+                          backgroundColor:
+                              Theme.of(context).colorScheme.surfaceContainerHighest,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text('${(_uploadProgress! * 100).round()}%',
+                        style: Theme.of(context).textTheme.bodySmall),
                   ],
                 ),
               ),

@@ -18,6 +18,7 @@ class AttachmentsPage extends StatefulWidget {
 class _AttachmentsPageState extends State<AttachmentsPage> {
   final ApiService _apiService = ApiService();
   List<Attachment> _attachments = [];
+  StorageUsage? _usage;
   bool _isLoading = true;
   String? _error;
 
@@ -34,10 +35,14 @@ class _AttachmentsPageState extends State<AttachmentsPage> {
       _error = null;
     });
     try {
-      final items = await _apiService.listMyAttachments(authService.accessToken!);
+      final results = await Future.wait<dynamic>([
+        _apiService.listMyAttachments(authService.accessToken!),
+        _apiService.fetchStorageUsage(authService.accessToken!),
+      ]);
       if (!mounted) return;
       setState(() {
-        _attachments = items;
+        _attachments = results[0] as List<Attachment>;
+        _usage = results[1] as StorageUsage;
         _isLoading = false;
       });
     } catch (e) {
@@ -111,19 +116,35 @@ class _AttachmentsPageState extends State<AttachmentsPage> {
     }
     return RefreshIndicator(
       onRefresh: _load,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _attachments.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-          childAspectRatio: 1.4,
-        ),
-        itemBuilder: (context, index) {
-          final att = _attachments[index];
-          return _buildTile(context, att, () => _openAttachment(context, att), () => _delete(att));
-        },
+      child: CustomScrollView(
+        slivers: [
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _UsageCard(usage: _usage),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1.4,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final att = _attachments[index];
+                  return _buildTile(context, att,
+                      () => _openAttachment(context, att), () => _delete(att));
+                },
+                childCount: _attachments.length,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -230,6 +251,120 @@ class _DeleteButton extends StatelessWidget {
             size: 18,
             color: Colors.white,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Storage statistics header: total files/size, optional quota bar and the
+/// per-bucket usage breakdown served by GET /storage/usage.
+class _UsageCard extends StatelessWidget {
+  final StorageUsage? usage;
+
+  const _UsageCard({this.usage});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (usage == null) {
+      // Usage endpoint unavailable: degrade to a plain totals card computed
+      // from the visible attachment list is skipped; show nothing.
+      return const SizedBox.shrink();
+    }
+    final u = usage!;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.donut_small_outlined,
+                    size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('usageTitle'.tr(), style: theme.textTheme.titleMedium),
+                const Spacer(),
+                Text('usageTotalCount'.tr(args: ['${u.totalCount}']),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(formatBytes(u.totalBytes),
+                    style: theme.textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                if (u.quotaEffectiveBytes != null) ...[
+                  const SizedBox(width: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                        '/ ${formatBytes(u.quotaEffectiveBytes!)}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                            color:
+                                theme.colorScheme.onSurfaceVariant)),
+                  ),
+                ],
+              ],
+            ),
+            if (u.quotaEffectiveBytes != null &&
+                u.quotaEffectiveBytes! > 0) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: u.quotaFraction,
+                  minHeight: 6,
+                  backgroundColor:
+                      theme.colorScheme.surfaceContainerHighest,
+                ),
+              ),
+              if ((u.quotaBonusBytes ?? 0) > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('usageBonus'.tr(args: [
+                    formatBytes(u.quotaBonusBytes!),
+                  ]),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant)),
+                ),
+            ],
+            if (u.buckets.isNotEmpty) ...[
+              const Divider(height: 24),
+              ...u.buckets.map((b) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.folder_outlined,
+                            size: 16,
+                            color: theme.colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            b.bucket.isEmpty ? 'default' : b.bucket,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ),
+                        Text('usageBucketFiles'.tr(args: ['${b.count}']),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color:
+                                    theme.colorScheme.onSurfaceVariant)),
+                        const SizedBox(width: 12),
+                        Text(formatBytes(b.sizeBytes),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  )),
+            ],
+          ],
         ),
       ),
     );

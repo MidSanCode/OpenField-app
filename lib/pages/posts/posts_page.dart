@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -17,7 +19,9 @@ import 'package:openfield/widgets/check_card.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 
 /// A media item in the composer: either an existing server attachment
-/// (has [attachmentId] + [url]) or a newly picked local image (has [localPath]).
+/// (has [attachmentId] + [url]) or a newly picked local file (has [localPath]).
+/// Any file type is allowed; images render as thumbnails, everything else as
+/// a generic file chip.
 class ComposerMedia {
   final int? attachmentId;
   final String? url;
@@ -30,6 +34,19 @@ class ComposerMedia {
         url = null;
 
   String get displayUrl => url ?? localPath ?? '';
+
+  static const _imageExtensions = {
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic', 'avif', 'svg',
+  };
+
+  /// True when the item should render as an image thumbnail rather than a
+  /// generic file chip.
+  bool get isImageLike {
+    final path = localPath ?? url ?? '';
+    final dot = path.lastIndexOf('.');
+    if (dot < 0) return false;
+    return _imageExtensions.contains(path.substring(dot + 1).toLowerCase());
+  }
 }
 
 class PostsPage extends StatefulWidget {
@@ -313,17 +330,50 @@ class _PostsPageState extends State<PostsPage> {
 
     final authService = Provider.of<AuthService>(context, listen: false);
     setState(() => _isPosting = true);
+    final locals = media.where((m) => m.localPath != null).toList();
+    final progress = ValueNotifier<double>(0.0);
+
+    // Modal progress dialog while attachments are uploading.
+    Future<void>? progressDialog;
+    if (locals.isNotEmpty && mounted) {
+      progressDialog = showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _UploadProgressDialog(notifier: progress, total: locals.length),
+      );
+    }
+
+    Future<void> closeProgress() async {
+      if (progressDialog == null) return;
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      await progressDialog;
+      progressDialog = null;
+    }
+
     try {
       final token = authService.accessToken!;
       final attachmentIds = <int>[];
+      var doneFiles = 0;
       for (final item in media) {
         if (item.attachmentId != null) {
           attachmentIds.add(item.attachmentId!);
         } else if (item.localPath != null) {
-          final att = await _apiService.uploadAttachmentSmart(item.localPath!, token);
+          final base = doneFiles / locals.length;
+          final att = await _apiService.uploadAttachmentSmart(
+            item.localPath!,
+            token,
+            onProgress: (p) {
+              progress.value =
+                  (base + p / locals.length).clamp(0.0, 1.0);
+            },
+          );
           attachmentIds.add(att.id);
+          doneFiles++;
         }
       }
+      await closeProgress();
       if (postId == null) {
         await _apiService.createPost(content, token,
             attachmentIds: attachmentIds, visibility: visibility, checkId: checkId);
@@ -334,6 +384,7 @@ class _PostsPageState extends State<PostsPage> {
       await _loadPosts();
       return true;
     } catch (e) {
+      await closeProgress();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString())),
@@ -341,6 +392,7 @@ class _PostsPageState extends State<PostsPage> {
       }
       return false;
     } finally {
+      progress.dispose();
       if (mounted) setState(() => _isPosting = false);
     }
   }
@@ -528,12 +580,58 @@ class _ComposerDialogState extends State<_ComposerDialog> {
     super.dispose();
   }
 
-  Future<void> _pickImages() async {
-    final picker = ImagePicker();
-    final files = await picker.pickMultiImage();
-    if (!mounted || files.isEmpty) return;
+  /// Attachment source picker: gallery images, gallery videos, or arbitrary
+  /// files from the system file manager. Videos and files also accept
+  /// multiple selections.
+  Future<void> _attachFromSheet() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text('attachFromGallery'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('image'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.movie_outlined),
+              title: Text('attachFromVideos'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('video'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: Text('attachFromFiles'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('file'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+
+    List<ComposerMedia> picked = [];
+    if (choice == 'image') {
+      final picker = ImagePicker();
+      final files = await picker.pickMultiImage();
+      picked = files.map((f) => ComposerMedia.local(f.path)).toList();
+    } else if (choice == 'video') {
+      final result = await FilePicker.platform.pickFiles(type: FileType.video, allowMultiple: true);
+      picked = (result?.files ?? const [])
+          .where((f) => f.path != null)
+          .map((f) => ComposerMedia.local(f.path!))
+          .toList();
+    } else {
+      final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: true);
+      picked = (result?.files ?? const [])
+          .where((f) => f.path != null)
+          .map((f) => ComposerMedia.local(f.path!))
+          .toList();
+    }
+    if (!mounted || picked.isEmpty) return;
     setState(() {
-      _media.addAll(files.map((f) => ComposerMedia.local(f.path)));
+      _media.addAll(picked);
       if (_media.length > 9) {
         _media.removeRange(9, _media.length);
       }
@@ -747,9 +845,9 @@ class _ComposerDialogState extends State<_ComposerDialog> {
               Row(
                 children: [
                   IconButton(
-                    onPressed: isBusy ? null : _pickImages,
+                    onPressed: isBusy ? null : _attachFromSheet,
                     icon: const Icon(Icons.attach_file),
-                    tooltip: 'addImages'.tr(),
+                    tooltip: 'addAttachment'.tr(),
                   ),
                   IconButton(
                     onPressed: isBusy ? null : _attachCheck,
@@ -815,6 +913,33 @@ class _ComposerDialogState extends State<_ComposerDialog> {
   }
 
   Widget _buildThumb(ComposerMedia media, ThemeData theme) {
+    if (!media.isImageLike) {
+      // Generic file chip: icon + filename instead of an image preview.
+      final name = (media.localPath ?? media.url ?? '')
+          .split(Platform.pathSeparator)
+          .last;
+      return Container(
+        width: 90,
+        height: 90,
+        color: theme.colorScheme.surfaceContainerHighest,
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.insert_drive_file_outlined,
+                size: 26, color: theme.colorScheme.primary),
+            const SizedBox(height: 4),
+            Text(
+              name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 9),
+            ),
+          ],
+        ),
+      );
+    }
     final child = SizedBox(
       width: 90,
       height: 90,
@@ -921,6 +1046,33 @@ class _ComposerPreviewDialog extends StatelessWidget {
         child: MediaImage(
           url: media.url ?? '',
           fit: BoxFit.cover,
+        ),
+      );
+    }
+    if (!media.isImageLike) {
+      // Generic file chip mirrors the composer's rendering for non-images.
+      final name = (media.localPath ?? '')
+          .split(Platform.pathSeparator)
+          .last;
+      return Container(
+        width: 90,
+        height: 90,
+        color: theme.colorScheme.surfaceContainerHighest,
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.insert_drive_file_outlined,
+                size: 26, color: theme.colorScheme.primary),
+            const SizedBox(height: 4),
+            Text(
+              name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 9),
+            ),
+          ],
         ),
       );
     }
@@ -1098,6 +1250,63 @@ class _VisibilityItem extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Modal dialog shown while post attachments are uploading: one aggregate
+/// progress bar plus the current fraction. The owner pops it when uploads
+/// finish (or fail).
+class _UploadProgressDialog extends StatelessWidget {
+  final ValueListenable<double> notifier;
+  final int total;
+
+  const _UploadProgressDialog({required this.notifier, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      content: ValueListenableBuilder<double>(
+        valueListenable: notifier,
+        builder: (context, value, _) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child:
+                        CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('uploadingAttachment'.tr(),
+                        style: theme.textTheme.titleMedium),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: value,
+                  minHeight: 6,
+                  backgroundColor:
+                      theme.colorScheme.surfaceContainerHighest,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text('${(value * 100).round()}%',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant)),
+            ],
+          );
+        },
+      ),
     );
   }
 }
