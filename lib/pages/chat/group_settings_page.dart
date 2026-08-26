@@ -1,4 +1,4 @@
-﻿import 'package:easy_localization/easy_localization.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -226,6 +226,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
 title: VerifiedName(
                 name: member.displayName,
                 verified: member.isVerified,
+                bot: member.isBot,
                 memberLevel: member.memberLevel,
                 memberActive: member.memberActive,
                 nameColor: member.nameColor,
@@ -790,6 +791,7 @@ title: Row(
                   child: VerifiedName(
                     name: m.displayName,
                     verified: m.isVerified,
+                    bot: m.isBot,
                     memberLevel: m.memberLevel,
                     memberActive: m.memberActive,
                     nameColor: m.nameColor,

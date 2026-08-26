@@ -108,11 +108,10 @@ class _ConversationPageState extends State<ConversationPage> {
 
   /// Voice recording state. A tap on the mic starts recording; the input bar
   /// is replaced by a recording bar with cancel/send actions.
-  final Record _recorder = Record();
+  final AudioRecorder _recorder = AudioRecorder();
   bool _recording = false;
   int _recordSeconds = 0;
   Timer? _recordTimer;
-  String? _recordPath;
 
   @override
   void initState() {
@@ -607,7 +606,8 @@ class _ConversationPageState extends State<ConversationPage> {
       final dir = await getTemporaryDirectory();
       final path =
           '${dir.path}${Platform.pathSeparator}of_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      final started = await _recorder.start(
+      // Throws on failure; a completed start means the recorder is running.
+      await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.aacLc,
           bitRate: 64000,
@@ -616,8 +616,6 @@ class _ConversationPageState extends State<ConversationPage> {
         ),
         path: path,
       );
-      if (!started) throw Exception('recorder failed to start');
-      _recordPath = path;
       _recordSeconds = 0;
       setState(() => _recording = true);
       _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -642,10 +640,7 @@ class _ConversationPageState extends State<ConversationPage> {
       }
     } catch (_) {}
     if (mounted) {
-      setState(() {
-        _recording = false;
-        _recordPath = null;
-      });
+      setState(() => _recording = false);
     }
   }
 
@@ -656,10 +651,7 @@ class _ConversationPageState extends State<ConversationPage> {
     _recordTimer?.cancel();
     final path = await _recorder.stop();
     if (mounted) {
-      setState(() {
-        _recording = false;
-        _recordPath = null;
-      });
+      setState(() => _recording = false);
     }
     if (path == null) return;
     if (_recordSeconds < 1) {
@@ -719,7 +711,7 @@ class _ConversationPageState extends State<ConversationPage> {
         });
       }
       final attachment =
-          await _apiService.uploadAttachmentSmart(uploadPath!, token,
+          await _apiService.uploadAttachmentSmart(uploadPath, token,
               visibility: _isEncrypted ? 'private' : 'public');
       final content =
           carrier.isEmpty ? '' : _encryptOutgoing(carrier);
@@ -2297,6 +2289,7 @@ class _MessageBubble extends StatelessWidget {
                           VerifiedName(
                             name: message.displayName,
                             verified: message.senderVerified,
+                            bot: message.senderIsBot,
                             memberLevel: message.senderMemberLevel,
                             memberActive: message.senderMemberActive,
                             nameColor: message.senderNameColor,

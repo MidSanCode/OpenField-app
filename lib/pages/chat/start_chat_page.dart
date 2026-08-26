@@ -5,6 +5,7 @@ import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/core/widgets/avatar.dart';
+import 'package:openfield/widgets/robot_badge.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 /// Lets the user search for another user to start a private chat with, or
@@ -231,7 +232,19 @@ class _StartChatPageState extends State<StartChatPage> {
             imageUrl: user.avatarUrl,
             fallbackIcon: Icons.person,
           ),
-          title: Text(user.displayName),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(user.displayName,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              if (user.isBot) ...[
+                const SizedBox(width: 5),
+                RobotBadge(size: 15),
+              ],
+            ],
+          ),
           subtitle: user.username.isNotEmpty && user.username != user.displayName
               ? Text('@${user.username}')
               : null,

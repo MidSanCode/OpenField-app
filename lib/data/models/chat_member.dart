@@ -13,6 +13,7 @@ class ChatMember {
   final String? nickname;
   final String? avatarUrl;
   final bool isVerified;
+  final bool isBot;
   final int memberLevel;
   final bool memberActive;
   final String nameColor;
@@ -42,6 +43,7 @@ class ChatMember {
     this.nickname,
     this.avatarUrl,
     this.isVerified = false,
+    this.isBot = false,
     this.memberLevel = 0,
     this.memberActive = false,
     this.nameColor = '',
@@ -115,6 +117,7 @@ class ChatMember {
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool? ?? false,
+      isBot: json['is_bot'] as bool? ?? false,
       memberLevel: _asInt(json['member_level']),
       memberActive: json['member_active'] as bool? ?? false,
       nameColor: json['name_color'] as String? ?? '',

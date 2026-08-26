@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import 'package:openfield/widgets/robot_badge.dart';
+
 /// A small blue verified badge shown next to verified usernames.
 class VerifiedBadge extends StatelessWidget {
   final double size;
@@ -123,11 +125,15 @@ class MemberTierBadge extends StatelessWidget {
 }
 
 /// Inline row of a display name (optionally coloured / gradient / animated per
-/// the user's membership name styling) followed by the membership tier badge
-/// and the verified badge when enabled.
+/// the user's membership name styling) followed by the membership tier badge,
+/// the verified badge and — for bot accounts — the robot badge.
 class VerifiedName extends StatefulWidget {
   final String name;
   final bool verified;
+
+  /// True when the account is a bot: renders the robot badge after the name.
+  /// Bots are ordinary accounts otherwise; this is their only visual marker.
+  final bool bot;
   final int memberLevel;
   final bool memberActive;
   final String memberTierName;
@@ -144,6 +150,7 @@ class VerifiedName extends StatefulWidget {
     super.key,
     required this.name,
     required this.verified,
+    this.bot = false,
     this.memberLevel = 0,
     this.memberActive = false,
     this.memberTierName = '',
@@ -293,6 +300,10 @@ class _VerifiedNameState extends State<VerifiedName> {
         if (widget.verified) ...[
           const SizedBox(width: 4),
           VerifiedBadge(),
+        ],
+        if (widget.bot) ...[
+          const SizedBox(width: 4),
+          RobotBadge(size: (baseStyle.fontSize ?? 14) * 1.05),
         ],
       ],
     );

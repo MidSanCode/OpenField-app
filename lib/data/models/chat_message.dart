@@ -29,6 +29,7 @@ class ChatMessage {
   final String? senderName;
   final String? senderAvatar;
   final bool senderVerified;
+  final bool senderIsBot;
   final int senderMemberLevel;
   final bool senderMemberActive;
   final String senderNameColor;
@@ -72,6 +73,7 @@ class ChatMessage {
     this.senderName,
     this.senderAvatar,
     this.senderVerified = false,
+    this.senderIsBot = false,
     this.senderMemberLevel = 0,
     this.senderMemberActive = false,
     this.senderNameColor = '',
@@ -156,6 +158,7 @@ class ChatMessage {
       senderName: senderName,
       senderAvatar: senderAvatar,
       senderVerified: senderVerified,
+      senderIsBot: senderIsBot,
       senderMemberLevel: senderMemberLevel,
       senderMemberActive: senderMemberActive,
       senderNameColor: senderNameColor,
@@ -191,6 +194,7 @@ class ChatMessage {
     String? senderName,
     String? senderAvatar,
     bool? senderVerified,
+    bool? senderIsBot,
     int? senderMemberLevel,
     bool? senderMemberActive,
     String? senderNameColor,
@@ -220,6 +224,7 @@ class ChatMessage {
       senderName: senderName ?? this.senderName,
       senderAvatar: senderAvatar ?? this.senderAvatar,
       senderVerified: senderVerified ?? this.senderVerified,
+      senderIsBot: senderIsBot ?? this.senderIsBot,
       senderMemberLevel: senderMemberLevel ?? this.senderMemberLevel,
       senderMemberActive: senderMemberActive ?? this.senderMemberActive,
       senderNameColor: senderNameColor ?? this.senderNameColor,
@@ -264,6 +269,7 @@ class ChatMessage {
       senderName: json['sender_name'] as String?,
       senderAvatar: json['sender_avatar'] as String?,
       senderVerified: json['sender_verified'] as bool? ?? false,
+      senderIsBot: json['sender_is_bot'] as bool? ?? false,
       senderMemberLevel: _asInt(json['sender_member_level']),
       senderMemberActive: json['sender_member_active'] as bool? ?? false,
       senderNameColor: json['sender_name_color'] as String? ?? '',

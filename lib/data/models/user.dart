@@ -103,6 +103,7 @@ class User {
   final String nameGradientDirection;
   final String avatarFrame;
   final bool hasPin;
+  final bool isBot;
   final DateTime? createdAt;
 
   User({
@@ -140,6 +141,7 @@ class User {
     this.nameGradientDirection = '',
     this.avatarFrame = '',
     this.hasPin = false,
+    this.isBot = false,
     this.createdAt,
   });
 
@@ -179,6 +181,7 @@ class User {
       nameGradientDirection: json['name_gradient_direction'] as String? ?? '',
       avatarFrame: json['avatar_frame'] as String? ?? '',
       hasPin: json['has_pin'] as bool? ?? false,
+      isBot: json['is_bot'] as bool? ?? false,
       createdAt: _asDate(json['created_at']),
     );
   }
@@ -397,6 +400,7 @@ class User {
     String? nameGradientDirection,
     String? avatarFrame,
     bool? hasPin,
+    bool? isBot,
     DateTime? createdAt,
   }) {
     return User(
@@ -434,6 +438,7 @@ class User {
       nameGradientDirection: nameGradientDirection ?? this.nameGradientDirection,
       avatarFrame: avatarFrame ?? this.avatarFrame,
       hasPin: hasPin ?? this.hasPin,
+      isBot: isBot ?? this.isBot,
       createdAt: createdAt ?? this.createdAt,
     );
   }

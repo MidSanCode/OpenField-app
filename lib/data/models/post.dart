@@ -11,6 +11,7 @@ class Post {
   final String? nickname;
   final String? avatarUrl;
   final bool? isVerified;
+  final bool isBot;
   final int memberLevel;
   final bool memberActive;
   final String nameColor;
@@ -45,6 +46,7 @@ class Post {
     this.nickname,
     this.avatarUrl,
     this.isVerified,
+    this.isBot = false,
     this.memberLevel = 0,
     this.memberActive = false,
     this.nameColor = '',
@@ -98,6 +100,7 @@ class Post {
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isVerified: json['is_verified'] as bool?,
+      isBot: json['is_bot'] as bool? ?? false,
       memberLevel: _asInt(json['member_level']),
       memberActive: json['member_active'] as bool? ?? false,
       nameColor: json['name_color'] as String? ?? '',
@@ -158,6 +161,7 @@ class Post {
     String? nickname,
     String? avatarUrl,
     bool? isVerified,
+    bool? isBot,
     int? memberLevel,
     bool? memberActive,
     String? nameColor,
@@ -188,6 +192,7 @@ class Post {
       nickname: nickname ?? this.nickname,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isVerified: isVerified ?? this.isVerified,
+      isBot: isBot ?? this.isBot,
       memberLevel: memberLevel ?? this.memberLevel,
       memberActive: memberActive ?? this.memberActive,
       nameColor: nameColor ?? this.nameColor,

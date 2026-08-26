@@ -137,6 +137,7 @@ class _ReplyTileState extends State<ReplyTile> {
                         child: VerifiedName(
                             name: reply.authorName,
                             verified: reply.isVerified,
+                            bot: reply.isBot,
                             memberLevel: reply.memberLevel,
                             memberActive: reply.memberActive,
                             nameColor: reply.nameColor,

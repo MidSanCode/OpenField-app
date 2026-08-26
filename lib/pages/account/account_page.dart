@@ -17,6 +17,7 @@ import 'package:openfield/pages/account/follow_list_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/account/exp_history_page.dart';
 import 'package:openfield/pages/account/membership_page.dart';
+import 'package:openfield/pages/bots/bots_page.dart';
 import 'package:openfield/pages/plugins/plugins_page.dart';
 import 'package:openfield/pages/account/my_posts_page.dart';
 import 'package:openfield/pages/account/storage_bucket_page.dart';
@@ -419,6 +420,21 @@ class _AccountPageState extends State<AccountPage> {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const PluginsPage()),
+                );
+              },
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: 'bots'.tr(),
+          children: [
+            _NavTile(
+              icon: Icons.smart_toy_outlined,
+              title: 'botManage'.tr(),
+              subtitle: 'botEntryHint'.tr(),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const BotsPage()),
                 );
               },
             ),

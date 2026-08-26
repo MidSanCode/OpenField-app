@@ -151,6 +151,7 @@ class _ProfilePageState extends State<ProfilePage> {
           child: VerifiedName(
             name: user.displayName,
             verified: user.isVerified,
+            bot: user.isBot,
             memberLevel: user.memberLevel,
             memberActive: user.hasActiveMembership,
             nameColor: user.nameColor,

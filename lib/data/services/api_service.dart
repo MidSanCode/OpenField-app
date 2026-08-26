@@ -2231,6 +2231,114 @@ class ApiService {
     throw ApiException(
         response.statusCode, _decodeError(response, 'Failed to download plugin'));
   }
+
+  // ---- bots ----
+
+  /// Registers a new bot account owned by the current user. The returned map
+  /// carries `user` (full profile) and `token` — the static ofb_ API token
+  /// the bot uses for every request. It is shown exactly once.
+  Future<Map<String, dynamic>> registerBot(
+      String accessToken, String username, String nickname) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/bots'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'username': username, 'nickname': nickname}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 201 && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to create bot'));
+  }
+
+  /// Lists the bots owned by the current user.
+  Future<List<BotAccount>> listBots(String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/bots'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final items = (data['bots'] as List?) ?? const [];
+      return items
+          .whereType<Map<String, dynamic>>()
+          .map(BotAccount.fromJson)
+          .toList();
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load bots'));
+  }
+
+  /// Replaces a bot's API token; the old one stops working immediately.
+  Future<String> regenerateBotToken(String accessToken, int botId) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/bots/$botId/regenerate'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null && data['token'] is String) {
+      return data['token'] as String;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to regenerate token'));
+  }
+
+  /// Deletes a bot account together with its content.
+  Future<void> deleteBot(String accessToken, int botId) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/bots/$botId'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to delete bot'));
+    }
+  }
+}
+
+/// One bot account as listed by GET /bots (owner-facing view).
+class BotAccount {
+  final int id;
+  final String username;
+  final String nickname;
+  final String avatarUrl;
+  final DateTime? createdAt;
+
+  /// When the current API token was issued (regeneration resets it).
+  final DateTime? tokenCreatedAt;
+
+  const BotAccount({
+    required this.id,
+    required this.username,
+    required this.nickname,
+    this.avatarUrl = '',
+    this.createdAt,
+    this.tokenCreatedAt,
+  });
+
+  String get displayName => nickname.isNotEmpty ? nickname : username;
+
+  factory BotAccount.fromJson(Map<String, dynamic> json) {
+    return BotAccount(
+      id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+      username: json['username']?.toString() ?? '',
+      nickname: json['nickname']?.toString() ?? '',
+      avatarUrl: json['avatar_url']?.toString() ?? '',
+      createdAt: _parseDate(json['created_at']),
+      tokenCreatedAt: _parseDate(json['token_created_at']),
+    );
+  }
+
+  static DateTime? _parseDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 /// One plugin listed by the store (server-side row of the catalog).

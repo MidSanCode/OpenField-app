@@ -246,6 +246,7 @@ class _PostCardState extends State<PostCard> {
                           VerifiedName(
                             name: post.authorName,
                             verified: post.authorVerified,
+                            bot: post.isBot,
                             memberLevel: post.memberLevel,
                             memberActive: post.memberActive,
                             nameColor: post.nameColor,
