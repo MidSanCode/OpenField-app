@@ -43,6 +43,15 @@ dependencies:
   mobile_scanner: ^5.2.3
   image: ^4.3.0
 
+# Force the federated record_* packages to a version that matches
+# record_platform_interface 1.6.x shipped by record 5.2.x. The pub cache may
+# contain a stale record_linux 0.7.2 that targets the old platform interface
+# and breaks the Windows build with G76B49859/GE5CFE876 "missing
+# implementations / fewer named arguments" errors.
+dependency_overrides:
+  record_linux: ^1.0.0
+  record_platform_interface: ^1.6.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
