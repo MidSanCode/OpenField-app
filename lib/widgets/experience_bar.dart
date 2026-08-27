@@ -23,7 +23,7 @@ class ExperienceBar extends StatelessWidget {
     // fills from empty to full within each level. The numbers keep showing the
     // real totals: lifetime exp and the cumulative exp needed to reach the
     // next level. A minimal sliver keeps the bar visibly filled at 0.
-    final progress = user.levelProgressWithin.clamp(0.02, 1.0);
+    final progress = user.levelProgressWithin.clamp(0.06, 1.0);
     final expTotal = '${user.exp}';
     final expNext = '${user.totalExpForNextLevel}';
 

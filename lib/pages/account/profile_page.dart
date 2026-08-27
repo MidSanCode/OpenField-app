@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/core/widgets/avatar.dart';
+import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/follow_list_page.dart';
+import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/experience_bar.dart';
 import 'package:openfield/widgets/markdown_content.dart';
+import 'package:openfield/widgets/post_card.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
 /// Public profile of any user: banner, avatar, nickname, @username, bio,
@@ -28,6 +31,24 @@ class _ProfilePageState extends State<ProfilePage> {
   Object? _error;
   bool _isLoading = true;
   bool _followLoading = false;
+  List<Post> _posts = [];
+  bool _postsLoading = false;
+
+  Future<void> _loadPosts(String? token) async {
+    if (mounted) setState(() => _postsLoading = true);
+    try {
+      final posts =
+          await _apiService.getPostsByUser(widget.userId, token: token);
+      if (mounted) {
+        setState(() {
+          _posts = posts;
+          _postsLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _postsLoading = false);
+    }
+  }
 
   String _formatLastSeen(DateTime t) {
     final diff = DateTime.now().difference(t);
@@ -59,6 +80,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _user = user;
           _isLoading = false;
         });
+        _loadPosts(token);
       }
     } catch (e) {
       if (mounted) {
@@ -103,6 +125,35 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: MarkdownContent(data: user.bio),
               ),
             ],
+            const Divider(height: 24),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: Text('myPosts'.tr(),
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(color: theme.colorScheme.primary)),
+            ),
+            if (_postsLoading)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            else if (_posts.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(child: Text('noPosts'.tr())),
+              )
+            else
+              for (final post in _posts)
+                PostCard(
+                  post: post,
+                  isMine: post.userId == user.id,
+                  token: Provider.of<AuthService>(context, listen: false)
+                      .accessToken,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => PostDetailPage(post: post)),
+                  ),
+                ),
           ],
         ),
       );
