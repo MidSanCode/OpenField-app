@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   static const Color seed = Color(0xFF4CAF50);
@@ -12,10 +13,44 @@ class AppTheme {
         shadowColor: Colors.black26,
         clipBehavior: Clip.antiAlias,
         color: fill,
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(16)),
         ),
       );
+
+  /// The application-wide font. Chiron GoRound TC is a friendly handwritten
+  /// font that mixes Chinese, Latin and digits; google_fonts loads it on first
+  /// use and caches the binary locally so subsequent launches are instant and
+  /// work offline once the cache has been primed.
+  static TextTheme _textTheme(Color onSurface) {
+    // Build each text-theme slot from the Chiron GoRound TC family so the
+    // font covers every scale. google_fonts loads the binary lazily on first
+    // paint and falls back to the platform default until then. We use the
+    // dynamic getFont API so the code does not depend on generated static
+    // methods whose name may vary between google_fonts versions.
+    final base = ThemeData(brightness: Brightness.light).textTheme;
+    TextStyle withFont(TextStyle? s) => GoogleFonts.getFont(
+            'Chiron GoRound TC',
+            textStyle: s ?? const TextStyle())
+        .copyWith(color: onSurface);
+    return base.copyWith(
+      displayLarge: withFont(base.displayLarge),
+      displayMedium: withFont(base.displayMedium),
+      displaySmall: withFont(base.displaySmall),
+      headlineLarge: withFont(base.headlineLarge),
+      headlineMedium: withFont(base.headlineMedium),
+      headlineSmall: withFont(base.headlineSmall),
+      titleLarge: withFont(base.titleLarge),
+      titleMedium: withFont(base.titleMedium),
+      titleSmall: withFont(base.titleSmall),
+      bodyLarge: withFont(base.bodyLarge),
+      bodyMedium: withFont(base.bodyMedium),
+      bodySmall: withFont(base.bodySmall),
+      labelLarge: withFont(base.labelLarge),
+      labelMedium: withFont(base.labelMedium),
+      labelSmall: withFont(base.labelSmall),
+    );
+  }
 
   /// Builds a theme from a user-chosen seed color, falling back to [seed].
   static ThemeData light(Color? seedColor, {double cardOpacity = 1.0}) {
@@ -26,6 +61,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       cardTheme: _cardThemeOf(card),
+      textTheme: _textTheme(scheme.onSurface),
       listTileTheme: ListTileThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -63,6 +99,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       cardTheme: _cardThemeOf(card),
+      textTheme: _textTheme(scheme.onSurface),
       listTileTheme: ListTileThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),

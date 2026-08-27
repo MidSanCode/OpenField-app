@@ -2400,6 +2400,144 @@ class ApiService {
           response.statusCode, _decodeError(response, 'Failed to delete bot'));
     }
   }
+
+
+// === Presence / sessions / deletion / notifications / QR ===
+
+  /// Sends a heartbeat to keep the current user marked as online.
+  Future<void> sendHeartbeat(String accessToken) async {
+    await _post(
+      Uri.parse('$baseUrl/users/me/heartbeat'),
+      headers: _headers(token: accessToken),
+    );
+  }
+
+  /// Asks the server to schedule account deletion; the user can cancel within
+  /// the grace window via [cancelDeletion].
+  Future<void> requestDeletion(String accessToken) async {
+    await _post(
+      Uri.parse('$baseUrl/users/me/deletion-request'),
+      headers: _headers(token: accessToken),
+    );
+  }
+
+  /// Cancels a previously requested deletion.
+  Future<void> cancelDeletion(String accessToken) async {
+    await _delete(
+      Uri.parse('$baseUrl/users/me/deletion-request'),
+      headers: _headers(token: accessToken),
+    );
+  }
+
+  /// Lists the devices the current user is signed in on.
+  Future<List<SessionDevice>> listSessions(String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/auth/sessions'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final items = (data['sessions'] as List?) ?? const [];
+      return items
+          .map((e) => SessionDevice.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to list sessions'));
+  }
+
+  /// Revokes one of the user's own sessions by id.
+  Future<void> deleteSession(String accessToken, int sessionId) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/auth/sessions/$sessionId'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode,
+          _decodeError(response, 'Failed to revoke session'));
+    }
+  }
+
+  /// Fetches the notification inbox.
+  Future<NotificationPage> listNotifications(
+    String accessToken, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/notifications?limit=$limit&offset=$offset'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return NotificationPage.fromJson(Map<String, dynamic>.from(data));
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to list notifications'));
+  }
+
+  /// Marks notifications as read; pass an empty list to clear every unread
+  /// item in one shot.
+  Future<int> markNotificationsRead(
+    String accessToken, {
+    List<int> ids = const [],
+  }) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/notifications/read'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'ids': ids}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return ((data['marked_read'] as num?) ?? 0).toInt();
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to mark notifications read'));
+  }
+
+  /// Kicks off a QR login handshake: the caller shows the returned code as a
+  /// QR code; an already-authenticated device scans and approves it; this
+  /// device polls [pollQrLogin] until it sees the access/refresh tokens.
+  Future<String> createQrLogin(String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/auth/qr'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return data['code']?.toString() ?? '';
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to create qr code'));
+  }
+
+  /// Polls a pending QR login. Returns the current state; when status flips
+  /// to confirmed the access/refresh tokens are ready for the requesting
+  /// device to adopt.
+  Future<QrLoginResult> pollQrLogin(String code) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/auth/qr/$code'),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return QrLoginResult.fromJson(Map<String, dynamic>.from(data));
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to poll qr code'));
+  }
+
+  /// Approves a pending QR login. Called by an authenticated device after it
+  /// scanned the code on the requesting device.
+  Future<void> approveQrLogin(String accessToken, String code) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/auth/qr/$code/approve'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode,
+          _decodeError(response, 'Failed to approve qr login'));
+    }
+  }
 }
 
 /// One bot account as listed by GET /bots (owner-facing view).
@@ -2563,6 +2701,136 @@ class BucketUsage {
       bucket: json['bucket']?.toString() ?? '',
       count: asInt(json['count']),
       sizeBytes: asInt(json['size_bytes']),
+    );
+  }
+}
+
+/// A device the current user is logged in on.
+class SessionDevice {
+  final int id;
+  final String deviceLabel;
+  final String lastIp;
+  final DateTime createdAt;
+  final DateTime? lastUsedAt;
+
+  SessionDevice({
+    required this.id,
+    required this.deviceLabel,
+    required this.lastIp,
+    required this.createdAt,
+    required this.lastUsedAt,
+  });
+
+  factory SessionDevice.fromJson(Map<String, dynamic> json) {
+    DateTime? parse(Object? v) {
+      if (v == null) return null;
+      try {
+        return DateTime.parse(v.toString());
+      } catch (_) {
+        return null;
+      }
+    }
+
+    return SessionDevice(
+      id: ((json['id'] as num?) ?? 0).toInt(),
+      deviceLabel: json['device_label']?.toString() ?? '',
+      lastIp: json['last_ip']?.toString() ?? '',
+      createdAt: parse(json['created_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      lastUsedAt: parse(json['last_used_at']),
+    );
+  }
+}
+
+/// A page of notifications plus the unread badge count.
+class NotificationPage {
+  final List<AppNotification> items;
+  final int total;
+  final int unread;
+
+  NotificationPage({required this.items, required this.total, required this.unread});
+
+  factory NotificationPage.fromJson(Map<String, dynamic> json) {
+    final raw = (json['notifications'] as List?) ?? const [];
+    return NotificationPage(
+      items: raw
+          .map((e) => AppNotification.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
+      total: ((json['total'] as num?) ?? raw.length).toInt(),
+      unread: ((json['unread'] as num?) ?? 0).toInt(),
+    );
+  }
+}
+
+/// A single inbox entry.
+class AppNotification {
+  final int id;
+  final String type;
+  final String title;
+  final String body;
+  final DateTime createdAt;
+  final DateTime? readAt;
+
+  AppNotification({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.body,
+    required this.createdAt,
+    required this.readAt,
+  });
+
+  bool get unread => readAt == null;
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) {
+    DateTime parse(Object? v) {
+      try {
+        return DateTime.parse(v.toString());
+      } catch (_) {
+        return DateTime.fromMillisecondsSinceEpoch(0);
+      }
+    }
+
+    return AppNotification(
+      id: ((json['id'] as num?) ?? 0).toInt(),
+      type: json['type']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      body: json['body']?.toString() ?? '',
+      createdAt: parse(json['created_at']),
+      readAt: json['read_at'] == null ? null : parse(json['read_at']),
+    );
+  }
+}
+
+/// Polling response for the QR login handshake. While the code is pending
+/// the caller keeps polling; once status flips to confirmed the access and
+/// refresh tokens are ready for the requesting device to adopt.
+class QrLoginResult {
+  final String code;
+  final String status; // pending | confirmed | expired
+  final String? accessToken;
+  final String? refreshToken;
+  final int? expiresIn;
+  final int? refreshExpiresIn;
+
+  QrLoginResult({
+    required this.code,
+    required this.status,
+    this.accessToken,
+    this.refreshToken,
+    this.expiresIn,
+    this.refreshExpiresIn,
+  });
+
+  bool get isConfirmed => status == 'confirmed' && accessToken != null;
+
+  factory QrLoginResult.fromJson(Map<String, dynamic> json) {
+    return QrLoginResult(
+      code: json['code']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'pending',
+      accessToken: json['access_token'] as String?,
+      refreshToken: json['refresh_token'] as String?,
+      expiresIn: (json['expires_in'] as num?)?.toInt(),
+      refreshExpiresIn: (json['refresh_expires_in'] as num?)?.toInt(),
     );
   }
 }

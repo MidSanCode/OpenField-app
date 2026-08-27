@@ -143,6 +143,7 @@ class AuthService extends ChangeNotifier {
     await SecureKV.write(
         _keyAccessExpiresAt, _accessExpiresAt!.millisecondsSinceEpoch.toString());
     _startRefreshLoop();
+    startHeartbeat();
     notifyListeners();
   }
 
@@ -287,6 +288,7 @@ class AuthService extends ChangeNotifier {
 
   Future<void> clearTokens() async {
     _stopRefreshLoop();
+    stopHeartbeat();
     _accessToken = null;
     _refreshToken = null;
     _accessExpiresAt = null;
@@ -429,6 +431,34 @@ class AuthService extends ChangeNotifier {
   void dispose() {
     _stopRefreshLoop();
     super.dispose();
+  }
+
+
+  // --- heartbeat presence loop ---
+
+  Timer? _heartbeatTimer;
+
+  /// Starts a 60-second heartbeat loop that tells the server the user is
+  /// still around so friends can see them as online. The loop is cancelled
+  /// when the user signs out so anonymous traffic is never billed to the
+  /// currently-authenticated user id.
+  void startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    final String? token = _accessToken;
+    if (token == null) return;
+    _heartbeatTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+      try {
+        await _api.sendHeartbeat(token);
+      } catch (_) {
+        // Heartbeats are best-effort; network blips recover on the next tick.
+      }
+    });
+  }
+
+  /// Stops the presence heartbeat (called on sign-out).
+  void stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
   }
 }
 

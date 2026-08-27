@@ -32,6 +32,9 @@ class Post {
   final bool isFavorite;
   final Map<String, int> reactions;
   final String myReaction;
+  /// Free-form tags attached to the post by the author. Empty list means the
+  /// post is untagged.
+  final List<String> tags;
 
   /// The check attached to this post, when present (null otherwise).
   final Check? check;
@@ -66,6 +69,7 @@ class Post {
     this.reactions = const {},
     this.myReaction = '',
     this.check,
+    this.tags = const [],
   });
 
   String get authorName => (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
@@ -116,7 +120,8 @@ class Post {
       favoriteCount: _asInt(json['favorite_count']),
       tipTotal: _asInt(json['tip_total']),
       visibility: json['visibility'] as String? ?? 'public',
-      isFavorite: json['is_favorite'] as bool? ?? false,
+      isFavorite: _firstBool(json, const ['is_favorite', 'favorited']),
+      tags: ((json['tags'] as List?) ?? const []).cast<String>(),
       reactions: reactions,
       myReaction: json['my_reaction'] as String? ?? '',
       check: json['check'] is Map<String, dynamic>
@@ -181,6 +186,7 @@ class Post {
     Map<String, int>? reactions,
     String? myReaction,
     Check? check,
+    List<String>? tags,
   }) {
     return Post(
       id: id ?? this.id,
@@ -212,6 +218,18 @@ class Post {
       reactions: reactions ?? this.reactions,
       myReaction: myReaction ?? this.myReaction,
       check: check ?? this.check,
+      tags: tags ?? this.tags,
     );
+  }
+
+  /// Reads the first non-null boolean from a list of JSON keys. The server
+  /// historically used `favorited` and a few stale payloads still ship the
+  /// `is_favorite` key; either is fine, missing means false.
+  static bool _firstBool(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value is bool) return value;
+    }
+    return false;
   }
 }

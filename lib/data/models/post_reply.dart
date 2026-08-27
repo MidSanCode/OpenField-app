@@ -96,7 +96,7 @@ class PostReply {
               .toList() ??
           const [],
       favoriteCount: _asInt(json['favorite_count']),
-      isFavorite: json['is_favorite'] as bool? ?? false,
+      isFavorite: _firstBool(json, const ['is_favorite', 'favorited']),
     );
   }
 
@@ -124,5 +124,16 @@ class PostReply {
       return value.map((e) => e.toString()).toList();
     }
     return const [];
+  }
+
+  /// Reads the first non-null boolean from a list of JSON keys. The server
+  /// historically used `favorited` and a few stale payloads still ship the
+  /// `is_favorite` key; either is fine, missing means false.
+  static bool _firstBool(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value is bool) return value;
+    }
+    return false;
   }
 }
