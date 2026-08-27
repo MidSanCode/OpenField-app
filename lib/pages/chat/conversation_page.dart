@@ -5,9 +5,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as image;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
+import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/data/models/chat_member.dart';
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
@@ -23,6 +26,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/chat/chat_search_page.dart';
 import 'package:openfield/pages/chat/group_settings_page.dart';
 import 'package:openfield/pages/account/profile_page.dart';
+import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/check_card.dart';
 import 'package:openfield/widgets/markdown_content.dart';
@@ -68,6 +72,13 @@ class _ConversationPageState extends State<ConversationPage> {
   bool _loadingOlder = false;
   bool _hasOlder = true;
   String? _error;
+
+  /// Staged local file paths awaiting send (multi-photo / multi-file). They
+  /// are uploaded together with the text caption when the user hits send, so
+  /// a message can carry several attachments and a caption at once.
+  final List<String> _pendingPaths = [];
+  /// Staged existing server attachment ids reused from past uploads.
+  final List<int> _pendingExistingIds = [];
   int? _replyToId;
   int _myUserId = 0;
   StreamSubscription<PushEvent>? _realtimeSub;
@@ -1065,7 +1076,9 @@ class _ConversationPageState extends State<ConversationPage> {
       return;
     }
     final content = _inputController.text.trim();
-    if (content.isEmpty) return;
+    final hasPending = _pendingPaths.isNotEmpty || _pendingExistingIds.isNotEmpty;
+    // Allow a caption-less media message, but never send an empty message.
+    if (content.isEmpty && !hasPending) return;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
@@ -1087,11 +1100,16 @@ class _ConversationPageState extends State<ConversationPage> {
     final replyToId = _replyToId;
     final mentions = _extractMentions(content);
     final cipher = _isEncrypted ? _encryptOutgoing(content) : content;
+    // Capture and clear the staged attachments so the UI is reset immediately.
+    final localPaths = List<String>.of(_pendingPaths);
+    final existingIds = List<int>.of(_pendingExistingIds);
     setState(() {
       _inputController.clear();
       _replyToId = null;
       _mentionCandidates = [];
       _mentionShowEveryone = false;
+      _pendingPaths.clear();
+      _pendingExistingIds.clear();
     });
     // Keep keyboard focus on the composer: on desktop the send button grabs
     // focus when clicked, otherwise the IME would dismiss after every send.
@@ -1117,7 +1135,110 @@ class _ConversationPageState extends State<ConversationPage> {
     );
     setState(() => _messages = _sorted([..._messages, local]));
     _scrollToBottom();
-    _dispatchSend(local, token);
+    if (localPaths.isNotEmpty || existingIds.isNotEmpty) {
+      _dispatchSendWithAttachments(local, token, localPaths, existingIds);
+    } else {
+      _dispatchSend(local, token);
+    }
+  }
+
+  /// GPS/EXIF metadata (including embedded lat/long) is stripped from images
+  /// before they are encrypted and uploaded for an E2EE conversation. The
+  /// location never leaves the device; re-encoding drops every APP1/EXIF
+  /// segment. Non-image files are returned unchanged.
+  Future<String> _stripGpsIfImage(String path) async {
+    final lower = path.toLowerCase();
+    const imageExt = {'.jpg', '.jpeg', '.png'};
+    if (!imageExt.any(lower.endsWith)) return path;
+    try {
+      final bytes = await File(path).readAsBytes();
+      final decoded = image.decodeImage(bytes);
+      if (decoded == null) return path;
+      // Re-encode without metadata: PNG for transparency, JPEG otherwise.
+      final out = lower.endsWith('.png')
+          ? image.encodePng(decoded)
+          : image.encodeJpg(decoded, quality: 92);
+      final stripped = File('$path.stripped');
+      await stripped.writeAsBytes(out, flush: true);
+      return stripped.path;
+    } catch (_) {
+      return path;
+    }
+  }
+
+  /// Dispatches a message carrying one or more attachments plus an optional
+  /// text caption. Each staged file is uploaded (with GPS stripping for E2EE
+  /// images) and the resulting attachment ids are sent in a single message.
+  Future<void> _dispatchSendWithAttachments(
+    ChatMessage local,
+    String token,
+    List<String> localPaths,
+    List<int> existingIds,
+  ) async {
+    _markStatus(local.clientId, MessageStatus.sending);
+    final attachmentIds = List<int>.of(existingIds);
+    try {
+      for (var i = 0; i < localPaths.length; i++) {
+        final srcPath = localPaths[i];
+        String uploadPath = srcPath;
+        if (_isEncrypted) {
+          // Strip GPS/EXIF locally before reading bytes for encryption so the
+          // location data never reaches the ciphertext envelope either.
+          final cleanPath = await _stripGpsIfImage(srcPath);
+          final bytes = await File(cleanPath).readAsBytes();
+          final crypto =
+              E2eeService.instance.encryptAttachment(widget.conversationId, bytes);
+          if (crypto == null) {
+            if (mounted) {
+              _markStatus(local.clientId, MessageStatus.failed);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(_e2eeWaitForMember
+                      ? 'e2eeWaitOtherMember'.tr()
+                      : 'e2eeKeysPending'.tr())));
+            }
+            return;
+          }
+          final cipherFile = File('$cleanPath.ofe');
+          await cipherFile.writeAsBytes(crypto.cipher, flush: true);
+          uploadPath = cipherFile.path;
+        }
+        final base = i / localPaths.length;
+        final attachment = await _apiService.uploadAttachmentSmart(
+          uploadPath,
+          token,
+          visibility: _isEncrypted ? 'private' : 'public',
+          onProgress: (p) => _updateUploadProgress(
+              local.clientId, (base + p / localPaths.length).clamp(0.0, 1.0)),
+        );
+        attachmentIds.add(attachment.id);
+      }
+
+      // The caption already rides in [local.content] (encrypted when needed);
+      // each attachment's crypto params travel inside its own upload envelope
+      // and the server returns them for the recipient to decrypt.
+      final content = local.content;
+      final msg = await _apiService.sendChatMessage(
+        token,
+        widget.conversationId,
+        content,
+        attachmentIds: attachmentIds,
+        replyToId: local.replyToId,
+        mentions: local.mentions,
+      );
+      if (!mounted) return;
+      final resolved = _isEncrypted ? _decryptMessage(msg) : msg;
+      setState(() {
+        _messages = _replaceByClientId(local.clientId, resolved);
+      });
+      _store.upsertMessage(resolved);
+      _scrollToBottom();
+      await _apiService.markConversationRead(token, widget.conversationId, resolved.id);
+    } catch (e) {
+      if (!mounted) return;
+      _markStatus(local.clientId, MessageStatus.failed);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   /// Sends (or resends) a message, updating the optimistic bubble in place.
@@ -1251,106 +1372,91 @@ class _ConversationPageState extends State<ConversationPage> {
     });
   }
 
-  Future<void> _pickAndSendAttachment() async {
+  /// Opens the attachment source sheet and stages the picked files. Files are
+  /// uploaded only when the user sends, together with any text caption, so a
+  /// single message can carry several photos and a caption at once.
+  Future<void> _pickAttachments() async {
     if (!_canSend) {
       _showMutedSnackBar();
       return;
     }
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text('attachPhotos'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('image'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: Text('attachFiles'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('file'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_done_outlined),
+              title: Text('attachFromUploads'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('uploads'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+
+    if (choice == 'image') {
+      final picker = ImagePicker();
+      final files = await picker.pickMultiImage();
+      if (!mounted || files.isEmpty) return;
+      setState(() => _pendingPaths
+          .addAll(files.map((f) => f.path).where((p) => p.isNotEmpty)));
+    } else if (choice == 'file') {
+      final result = await FilePicker.platform.pickFiles(
+          type: FileType.any, allowMultiple: true);
+      if (!mounted) return;
+      final paths = (result?.files ?? const [])
+          .where((f) => f.path != null)
+          .map((f) => f.path!)
+          .toList();
+      if (paths.isEmpty) return;
+      setState(() => _pendingPaths.addAll(paths));
+    } else if (choice == 'uploads') {
+      await _pickExistingAttachments();
+    }
+  }
+
+  /// Lets the user reuse a file they uploaded earlier instead of re-picking it
+  /// from disk. The selected server attachment ids are staged for the next
+  /// send exactly like freshly picked files.
+  Future<void> _pickExistingAttachments() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null) return;
-    // For encrypted conversations the file bytes are encrypted before upload,
-    // so the group key must be available up front, just like for text sends.
-    if (_isEncrypted && !_e2eeKeysReady) {
-      await _ensureE2EE();
-      if (!mounted) return;
-      if (!_e2eeKeysReady) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(_e2eeWaitForMember
-                ? 'e2eeWaitOtherMember'.tr()
-                : 'e2eeKeysPending'.tr())));
-        return;
-      }
-    }
-    final result = await FilePicker.platform.pickFiles(type: FileType.any);
-    final file = result?.files.single;
-    if (file == null || file.path == null) return;
-    final local = ChatMessage(
-      id: -DateTime.now().millisecondsSinceEpoch,
-      conversationId: widget.conversationId,
-      senderId: _myUserId,
-      content: '',
-      createdAt: DateTime.now(),
-      senderName: authService.user?.nickname ?? authService.username,
-      senderAvatar: authService.user?.avatarUrl ?? authService.avatarUrl,
-      clientId: generateClientId(),
-      status: MessageStatus.sending,
-    );
-    setState(() => _messages = _sorted([..._messages, local]));
-    _scrollToBottom();
+    List<Attachment> items;
     try {
-      final originalName =
-          file.name.isNotEmpty ? file.name : File(file.path!).uri.pathSegments.last;
-      String uploadPath = file.path!;
-      var carrier = '';
-      if (_isEncrypted) {
-        // Encrypt the file bytes with the conversation's group key and upload
-        // only the ciphertext. The real mime/name ride along inside the
-        // encrypted message payload so the recipient can restore them after
-        // decrypting the file.
-        final bytes = await File(file.path!).readAsBytes();
-        final crypto =
-            E2eeService.instance.encryptAttachment(widget.conversationId, bytes);
-        if (crypto == null) {
-          if (mounted) {
-            _markStatus(local.clientId, MessageStatus.failed);
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(_e2eeWaitForMember
-                    ? 'e2eeWaitOtherMember'.tr()
-                    : 'e2eeKeysPending'.tr())));
-          }
-          return;
-        }
-        final cipherFile = File(
-          '${file.path!}.ofe',
-        );
-        await cipherFile.writeAsBytes(crypto.cipher, flush: true);
-        uploadPath = cipherFile.path;
-        carrier = jsonEncode({
-          'att': {
-            'v': crypto.version,
-            'n': crypto.nonceB64,
-            'm': mimeTypeForPath(file.path!),
-            'name': originalName,
-          },
-        });
-      }
-      final attachment = await _apiService.uploadAttachmentSmart(uploadPath, token,
-          visibility: _isEncrypted ? 'private' : 'public',
-          onProgress: (p) => _updateUploadProgress(local.clientId, p));
-      final content = carrier.isEmpty
-          ? ''
-          : _encryptOutgoing(carrier);
-      final msg = await _apiService.sendChatMessage(
-        token,
-        widget.conversationId,
-        content,
-        attachmentIds: [attachment.id],
-      );
-      if (!mounted) return;
-      final resolved = _isEncrypted ? _decryptMessage(msg) : msg;
-      setState(() {
-        _messages = _replaceByClientId(local.clientId, resolved);
-      });
-      _store.upsertMessage(resolved);
-      _scrollToBottom();
-      await _apiService.markConversationRead(token, widget.conversationId, resolved.id);
+      items = await _apiService.listMyAttachments(token);
     } catch (e) {
-      if (!mounted) return;
-      _markStatus(local.clientId, MessageStatus.failed);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+      return;
     }
+    if (!mounted) return;
+    if (items.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('noUploadsYet'.tr())));
+      return;
+    }
+    final picked = await showDialog<List<int>>(
+      context: context,
+      builder: (ctx) => _ExistingAttachmentsDialog(items: items),
+    );
+    if (picked == null || !mounted || picked.isEmpty) return;
+    setState(() => _pendingExistingIds.addAll(picked));
   }
 
   Future<void> _onMessageLongPress(ChatMessage message) async {
@@ -2126,7 +2232,36 @@ class _ConversationPageState extends State<ConversationPage> {
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_pendingPaths.isNotEmpty || _pendingExistingIds.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final path in _pendingPaths)
+                      Chip(
+                        label: Text(File(path).uri.pathSegments.last,
+                            overflow: TextOverflow.ellipsis),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () =>
+                            setState(() => _pendingPaths.remove(path)),
+                      ),
+                    for (final id in _pendingExistingIds)
+                      Chip(
+                        label: Text('#$id'),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () =>
+                            setState(() => _pendingExistingIds.remove(id)),
+                      ),
+                  ],
+                ),
+              ),
+            Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!kIsWeb)
@@ -2141,7 +2276,7 @@ class _ConversationPageState extends State<ConversationPage> {
               tooltip: 'checkSend'.tr(),
             ),
             IconButton(
-              onPressed: _pickAndSendAttachment,
+              onPressed: _pickAttachments,
               icon: const Icon(Icons.attach_file),
               tooltip: 'attachFile'.tr(),
             ),
@@ -2174,6 +2309,108 @@ class _ConversationPageState extends State<ConversationPage> {
               tooltip: 'send'.tr(),
             ),
           ],
+        ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lets the user reuse previously uploaded files by picking one or more
+/// server attachment ids. Selection returns the chosen ids to the caller.
+class _ExistingAttachmentsDialog extends StatefulWidget {
+  final List<Attachment> items;
+
+  const _ExistingAttachmentsDialog({required this.items});
+
+  @override
+  State<_ExistingAttachmentsDialog> createState() =>
+      _ExistingAttachmentsDialogState();
+}
+
+class _ExistingAttachmentsDialogState extends State<_ExistingAttachmentsDialog> {
+  final Set<int> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Dialog(
+      insetPadding: const EdgeInsets.all(32),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.cloud_done_outlined,
+                      size: 20, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text('attachFromUploads'.tr(),
+                      style: theme.textTheme.titleLarge),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: widget.items.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final att = widget.items[index];
+                    final isImage = att.isImage;
+                    final selected = _selected.contains(att.id);
+                    return ListTile(
+                      leading: isImage
+                          ? SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: MediaImage(url: att.url, fit: BoxFit.cover),
+                            )
+                          : const Icon(Icons.insert_drive_file_outlined),
+                      title: Text(att.originalName.isNotEmpty
+                          ? att.originalName
+                          : att.mimeType),
+                      trailing: Checkbox(
+                        value: selected,
+                        onChanged: (v) => setState(() {
+                          if (v == true) {
+                            _selected.add(att.id);
+                          } else {
+                            _selected.remove(att.id);
+                          }
+                        }),
+                      ),
+                      onTap: () => setState(() {
+                        if (_selected.contains(att.id)) {
+                          _selected.remove(att.id);
+                        } else {
+                          _selected.add(att.id);
+                        }
+                      }),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _selected.isEmpty
+                    ? null
+                    : () =>
+                        Navigator.of(context).pop(_selected.toList()),
+                child: Text('add'.tr()),
+              ),
+            ],
+          ),
         ),
       ),
     );

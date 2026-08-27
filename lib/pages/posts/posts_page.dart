@@ -66,6 +66,8 @@ class _PostsPageState extends State<PostsPage> {
   bool _searchActive = false;
   String? _error;
   String _query = '';
+  /// Active tag filter; null when the feed shows everything.
+  String? _tag;
 
   // Advanced search filters (combined with the keyword server-side).
   String _authorFilter = '';
@@ -112,6 +114,18 @@ class _PostsPageState extends State<PostsPage> {
         _query = '';
       }
     });
+    _loadPosts();
+  }
+
+  /// Sets the active tag filter and reloads the feed restricted to that tag.
+  void _setTag(String tag) {
+    setState(() => _tag = tag);
+    _loadPosts();
+  }
+
+  /// Clears the tag filter and restores the full feed.
+  void _clearTag() {
+    setState(() => _tag = null);
     _loadPosts();
   }
 
@@ -256,6 +270,7 @@ class _PostsPageState extends State<PostsPage> {
         author: _authorFilter,
         from: _fromFilter,
         to: _toFilter,
+        tag: _tag,
       );
       if (!mounted) return;
       setState(() {
@@ -295,8 +310,8 @@ class _PostsPageState extends State<PostsPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => _ComposerDialog(
-        onSubmit: (content, media, visibility, checkId) =>
-            _submitPost(content, media, visibility: visibility, checkId: checkId),
+        onSubmit: (content, media, visibility, checkId, tags) =>
+            _submitPost(content, media, visibility: visibility, checkId: checkId, tags: tags),
         isPosting: _isPosting,
       ),
     );
@@ -313,8 +328,8 @@ class _PostsPageState extends State<PostsPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => _ComposerDialog(
-        onSubmit: (content, items, visibility, _) =>
-            _submitPost(content, items, postId: post.id, visibility: visibility),
+        onSubmit: (content, items, visibility, _, tags) =>
+            _submitPost(content, items, postId: post.id, visibility: visibility, tags: tags),
         isPosting: _isPosting,
         initialContent: post.content,
         initialMedia: media,
@@ -325,7 +340,10 @@ class _PostsPageState extends State<PostsPage> {
   }
 
   Future<bool> _submitPost(String content, List<ComposerMedia> media,
-      {int? postId, String visibility = 'public', int checkId = 0}) async {
+      {int? postId,
+      String visibility = 'public',
+      int checkId = 0,
+      List<String> tags = const []}) async {
     if (content.trim().isEmpty && media.isEmpty) return false;
 
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -376,7 +394,10 @@ class _PostsPageState extends State<PostsPage> {
       await closeProgress();
       if (postId == null) {
         await _apiService.createPost(content, token,
-            attachmentIds: attachmentIds, visibility: visibility, checkId: checkId);
+            attachmentIds: attachmentIds,
+            visibility: visibility,
+            checkId: checkId,
+            tags: tags);
       } else {
         await _apiService.updatePost(postId, content, token,
             attachmentIds: attachmentIds, visibility: visibility);
@@ -474,6 +495,7 @@ class _PostsPageState extends State<PostsPage> {
   }
 
   Widget _buildFeed(int? currentUserId) {
+    final theme = Theme.of(context);
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -500,40 +522,72 @@ class _PostsPageState extends State<PostsPage> {
 
     return RefreshIndicator(
       onRefresh: _loadPosts,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(0, 8, 0, 88),
-        itemCount: _posts.length,
-        itemBuilder: (context, index) {
-          final post = _posts[index];
-          final authService = Provider.of<AuthService>(context, listen: false);
-          return PostCard(
-            post: post,
-            isMine: post.userId == currentUserId,
-            onEdit: () => _openEdit(post),
-            onDelete: () => _deletePost(post),
-            onTapAuthor: () => _openAuthorProfile(post.userId),
-            onTapReply: () => _openPostDetail(post),
-            onTap: () => _openPostDetail(post),
-            token: authService.accessToken,
-            onPostChanged: (updated) {
-              setState(() {
-                _posts = _posts.map((p) => p.id == updated.id ? updated : p).toList();
-              });
-            },
-            onUnauthenticated: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('loginWithOIDC'.tr())),
-              );
-            },
-          );
-        },
+      child: Column(
+        children: [
+          if (_tag != null)
+            Material(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.tag, size: 16, color: theme.colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      '#$_tag',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      tooltip: 'clear'.tr(),
+                      onPressed: _clearTag,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(0, 8, 0, 88),
+              itemCount: _posts.length,
+              itemBuilder: (context, index) {
+                final post = _posts[index];
+                final authService = Provider.of<AuthService>(context, listen: false);
+                return PostCard(
+                  post: post,
+                  isMine: post.userId == currentUserId,
+                  onEdit: () => _openEdit(post),
+                  onDelete: () => _deletePost(post),
+                  onTapAuthor: () => _openAuthorProfile(post.userId),
+                  onTapReply: () => _openPostDetail(post),
+                  onTap: () => _openPostDetail(post),
+                  token: authService.accessToken,
+                  onTapTag: (tag) => _setTag(tag),
+                  onPostChanged: (updated) {
+                    setState(() {
+                      _posts = _posts.map((p) => p.id == updated.id ? updated : p).toList();
+                    });
+                  },
+                  onUnauthenticated: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('loginWithOIDC'.tr())),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _ComposerDialog extends StatefulWidget {
-  final Future<bool> Function(String content, List<ComposerMedia> media, String visibility, int checkId) onSubmit;
+  final Future<bool> Function(String content, List<ComposerMedia> media, String visibility, int checkId, List<String> tags) onSubmit;
   final bool isPosting;
   final String initialContent;
   final List<ComposerMedia> initialMedia;
@@ -566,6 +620,11 @@ class _ComposerDialogState extends State<_ComposerDialog> {
   /// refunds to the wallet.
   int? _pendingCheckId;
 
+  /// Free-form tags attached to the post. The server normalises (lowercase,
+  /// trim, dedupe, cap at 20) so the client only does light sanitising.
+  final List<String> _pendingTags = [];
+  final TextEditingController _tagController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -577,6 +636,7 @@ class _ComposerDialogState extends State<_ComposerDialog> {
   @override
   void dispose() {
     _controller.dispose();
+    _tagController.dispose();
     super.dispose();
   }
 
@@ -695,10 +755,21 @@ class _ComposerDialogState extends State<_ComposerDialog> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// Adds a tag (from the tag field) after light normalisation. Entering an
+  /// already-added tag is a no-op.
+  void _addTag() {
+    final raw = _tagController.text.trim().replaceAll('#', '');
+    if (raw.isEmpty) return;
+    setState(() {
+      if (!_pendingTags.contains(raw)) _pendingTags.add(raw);
+      _tagController.clear();
+    });
+  }
+
   Future<void> _submit() async {
     setState(() => _isSubmitting = true);
     final success = await widget.onSubmit(
-        _controller.text.trim(), _media, _visibility, _pendingCheckId ?? 0);
+        _controller.text.trim(), _media, _visibility, _pendingCheckId ?? 0, _pendingTags);
     if (mounted && success) {
       final draftId = _currentDraftId;
       if (draftId != null) {
@@ -842,6 +913,49 @@ class _ComposerDialogState extends State<_ComposerDialog> {
                     ],
                   ),
                 ),
+              if (_pendingTags.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final tag in _pendingTags)
+                        Chip(
+                          label: Text('#$tag'),
+                          deleteIcon: const Icon(Icons.close, size: 16),
+                          onDeleted: () =>
+                              setState(() => _pendingTags.remove(tag)),
+                        ),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.tag, size: 18, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _tagController,
+                        onSubmitted: (_) => _addTag(),
+                        textInputAction: TextInputAction.done,
+                        decoration: InputDecoration(
+                          hintText: 'addTag'.tr(),
+                          border: InputBorder.none,
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add, size: 18),
+                      tooltip: 'addTag'.tr(),
+                      onPressed: _addTag,
+                    ),
+                  ],
+                ),
+              ),
               Row(
                 children: [
                   IconButton(

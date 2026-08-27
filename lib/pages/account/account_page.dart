@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/core/widgets/error_dialog.dart';
@@ -10,6 +13,7 @@ import 'package:openfield/core/widgets/avatar.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/chat_local_db.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
 import 'package:openfield/pages/account/favorites_page.dart';
@@ -25,6 +29,9 @@ import 'package:openfield/pages/account/tasks_page.dart';
 import 'package:openfield/pages/account/wallet_page.dart';
 import 'package:openfield/pages/register/register_page.dart';
 import 'package:openfield/pages/settings/settings_page.dart';
+import 'package:openfield/pages/account/sessions_page.dart';
+import 'package:openfield/pages/account/notifications_page.dart';
+import 'package:openfield/pages/account/qr_login_page.dart';
 import 'package:openfield/widgets/experience_bar.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
@@ -163,7 +170,9 @@ class _AccountPageState extends State<AccountPage> {
   Future<void> _loginWithOIDC() async {
     setState(() => _isLoggingIn = true);
     try {
-      final authUrl = await _apiService.getOIDCLoginUrl();
+      final authUrl = await _apiService.getOIDCLoginUrl(
+        flow: kIsWeb ? 'web' : 'app',
+      );
       final uri = Uri.parse(authUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -212,6 +221,133 @@ class _AccountPageState extends State<AccountPage> {
     final authService = Provider.of<AuthService>(context, listen: false);
     await authService.clearTokens();
     if (mounted) setState(() {});
+  }
+
+  // ---- Debug menu ----
+
+  /// Force-refreshes the access token via the refresh-token grant. Useful when
+  /// the cached token looks valid but the server has rotated a signing key.
+  Future<void> _forceRefreshToken() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    try {
+      await authService.refreshAccessToken();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('debugTokenRefreshed'.tr())),
+      );
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    }
+  }
+
+  /// Wipes the local chat SQLite store. Server-side messages are unaffected.
+  Future<void> _clearLocalChatDb() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('debugClearChatDb'.tr()),
+        content: Text('debugClearChatDbConfirm'.tr()),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('cancel'.tr())),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text('delete'.tr())),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ChatLocalDb.instance.clearAll();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('debugChatDbCleared'.tr())),
+      );
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    }
+  }
+
+  /// Clears transient caches (image cache + temporary files). Downloads and
+  /// local chat database are left intact.
+  Future<void> _clearCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('debugClearCache'.tr()),
+        content: Text('debugClearCacheConfirm'.tr()),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('cancel'.tr())),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text('clear'.tr())),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      // Best-effort temp-directory sweep.
+      final temp = await getTemporaryDirectory();
+      if (temp.existsSync()) {
+        await for (final entry in temp.list(recursive: false)) {
+          try {
+            if (entry is File) await entry.delete();
+          } catch (_) {}
+        }
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('debugCacheCleared'.tr())),
+      );
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    }
+  }
+
+  // ---- Account deletion ----
+
+  /// Requests soft-delete of the current account. On success the server hides
+  /// the profile immediately and schedules a hard purge 30 days later; the
+  /// user can cancel by signing in again inside that window.
+  Future<void> _requestDeletion() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('deleteAccountTitle'.tr()),
+        content: Text('deleteAccountConfirm'.tr()),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('cancel'.tr())),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('delete'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _apiService.requestDeletion(token);
+      await authService.clearTokens();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('deleteAccountRequested'.tr())),
+      );
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
+    }
   }
 
   @override
@@ -493,6 +629,79 @@ class _AccountPageState extends State<AccountPage> {
                   MaterialPageRoute(builder: (_) => const FavoritesPage()),
                 );
               },
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: 'security'.tr(),
+          children: [
+            if (user != null)
+              _NavTile(
+                icon: Icons.devices_outlined,
+                title: 'sessionsTitle'.tr(),
+                subtitle: 'sessionsSubtitle'.tr(),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SessionsPage()),
+                  );
+                },
+              ),
+            if (user != null) const Divider(height: 1),
+            if (user != null)
+              _NavTile(
+                icon: Icons.qr_code_2_outlined,
+                title: 'qrLoginSubtitle'.tr(),
+                subtitle: 'qrLoginTitle'.tr(),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const QrLoginPage()),
+                  );
+                },
+              ),
+            if (user != null) const Divider(height: 1),
+            _NavTile(
+              icon: Icons.notifications_outlined,
+              title: 'notificationsInbox'.tr(),
+              subtitle: 'notificationsHint'.tr(),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                );
+              },
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: 'debugMenu'.tr(),
+          children: [
+            _NavTile(
+              icon: Icons.refresh,
+              title: 'debugForceRefreshToken'.tr(),
+              onTap: _forceRefreshToken,
+            ),
+            const Divider(height: 1),
+            _NavTile(
+              icon: Icons.delete_sweep_outlined,
+              title: 'debugClearChatDb'.tr(),
+              onTap: _clearLocalChatDb,
+            ),
+            const Divider(height: 1),
+            _NavTile(
+              icon: Icons.cleaning_services_outlined,
+              title: 'debugClearCache'.tr(),
+              onTap: _clearCache,
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: 'dangerZone'.tr(),
+          children: [
+            _NavTile(
+              icon: Icons.delete_forever_outlined,
+              title: 'deleteAccountTitle'.tr(),
+              subtitle: 'deleteAccountHint'.tr(),
+              showChevron: false,
+              onTap: _requestDeletion,
             ),
           ],
         ),

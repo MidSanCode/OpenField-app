@@ -1,5 +1,11 @@
 Windows Registry Editor Version 5.00
 
+; Registers the openfield:// custom URL scheme so the desktop app is launched
+; when the web client redirects after login. On a normal install the app also
+; self-registers this on first launch (see lib/core/windows/protocol_registration.dart),
+; so this file is only a manual fallback. Replace the path below with the real
+; install location of openfield.exe, e.g. C:\Program Files\openfield\openfield.exe.
+
 [HKEY_CURRENT_USER\Software\Classes\openfield]
 @="URL:OpenField Protocol"
 "URL Protocol"=""
@@ -9,4 +15,4 @@ Windows Registry Editor Version 5.00
 [HKEY_CURRENT_USER\Software\Classes\openfield\shell\open]
 
 [HKEY_CURRENT_USER\Software\Classes\openfield\shell\open\command]
-@="\"C:\\Users\\Administrator\\AppData\\Local\\openfield\\openfield.exe\" \"%1\""
+@="\"C:\\Program Files\\openfield\\openfield.exe\" \"%1\""

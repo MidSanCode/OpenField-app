@@ -105,6 +105,10 @@ class User {
   final bool hasPin;
   final bool isBot;
   final DateTime? createdAt;
+  /// Presence: true when the user pinged a heartbeat within the last few
+  /// minutes. [lastSeenAt] powers the "last seen" fallback when offline.
+  final bool online;
+  final DateTime? lastSeenAt;
 
   User({
     required this.id,
@@ -143,6 +147,8 @@ class User {
     this.hasPin = false,
     this.isBot = false,
     this.createdAt,
+    this.online = false,
+    this.lastSeenAt,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -183,6 +189,8 @@ class User {
       hasPin: json['has_pin'] as bool? ?? false,
       isBot: json['is_bot'] as bool? ?? false,
       createdAt: _asDate(json['created_at']),
+      online: json['online'] as bool? ?? false,
+      lastSeenAt: _asDate(json['last_seen_at']),
     );
   }
 
@@ -402,6 +410,8 @@ class User {
     bool? hasPin,
     bool? isBot,
     DateTime? createdAt,
+    bool? online,
+    DateTime? lastSeenAt,
   }) {
     return User(
       id: id ?? this.id,
@@ -440,6 +450,8 @@ class User {
       hasPin: hasPin ?? this.hasPin,
       isBot: isBot ?? this.isBot,
       createdAt: createdAt ?? this.createdAt,
+      online: online ?? this.online,
+      lastSeenAt: lastSeenAt ?? this.lastSeenAt,
     );
   }
 

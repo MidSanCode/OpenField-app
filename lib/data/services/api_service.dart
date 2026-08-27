@@ -300,8 +300,12 @@ class ApiService {
 
   // ---- Auth ----
 
-  Future<String> getOIDCLoginUrl() async {
-    final response = await _get(Uri.parse('$baseUrl/auth/oidc/login'));
+  /// Requests the OIDC authorize URL. On web builds [flow] should be 'web' so
+  /// the server redirects back to the web origin instead of the openfield://
+  /// custom scheme that a browser cannot open.
+  Future<String> getOIDCLoginUrl({String flow = 'app'}) async {
+    final response =
+        await _get(Uri.parse('$baseUrl/auth/oidc/login?flow=$flow'));
     final data = _decodeMap(response);
     if (response.statusCode == 200 && data != null) {
       final url = data['auth_url'];
@@ -956,6 +960,7 @@ class ApiService {
     String? author,
     DateTime? from,
     DateTime? to,
+    String? tag,
   }) async {
     final params = <String>[
       'page=$page',
@@ -969,6 +974,8 @@ class ApiService {
         'from=${(from.millisecondsSinceEpoch ~/ 1000)}',
       if (to != null)
         'to=${(to.millisecondsSinceEpoch ~/ 1000) + 86399}',
+      if (tag != null && tag.trim().isNotEmpty)
+        'tag=${Uri.encodeQueryComponent(tag.trim())}',
     ];
     final response = await _get(
       Uri.parse('$baseUrl/posts?${params.join('&')}'),
@@ -1017,7 +1024,10 @@ class ApiService {
   }
 
   Future<Post> createPost(String content, String accessToken,
-      {List<int> attachmentIds = const [], String visibility = 'public', int checkId = 0}) async {
+      {List<int> attachmentIds = const [],
+      String visibility = 'public',
+      int checkId = 0,
+      List<String> tags = const []}) async {
     final response = await _post(
       Uri.parse('$baseUrl/posts'),
       headers: _headers(token: accessToken),
@@ -1026,6 +1036,7 @@ class ApiService {
         'attachment_ids': attachmentIds,
         'visibility': visibility,
         if (checkId > 0) 'check_id': checkId,
+        if (tags.isNotEmpty) 'tags': tags,
       }),
     );
     final data = _decodeMap(response);

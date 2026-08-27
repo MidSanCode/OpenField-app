@@ -34,5 +34,10 @@ Future<void> ensureOpenFieldProtocol() async {
 
   runReg(['add', key, '/f']);
   await setDefault('', 'URL:OpenField Protocol');
+  // The empty "URL Protocol" named value is what marks the key as a custom
+  // URL scheme; without it Windows / browsers ignore the handler even when the
+  // shell\open\command is correctly set. This was the reason the protocol was
+  // not honoured after install on some machines.
+  runReg(['add', key, '/v', 'URL Protocol', '/t', 'REG_SZ', '/d', '', '/f']);
   await setDefault(r'shell\open\command', quoted);
 }

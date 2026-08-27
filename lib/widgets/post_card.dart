@@ -34,6 +34,9 @@ class PostCard extends StatefulWidget {
   /// page. Inner controls (author, reply, reactions, tip and the menu) keep
   /// their own handlers.
   final VoidCallback? onTap;
+  /// Tapping a tag chip filters the feed by that tag. Null disables the
+  /// affordance (e.g. inside the post detail page).
+  final ValueChanged<String>? onTapTag;
 
   const PostCard({
     super.key,
@@ -49,6 +52,7 @@ class PostCard extends StatefulWidget {
     this.onUnauthenticated,
     this.showFullContent = false,
     this.onTap,
+    this.onTapTag,
   });
 
   @override
@@ -323,6 +327,49 @@ class _PostCardState extends State<PostCard> {
                       ),
                     ),
                   ),
+                ),
+              ],
+              if (post.tags.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final tag in post.tags)
+                      InkWell(
+                        onTap: widget.onTapTag == null
+                            ? null
+                            : () => widget.onTapTag!(tag),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer
+                                .withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.tag,
+                                size: 14,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                tag,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ],
               if (post.attachments.isNotEmpty) ...[

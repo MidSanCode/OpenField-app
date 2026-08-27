@@ -360,4 +360,14 @@ class ChatLocalDb implements ChatCacheStore {
       await db.close();
     }
   }
+
+  /// Deletes every cached conversation and message from the local store.
+  /// Used by the debug menu to wipe the offline chat database; the next sync
+  /// rebuilds it from the server. No-op on unsupported platforms.
+  Future<void> clearAll() async {
+    final db = await _open();
+    if (db == null) return;
+    await db.delete('messages');
+    await db.delete('message_attachments');
+  }
 }

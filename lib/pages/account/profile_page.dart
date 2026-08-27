@@ -29,6 +29,14 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isLoading = true;
   bool _followLoading = false;
 
+  String _formatLastSeen(DateTime t) {
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    if (diff.inDays < 30) return '${diff.inDays}d';
+    return '${t.year}-${t.month}-${t.day}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -131,18 +139,37 @@ class _ProfilePageState extends State<ProfilePage> {
         // Centered avatar stacked below banner
         const SizedBox(height: 16),
         Center(
-          child: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: theme.colorScheme.surface, width: 3),
-            ),
-            child: Avatar(
-              radius: 44,
-              imageUrl: hasAvatar ? user.avatarUrl : '',
-              fallbackIcon: Icons.person,
-              backgroundColor: theme.colorScheme.surface,
-              foregroundColor: theme.colorScheme.onSurfaceVariant,
-            ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: theme.colorScheme.surface, width: 3),
+                ),
+                child: Avatar(
+                  radius: 44,
+                  imageUrl: hasAvatar ? user.avatarUrl : '',
+                  fallbackIcon: Icons.person,
+                  backgroundColor: theme.colorScheme.surface,
+                  foregroundColor: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              // Online presence dot.
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: user.online ? Colors.green : theme.colorScheme.surface,
+                    border: Border.all(color: theme.colorScheme.surface, width: 2),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -160,6 +187,22 @@ class _ProfilePageState extends State<ProfilePage> {
             nameGradientDirection: user.nameGradientDirection,
             nameDynamic: user.nameDynamic,
             style: theme.textTheme.titleLarge,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Center(
+          child: Text(
+            user.online
+                ? 'online'.tr()
+                : (user.lastSeenAt != null
+                    ? 'lastSeen'.tr().replaceFirst(
+                        '{time}', _formatLastSeen(user.lastSeenAt!))
+                    : 'offline'.tr()),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: user.online
+                  ? Colors.green
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
         if (user.isVerified && user.verifiedBy.isNotEmpty) ...[
