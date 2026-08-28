@@ -1,8 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   static const Color seed = Color(0xFF4CAF50);
+
+  /// Font family used as the application-wide typeface. Chiron GoRound TC is
+  /// a friendly handwritten font; the static OTF files (regular and bold) are
+  /// bundled in assets/fonts and registered via pubspec.yaml, so the font is
+  /// always available offline and never depends on a network round-trip.
+  static const String _fontFamily = 'Chiron GoRound TC';
+
+  /// Fallback chain for glyphs that Chiron does not cover (CJK characters,
+  /// emoji, etc.). Flutter picks the first family that has a glyph, so Latin
+  /// text uses Chiron and Chinese text falls back to the platform default
+  /// without throwing "no font family" errors.
+  static const List<String> _fontFallback = <String>[
+    'Roboto',
+    'Noto Sans',
+    'Noto Sans CJK SC',
+    'Noto Sans CJK',
+    'Microsoft YaHei',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Source Han Sans SC',
+    'Source Han Sans CN',
+    'sans-serif',
+  ];
 
   /// Builds a card theme from a fill color. The fill is the M3 card surface
   /// (surfaceContainerLow) already tinted by [cardOpacity] so the rounded panel
@@ -19,20 +41,17 @@ class AppTheme {
       );
 
   /// The application-wide font. Chiron GoRound TC is a friendly handwritten
-  /// font that mixes Chinese, Latin and digits; google_fonts loads it on first
-  /// use and caches the binary locally so subsequent launches are instant and
-  /// work offline once the cache has been primed.
+  /// typeface bundled as assets/fonts/ChironGoRoundTC-{400R,700B}.otf; it
+  /// only carries Latin/Greek/Vietnamese glyphs so the fallback chain renders
+  /// CJK characters via the platform default.
   static TextTheme _textTheme(Color onSurface) {
-    // Build each text-theme slot from the Chiron GoRound TC family so the
-    // font covers every scale. google_fonts loads the binary lazily on first
-    // paint and falls back to the platform default until then. We use the
-    // dynamic getFont API so the code does not depend on generated static
-    // methods whose name may vary between google_fonts versions.
     final base = ThemeData(brightness: Brightness.light).textTheme;
-    TextStyle withFont(TextStyle? s) => GoogleFonts.getFont(
-            'Chiron GoRound TC',
-            textStyle: s ?? const TextStyle())
-        .copyWith(color: onSurface);
+    TextStyle withFont(TextStyle? s) =>
+        (s ?? const TextStyle()).copyWith(
+          fontFamily: _fontFamily,
+          fontFamilyFallback: _fontFallback,
+          color: onSurface,
+        );
     return base.copyWith(
       displayLarge: withFont(base.displayLarge),
       displayMedium: withFont(base.displayMedium),

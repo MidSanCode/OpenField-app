@@ -38,7 +38,6 @@ dependencies:
   package_info_plus: ^9.0.1
   flutter_js: ^0.8.3
   archive: ^3.6.1
-  google_fonts: ^6.2.1
   qr_flutter: ^4.1.0
   mobile_scanner: ^5.2.3
   image: ^4.3.0
@@ -61,3 +60,11 @@ flutter:
   uses-material-design: true
   assets:
     - assets/translations/
+
+  fonts:
+    - family: Chiron GoRound TC
+      fonts:
+        - asset: assets/fonts/ChironGoRoundTC-400R.otf
+          weight: 400
+        - asset: assets/fonts/ChironGoRoundTC-700B.otf
+          weight: 700
