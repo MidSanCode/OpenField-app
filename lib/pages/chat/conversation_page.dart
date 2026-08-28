@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+// ignore: depend_on_referenced_packages
+import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as image;
@@ -121,8 +124,14 @@ class _ConversationPageState extends State<ConversationPage> {
   /// is replaced by a recording bar with cancel/send actions.
   final AudioRecorder _recorder = AudioRecorder();
   bool _recording = false;
+  bool _voiceMode = false;
   int _recordSeconds = 0;
   Timer? _recordTimer;
+
+  /// 1 MiB read window used when staging a file for E2EE encryption. The
+  /// upload chunk size is 4 MiB, so 1 MiB reads keep the in-memory copy bounded
+  /// for multi-GB videos while still amortising syscall overhead.
+  static const int _fileReadChunkBytes = 1 << 20;
 
   @override
   void initState() {
@@ -615,18 +624,28 @@ class _ConversationPageState extends State<ConversationPage> {
         return;
       }
       final dir = await getTemporaryDirectory();
-      final path =
-          '${dir.path}${Platform.pathSeparator}of_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      // Windows' Media Foundation stack doesn't ship a built-in AAC encoder
+      // on every SKU, so requesting aacLc there fails with "the data type
+      // specified is invalid". Fall back to PCM wav which every supported
+      // platform handles natively; m4a stays the default everywhere else.
+      final useWav = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+      final voicePath = useWav
+          ? '${dir.path}${Platform.pathSeparator}of_voice_${DateTime.now().millisecondsSinceEpoch}.wav'
+          : '${dir.path}${Platform.pathSeparator}of_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final recordConfig = useWav
+          ? const RecordConfig(
+              encoder: AudioEncoder.wav,
+              sampleRate: 16000,
+              numChannels: 1,
+            )
+          : const RecordConfig(
+              encoder: AudioEncoder.aacLc,
+              bitRate: 64000,
+              sampleRate: 44100,
+              numChannels: 1,
+            );
       // Throws on failure; a completed start means the recorder is running.
-      await _recorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          bitRate: 64000,
-          sampleRate: 44100,
-          numChannels: 1,
-        ),
-        path: path,
-      );
+      await _recorder.start(recordConfig, path: voicePath);
       _recordSeconds = 0;
       setState(() => _recording = true);
       _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -701,9 +720,20 @@ class _ConversationPageState extends State<ConversationPage> {
       if (_isEncrypted) {
         // Same scheme as regular attachments: upload only ciphertext and let
         // the recipient recover mime/name from the encrypted payload.
-        final bytes = await File(path).readAsBytes();
-        final crypto =
-            E2eeService.instance.encryptAttachment(widget.conversationId, bytes);
+        final voiceRaf = await File(path).open();
+        final voiceBuilder = BytesBuilder(copy: false);
+        try {
+          while (true) {
+            final chunk = await voiceRaf.read(_fileReadChunkBytes);
+            if (chunk.isEmpty) break;
+            voiceBuilder.add(chunk);
+          }
+        } finally {
+          await voiceRaf.close();
+        }
+        final bytes = voiceBuilder.toBytes();
+        final crypto = await E2eeService.instance
+            .encryptAttachment(widget.conversationId, bytes);
         if (crypto == null) {
           throw Exception(_e2eeWaitForMember
               ? 'e2eeWaitOtherMember'.tr()
@@ -712,12 +742,13 @@ class _ConversationPageState extends State<ConversationPage> {
         final cipherFile = File('$path.ofe');
         await cipherFile.writeAsBytes(crypto.cipher, flush: true);
         uploadPath = cipherFile.path;
+        final voiceExt = p.extension(path); // .m4a or .wav
         carrier = jsonEncode({
           'att': {
             'v': crypto.version,
             'n': crypto.nonceB64,
             'm': mimeTypeForPath(path),
-            'name': '${'voiceMessage'.tr()}.m4a',
+            'name': '${'voiceMessage'.tr()}$voiceExt',
           },
         });
       }
@@ -1185,9 +1216,24 @@ class _ConversationPageState extends State<ConversationPage> {
           // Strip GPS/EXIF locally before reading bytes for encryption so the
           // location data never reaches the ciphertext envelope either.
           final cleanPath = await _stripGpsIfImage(srcPath);
-          final bytes = await File(cleanPath).readAsBytes();
-          final crypto =
-              E2eeService.instance.encryptAttachment(widget.conversationId, bytes);
+          // Stream the file into memory in 1 MiB chunks so a multi-hundred-MB
+          // video does not balloon to many times its size during the copy and
+          // does not allocate a single contiguous backing buffer larger than
+          // the file itself.
+          final raf = await File(cleanPath).open();
+          final builder = BytesBuilder(copy: false);
+          try {
+            while (true) {
+              final chunk = await raf.read(_fileReadChunkBytes);
+              if (chunk.isEmpty) break;
+              builder.add(chunk);
+            }
+          } finally {
+            await raf.close();
+          }
+          final bytes = builder.toBytes();
+          final crypto = await E2eeService.instance
+              .encryptAttachment(widget.conversationId, bytes);
           if (crypto == null) {
             if (mounted) {
               _markStatus(local.clientId, MessageStatus.failed);
@@ -1370,62 +1416,6 @@ class _ConversationPageState extends State<ConversationPage> {
         );
       }
     });
-  }
-
-  /// Opens the attachment source sheet and stages the picked files. Files are
-  /// uploaded only when the user sends, together with any text caption, so a
-  /// single message can carry several photos and a caption at once.
-  Future<void> _pickAttachments() async {
-    if (!_canSend) {
-      _showMutedSnackBar();
-      return;
-    }
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: Text('attachPhotos'.tr()),
-              onTap: () => Navigator.of(sheetContext).pop('image'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.folder_outlined),
-              title: Text('attachFiles'.tr()),
-              onTap: () => Navigator.of(sheetContext).pop('file'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.cloud_done_outlined),
-              title: Text('attachFromUploads'.tr()),
-              onTap: () => Navigator.of(sheetContext).pop('uploads'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || choice == null) return;
-
-    if (choice == 'image') {
-      final picker = ImagePicker();
-      final files = await picker.pickMultiImage();
-      if (!mounted || files.isEmpty) return;
-      setState(() => _pendingPaths
-          .addAll(files.map((f) => f.path).where((p) => p.isNotEmpty)));
-    } else if (choice == 'file') {
-      final result = await FilePicker.platform.pickFiles(
-          type: FileType.any, allowMultiple: true);
-      if (!mounted) return;
-      final paths = (result?.files ?? const [])
-          .where((f) => f.path != null)
-          .map((f) => f.path!)
-          .toList();
-      if (paths.isEmpty) return;
-      setState(() => _pendingPaths.addAll(paths));
-    } else if (choice == 'uploads') {
-      await _pickExistingAttachments();
-    }
   }
 
   /// Lets the user reuse a file they uploaded earlier instead of re-picking it
@@ -2228,17 +2218,19 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   Widget _buildInputBar() {
+    final theme = Theme.of(context);
+    final showVoiceToggle = !kIsWeb && !_recording;
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_pendingPaths.isNotEmpty || _pendingExistingIds.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
                 child: Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -2262,58 +2254,177 @@ class _ConversationPageState extends State<ConversationPage> {
                 ),
               ),
             Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (!kIsWeb)
-              IconButton(
-                onPressed: _startVoiceRecording,
-                icon: const Icon(Icons.mic_none),
-                tooltip: 'voiceSend'.tr(),
-              ),
-            IconButton(
-              onPressed: _sendCheck,
-              icon: const Icon(Icons.redeem),
-              tooltip: 'checkSend'.tr(),
-            ),
-            IconButton(
-              onPressed: _pickAttachments,
-              icon: const Icon(Icons.attach_file),
-              tooltip: 'attachFile'.tr(),
-            ),
-            Expanded(
-              child: TextField(
-                controller: _inputController,
-                focusNode: _inputFocus,
-                minLines: 1,
-                maxLines: 5,
-                textCapitalization: TextCapitalization.sentences,
-                onChanged: _onTypingChanged,
-                decoration: InputDecoration(
-                  hintText: 'message'.tr(),
-                  isDense: true,
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (showVoiceToggle)
+                  IconButton(
+                    onPressed: _toggleVoiceMode,
+                    icon: Icon(_voiceMode
+                        ? Icons.keyboard_alt_outlined
+                        : Icons.mic_none),
+                    tooltip: _voiceMode
+                        ? 'keyboardMode'.tr()
+                        : 'voiceSend'.tr(),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                IconButton(
+                  onPressed: _openMoreTools,
+                  icon: const Icon(Icons.add_circle_outline),
+                  tooltip: 'moreTools'.tr(),
                 ),
-                onSubmitted: (_) => _send(),
-              ),
+                Expanded(
+                  child: _voiceMode
+                      ? _buildHoldToTalkButton(theme)
+                      : TextField(
+                          controller: _inputController,
+                          focusNode: _inputFocus,
+                          minLines: 1,
+                          maxLines: 5,
+                          textCapitalization: TextCapitalization.sentences,
+                          onChanged: _onTypingChanged,
+                          decoration: InputDecoration(
+                            hintText: 'message'.tr(),
+                            isDense: true,
+                            filled: true,
+                            fillColor: theme
+                                .colorScheme.surfaceContainerHighest,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                          ),
+                          onSubmitted: (_) => _send(),
+                        ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: _send,
+                  icon: const Icon(Icons.send),
+                  tooltip: 'send'.tr(),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: _send,
-              icon: const Icon(Icons.send),
-              tooltip: 'send'.tr(),
-            ),
-          ],
-        ),
           ],
         ),
       ),
     );
+  }
+
+  /// Hold-to-talk pill shown in voice mode: tap-and-hold captures, release
+  /// sends. A tap without holding for at least one second is treated as a
+  /// stray tap (too short) and discarded.
+  Widget _buildHoldToTalkButton(ThemeData theme) {
+    return GestureDetector(
+      onTapDown: (_) => _startVoiceRecording(),
+      onTapUp: (_) => _sendVoiceRecording(),
+      onTapCancel: _cancelVoiceRecording,
+      child: Container(
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Text(
+          'holdToTalk'.tr(),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Switches the input bar between voice and text mode. Voice mode replaces
+  /// the text field with a hold-to-talk pill; text mode puts the keyboard
+  /// back. Cancels any in-progress recording so a mode switch never leaves
+  /// the recorder dangling.
+  void _toggleVoiceMode() {
+    if (_recording) return;
+    setState(() => _voiceMode = !_voiceMode);
+    if (_voiceMode) {
+      _inputFocus.unfocus();
+    } else {
+      _inputFocus.requestFocus();
+    }
+  }
+
+  /// Second-level drawer behind the "+" button. Every non-voice action lives
+  /// here so the input bar stays uncluttered: photos, files, previously
+  /// uploaded files, and the check (red packet) composer.
+  Future<void> _openMoreTools() async {
+    if (!_canSend) {
+      _showMutedSnackBar();
+      return;
+    }
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text('attachPhotos'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('image'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: Text('attachFiles'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('file'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_done_outlined),
+              title: Text('attachFromUploads'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('uploads'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.redeem),
+              title: Text('checkSend'.tr()),
+              onTap: () => Navigator.of(sheetContext).pop('check'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case 'image':
+      case 'file':
+      case 'uploads':
+        // Reuse the existing picker pipeline: synthesize a fake _pickAttachments
+        // call by closing the choice into a method that takes the chosen source.
+        await _pickAttachmentsFromSource(choice);
+        break;
+      case 'check':
+        await _sendCheck();
+        break;
+    }
+  }
+
+  /// Same pipeline as _pickAttachments but with the source pre-selected so
+  /// the modal sheet inside _openMoreTools can dispatch directly.
+  Future<void> _pickAttachmentsFromSource(String source) async {
+    if (source == 'image') {
+      final picker = ImagePicker();
+      final files = await picker.pickMultiImage();
+      if (!mounted || files.isEmpty) return;
+      setState(() => _pendingPaths
+          .addAll(files.map((f) => f.path).where((p) => p.isNotEmpty)));
+    } else if (source == 'file') {
+      final result = await FilePicker.platform.pickFiles(
+          type: FileType.any, allowMultiple: true);
+      if (!mounted) return;
+      final paths = (result?.files ?? const [])
+          .where((f) => f.path != null)
+          .map((f) => f.path!)
+          .toList();
+      if (paths.isEmpty) return;
+      setState(() => _pendingPaths.addAll(paths));
+    } else if (source == 'uploads') {
+      await _pickExistingAttachments();
+    }
   }
 }
 

@@ -741,7 +741,7 @@ class ApiService {
     ValueChanged<double>? onProgress,
   }) async {
     final totalChunks = (fileSize / chunkSizeBytes).ceil();
-    final mimeType = _mediaTypeFor(file.path);
+    final mimeType = _mediaTypeFor(file.path).toString();
 
     final init = await _post(
       Uri.parse('$baseUrl/attachments/chunk/init'),

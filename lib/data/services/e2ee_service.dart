@@ -2,9 +2,33 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/e2ee_crypto.dart';
 import 'package:openfield/data/services/secure_kv.dart';
+
+/// One encryption job fed to the isolate pool: the group key version, the
+/// HKDF-derived per-attachment key, the fresh GCM nonce, and the plaintext
+/// bytes. The result is the ciphertext (which already embeds the GCM tag) so
+/// the call site just needs to write the result to disk and upload.
+class _EncryptJob {
+  final Uint8List key;
+  final Uint8List nonce;
+  final Uint8List plaintext;
+  const _EncryptJob(this.key, this.nonce, this.plaintext);
+}
+
+/// Top-level entry point so `compute` can move the AES-GCM pass off the UI
+/// isolate. Without this the entire attachment (potentially hundreds of MB for
+/// a video) sat in main memory and the synchronous cipher.process loop blocked
+/// the UI thread for many seconds, freezing the chat composer.
+Uint8List _runEncrypt(_EncryptJob job) {
+  return aes256GcmEncrypt(
+    key: job.key,
+    nonce: job.nonce,
+    plaintext: job.plaintext,
+  );
+}
 
 /// Thrown when a synchronous E2EE operation cannot run because the service has
 /// not been initialised or the conversation has no usable group key.
@@ -378,16 +402,26 @@ class E2eeService {
   /// was sealed under, the base64url-encoded GCM nonce, and the ciphertext —
   /// the latter is what gets uploaded to the server. Returns null when no
   /// group key is cached yet.
-  ({int version, String nonceB64, Uint8List cipher})? encryptAttachment(
+  ///
+  /// Runs the AES-GCM pass in a background isolate so that encrypting a large
+  /// video (or any multi-hundred-MB file) does not freeze the chat UI. The
+  /// tradeoff is the plaintext bytes still have to cross the isolate boundary
+  /// once, which the runtime does via a transfer; for a 1GB file that copy is
+  /// unavoidable on the current single-shot upload protocol. A future chunked
+  /// encrypted protocol would stream instead.
+  Future<({int version, String nonceB64, Uint8List cipher})?> encryptAttachment(
     int conversationId,
     Uint8List bytes,
-  ) {
+  ) async {
     final version = currentVersion(conversationId);
     if (version == null) return null;
     final gk = _groupKeyFor(conversationId, version)!;
     final key = hkdfSha256(gk, info: _attInfo, length: 32);
     final nonce = randomBytes(12);
-    final cipher = aes256GcmEncrypt(key: key, nonce: nonce, plaintext: bytes);
+    final cipher = await compute(
+      _runEncrypt,
+      _EncryptJob(key, nonce, bytes),
+    );
     return (version: version, nonceB64: base64Url.encode(nonce), cipher: cipher);
   }
 
