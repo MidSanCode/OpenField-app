@@ -653,8 +653,7 @@ class _ConversationPageState extends State<ConversationPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
     }
   }
@@ -772,8 +771,7 @@ class _ConversationPageState extends State<ConversationPage> {
     } catch (e) {
       if (!mounted) return;
       _markStatus(local.clientId, MessageStatus.failed);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      _showErrorSnackBar(e);
     } finally {
       // Clean up temp files regardless of the outcome.
       for (final p in [path, '$path.ofe']) {
@@ -865,6 +863,23 @@ class _ConversationPageState extends State<ConversationPage> {
   void _showMutedSnackBar() {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(_muteBannerText())));
+  }
+
+  /// Shows an error from a catch handler. Pulls the HTTP status code out of
+  /// [ApiException] so a failed upload no longer hides behind a bare
+  /// "missing chunks" string: the user sees "[409] missing chunks" instead.
+  /// Background is the theme's errorContainer so it visually distinguishes
+  /// from the muted / info snackbars in this same screen.
+  void _showErrorSnackBar(Object e) {
+    final theme = Theme.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
+      content: Text(e.toString()),
+      backgroundColor: theme.colorScheme.errorContainer,
+      duration: const Duration(seconds: 6),
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   /// Re-fetches the conversation detail (settings + members + my membership)
@@ -1096,7 +1111,7 @@ class _ConversationPageState extends State<ConversationPage> {
       _refreshConversation();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
     }
   }
@@ -1282,8 +1297,7 @@ class _ConversationPageState extends State<ConversationPage> {
     } catch (e) {
       if (!mounted) return;
       _markStatus(local.clientId, MessageStatus.failed);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      _showErrorSnackBar(e);
     }
   }
 
@@ -1309,8 +1323,7 @@ class _ConversationPageState extends State<ConversationPage> {
       if (!mounted) return;
       _markStatus(local.clientId, MessageStatus.failed);
       _scrollToBottom();
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      _showErrorSnackBar(e);
     }
   }
 
@@ -1357,8 +1370,7 @@ class _ConversationPageState extends State<ConversationPage> {
     } catch (e) {
       if (!mounted) return;
       _markStatus(local.clientId, MessageStatus.failed);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      _showErrorSnackBar(e);
     }
   }
 
@@ -1430,8 +1442,7 @@ class _ConversationPageState extends State<ConversationPage> {
       items = await _apiService.listMyAttachments(token);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
       return;
     }
@@ -1549,7 +1560,7 @@ class _ConversationPageState extends State<ConversationPage> {
       _store.upsertMessage(resolved);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
     }
   }
@@ -1586,7 +1597,7 @@ class _ConversationPageState extends State<ConversationPage> {
       _store.upsertMessage(deleted);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
     }
   }
@@ -1639,7 +1650,7 @@ class _ConversationPageState extends State<ConversationPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
     }
   }
@@ -1692,7 +1703,7 @@ class _ConversationPageState extends State<ConversationPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
     }
   }
@@ -1762,8 +1773,7 @@ class _ConversationPageState extends State<ConversationPage> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
     }
   }
@@ -1796,7 +1806,7 @@ class _ConversationPageState extends State<ConversationPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
     }
   }
@@ -1831,7 +1841,7 @@ class _ConversationPageState extends State<ConversationPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        _showErrorSnackBar(e);
       }
     }
   }

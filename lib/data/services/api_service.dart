@@ -28,8 +28,13 @@ class ApiException implements Exception {
 
   ApiException(this.statusCode, this.message);
 
+  /// Renders as `[<status>] <message>` when the server responded with a
+  /// status code so callers that print the exception (snackbars, debug logs,
+  /// the red bubble on a failed message) can see the HTTP code at a glance
+  /// without having to fish the raw object out of the catch handler.
   @override
-  String toString() => message;
+  String toString() =>
+      statusCode != null ? '[$statusCode] $message' : message;
 }
 
 /// HTTP client that logs every request/response to the console and stamps every
@@ -795,6 +800,16 @@ class ApiService {
             ? fileSize - start
             : chunkSizeBytes;
         final chunk = await raf.read(length);
+        // raf.read is permitted to return short reads, but the server only
+        // counts chunks by index, so a partial chunk upload would still be
+        // recorded as "present" with the wrong size and trip the dedup hash
+        // check on complete(). Fail loudly instead of uploading a partial.
+        if (chunk.length < length) {
+          throw ApiException(
+            null,
+            'short read on chunk $index (got ${chunk.length}/$length bytes)',
+          );
+        }
 
         final request = http.MultipartRequest(
           'POST',
@@ -802,9 +817,27 @@ class ApiService {
         );
         request.headers['Authorization'] = 'Bearer $accessToken';
         request.files.add(http.MultipartFile.fromBytes('chunk', chunk));
-        await _sendMultipartProgressed(request, (fraction) {
-          onProgress?.call((completedBytes + fraction * length) / fileSize);
-        });
+        // A transient network blip on any single chunk would otherwise surface
+        // as a hard 409 "missing chunks" at the complete() step. Retry the
+        // chunk up to 3 times with a short backoff before giving up.
+        const maxAttempts = 3;
+        Object? lastError;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            await _sendMultipartProgressed(request, (fraction) {
+              onProgress?.call(
+                  (completedBytes + fraction * length) / fileSize);
+            });
+            lastError = null;
+            break;
+          } catch (e) {
+            lastError = e;
+            if (attempt == maxAttempts) rethrow;
+            await Future<void>.delayed(
+                Duration(milliseconds: 250 * attempt));
+          }
+        }
+        if (lastError != null) throw lastError;
         completedBytes += length;
         onProgress?.call(completedBytes / fileSize);
       }
