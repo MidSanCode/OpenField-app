@@ -765,103 +765,184 @@ class ApiService {
     }
     final uploadId = initData['upload_id'] as String;
 
-    // Resume: query which chunks already landed on the server.
-    final uploaded = <int>{};
-    final status = await _get(
-      Uri.parse('$baseUrl/attachments/chunk/$uploadId'),
-      headers: _headers(token: accessToken, json: false),
-    );
-    if (status.statusCode == 200) {
-      final statusData = _decodeMap(status);
-      final list = statusData?['uploaded'];
-      if (list is List) {
-        uploaded.addAll(list.whereType<int>());
-      }
-    }
-
+    // Loop body: every entry (re)uploads whichever chunks the server reports
+    // as missing, then calls complete. On 409 missing-chunks we keep going
+    // until the missing set is empty (or we run out of attempts).
     final raf = await file.open();
-    var completedBytes = 0;
-    // Chunks restored from a previous session count towards progress.
-    for (final index in uploaded) {
-      final start = (index - 1) * chunkSizeBytes;
-      completedBytes += (start + chunkSizeBytes > fileSize)
-          ? fileSize - start
-          : chunkSizeBytes;
-    }
+    final uploaded = await _uploadedChunks(uploadId, accessToken);
     try {
-      for (var index = 1; index <= totalChunks; index++) {
-        if (uploaded.contains(index)) {
-          onProgress?.call(completedBytes / fileSize);
-          continue;
-        }
-        final start = (index - 1) * chunkSizeBytes;
-        await raf.setPosition(start);
-        final length = (start + chunkSizeBytes > fileSize)
-            ? fileSize - start
-            : chunkSizeBytes;
-        final chunk = await raf.read(length);
-        // raf.read is permitted to return short reads, but the server only
-        // counts chunks by index, so a partial chunk upload would still be
-        // recorded as "present" with the wrong size and trip the dedup hash
-        // check on complete(). Fail loudly instead of uploading a partial.
-        if (chunk.length < length) {
-          throw ApiException(
-            null,
-            'short read on chunk $index (got ${chunk.length}/$length bytes)',
+      for (var attempt = 1; attempt <= _maxCompleteAttempts; attempt++) {
+        // Fresh missing set every round: chunks that survived the previous
+        // round do not need to be re-sent.
+        final pending = _missingChunks(uploaded, totalChunks);
+        if (pending.isEmpty) break;
+        for (final index in pending) {
+          await _uploadChunk(
+            raf,
+            fileSize,
+            totalChunks,
+            uploadId,
+            accessToken,
+            index,
+            (fraction) => onProgress?.call(fraction),
+            uploaded,
           );
         }
 
-        final request = http.MultipartRequest(
-          'POST',
-          Uri.parse('$baseUrl/attachments/chunk/$uploadId/$index'),
+        final complete = await _post(
+          Uri.parse('$baseUrl/attachments/chunk/$uploadId/complete'),
+          headers: _headers(token: accessToken),
+          body: jsonEncode({
+            'filename': file.uri.pathSegments.last,
+            'size': fileSize,
+            'total_chunks': totalChunks,
+            'mime_type': mimeType,
+            'visibility': visibility,
+          }),
         );
-        request.headers['Authorization'] = 'Bearer $accessToken';
-        request.files.add(http.MultipartFile.fromBytes('chunk', chunk));
-        // A transient network blip on any single chunk would otherwise surface
-        // as a hard 409 "missing chunks" at the complete() step. Retry the
-        // chunk up to 3 times with a short backoff before giving up.
-        const maxAttempts = 3;
-        Object? lastError;
-        for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-          try {
-            await _sendMultipartProgressed(request, (fraction) {
-              onProgress?.call(
-                  (completedBytes + fraction * length) / fileSize);
-            });
-            lastError = null;
-            break;
-          } catch (e) {
-            lastError = e;
-            if (attempt == maxAttempts) rethrow;
-            await Future<void>.delayed(
-                Duration(milliseconds: 250 * attempt));
+        if (complete.statusCode == 200 || complete.statusCode == 201) {
+          final data = _decodeMap(complete);
+          if (data != null) {
+            onProgress?.call(1);
+            return Attachment.fromJson(data);
           }
+          throw ApiException(complete.statusCode,
+              _decodeError(complete, 'Failed to finish upload'));
         }
-        if (lastError != null) throw lastError;
-        completedBytes += length;
-        onProgress?.call(completedBytes / fileSize);
+        if (complete.statusCode != 409) {
+          throw ApiException(complete.statusCode,
+              _decodeError(complete, 'Failed to finish upload'));
+        }
+        // 409 missing chunks: refresh the uploaded set from the server and
+        // re-enter the loop. The server already accepted the chunks we did
+        // upload in this round, so ListChunks will reflect them and only the
+        // genuinely missing ones will be re-sent.
+        final refreshed = await _uploadedChunks(uploadId, accessToken);
+        uploaded
+          ..clear()
+          ..addAll(refreshed);
       }
+      // Loop exhausted without ever getting a 2xx. Last 409 reported the
+      // still-missing chunks; surface that to the user.
+      final stillMissing = _missingChunks(uploaded, totalChunks);
+      final detail = stillMissing.isEmpty
+          ? ''
+          : ' (still missing chunks: ${stillMissing.join(', ')})';
+      throw ApiException(
+          409, 'missing chunks$detail — upload aborted after $_maxCompleteAttempts retries');
     } finally {
       raf.close();
     }
+  }
 
-    final complete = await _post(
-      Uri.parse('$baseUrl/attachments/chunk/$uploadId/complete'),
-      headers: _headers(token: accessToken),
-      body: jsonEncode({
-        'filename': file.uri.pathSegments.last,
-        'size': fileSize,
-        'total_chunks': totalChunks,
-        'mime_type': mimeType,
-        'visibility': visibility,
-      }),
-    );
-    final data = _decodeMap(complete);
-    if ((complete.statusCode == 200 || complete.statusCode == 201) && data != null) {
-      onProgress?.call(1);
-      return Attachment.fromJson(data);
+  /// Maximum number of times we re-enter the upload loop when complete()
+  /// returns 409 missing-chunks. Each round re-sends only the chunks the
+  /// server has not yet seen, so the cost is bounded by the actual missing
+  /// count rather than the total chunk count.
+  static const int _maxCompleteAttempts = 4;
+
+  /// Fetches the set of chunk indexes that the server already has for
+  /// [uploadId]. Returns an empty set on any error: the caller will then
+  /// re-upload everything, which is safe because chunk uploads are
+  /// overwrite-on-PutObject.
+  Future<Set<int>> _uploadedChunks(String uploadId, String accessToken) async {
+    final uploaded = <int>{};
+    try {
+      final status = await _get(
+        Uri.parse('$baseUrl/attachments/chunk/$uploadId'),
+        headers: _headers(token: accessToken, json: false),
+      );
+      if (status.statusCode == 200) {
+        final statusData = _decodeMap(status);
+        final list = statusData?['uploaded'];
+        if (list is List) {
+          uploaded.addAll(list.whereType<int>());
+        }
+      }
+    } catch (_) {
+      // Treat network errors as "nothing uploaded yet" — the chunk loop
+      // re-sends everything, which PutObject on the server handles fine.
     }
-    throw ApiException(complete.statusCode, _decodeError(complete, 'Failed to finish upload'));
+    return uploaded;
+  }
+
+  /// Chunks in 1..[totalChunks] that are NOT in [uploaded].
+  List<int> _missingChunks(Set<int> uploaded, int totalChunks) {
+    final out = <int>[];
+    for (var i = 1; i <= totalChunks; i++) {
+      if (!uploaded.contains(i)) out.add(i);
+    }
+    return out;
+  }
+
+  /// Uploads a single chunk for [uploadId], updating [uploaded] on success
+  /// and reporting per-byte progress through [onProgress]. Throws
+  /// ApiException on a short read or a network failure that survives the
+  /// retry budget; in the latter case the chunk index is NOT added to
+  /// [uploaded], so the next outer round will pick it up again.
+  Future<void> _uploadChunk(
+    RandomAccessFile raf,
+    int fileSize,
+    int totalChunks,
+    String uploadId,
+    String accessToken,
+    int index,
+    ValueChanged<double> onProgress,
+    Set<int> uploaded,
+  ) async {
+    final start = (index - 1) * chunkSizeBytes;
+    await raf.setPosition(start);
+    final length = (start + chunkSizeBytes > fileSize)
+        ? fileSize - start
+        : chunkSizeBytes;
+    final chunk = await raf.read(length);
+    // raf.read is permitted to return short reads, but the server only
+    // counts chunks by index, so a partial chunk upload would still be
+    // recorded as "present" with the wrong size and trip the dedup hash
+    // check on complete(). Fail loudly instead of uploading a partial.
+    if (chunk.length < length) {
+      throw ApiException(
+        null,
+        'short read on chunk $index (got ${chunk.length}/$length bytes)',
+      );
+    }
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/attachments/chunk/$uploadId/$index'),
+    );
+    request.headers['Authorization'] = 'Bearer $accessToken';
+    request.files.add(http.MultipartFile.fromBytes('chunk', chunk));
+    // A transient network blip on any single chunk would otherwise surface
+    // as a hard 409 "missing chunks" at the complete() step. Retry the
+    // chunk up to 3 times with a short backoff before giving up.
+    const maxAttempts = 3;
+    Object? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await _sendMultipartProgressed(request, (fraction) {
+          // Weight this chunk's per-byte fraction by its share of the file
+          // so the global progress bar advances smoothly across chunks.
+          onProgress(
+              ((index - 1) * chunkSizeBytes + fraction * length) / fileSize);
+        });
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        if (attempt == maxAttempts) rethrow;
+        await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
+      }
+    }
+    if (lastError != null) throw lastError;
+    // Only mark the chunk as seen after a fully successful PUT, so the
+    // outer loop re-sends anything that did not make it across.
+    uploaded.add(index);
+    onProgress(
+        (index * chunkSizeBytes > fileSize
+                ? fileSize
+                : index * chunkSizeBytes) /
+            fileSize);
   }
 
   Future<List<Attachment>> listMyAttachments(String accessToken, {int limit = 100}) async {
