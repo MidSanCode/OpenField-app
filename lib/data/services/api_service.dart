@@ -570,6 +570,11 @@ class ApiService {
   /// a fraction in [0, 1]. Falls back to the plain path when no [onProgress]
   /// is given. The body is re-piped through a counting stream so progress
   /// reflects actual bytes handed to the socket.
+  ///
+  /// Note: this helper is currently unused by the chunked-upload path
+  /// (which switched to a simpler `request.send()` based pipeline below);
+  /// it is kept for the simple-upload path that still needs accurate
+  /// progress (single-shot multipart of a small file).
   Future<http.Response> _sendMultipartProgressed(
     http.MultipartRequest request,
     ValueChanged<double>? onProgress,
@@ -603,6 +608,19 @@ class ApiService {
     } on http.ClientException catch (e) {
       throw ApiException(0, e.message);
     }
+  }
+
+  /// Sends a chunked-upload chunk and returns the [http.StreamedResponse].
+  /// Uses the request's own send() so the base client owns the body pipe
+  /// end-to-end and the response stream does not need a separate drain call.
+  /// Reusing the previous hand-rolled [StreamedRequest] + map + listen
+  /// pipeline in [_sendMultipartProgressed] left a window where the local
+  /// sink could finish before the IO socket had actually pushed every byte,
+  /// producing 100% progress on the client while the server saw no chunks.
+  Future<http.StreamedResponse> _sendChunkRequest(
+    http.MultipartRequest request,
+  ) async {
+    return _client.send(request);
   }
 
   /// Streams [url] to the local file [savePath], reporting progress. Returns
@@ -913,19 +931,40 @@ class ApiService {
     );
     request.headers['Authorization'] = 'Bearer $accessToken';
     request.files.add(http.MultipartFile.fromBytes('chunk', chunk));
+    // Advance the progress bar to "this chunk started" so the UI does not
+    // stall while a slow link is uploading. Per-byte progress is not worth
+    // the extra StreamedRequest pipeline (see _sendChunkRequest below) for
+    // a 4 MiB PUT that usually completes in under a second.
+    onProgress(((index - 1) * chunkSizeBytes) / fileSize);
+
     // A transient network blip on any single chunk would otherwise surface
     // as a hard 409 "missing chunks" at the complete() step. Retry the
-    // chunk up to 3 times with a short backoff before giving up.
+    // chunk up to 3 times with a short backoff before giving up. Each
+    // attempt uses a fresh MultipartRequest because finalize() consumes the
+    // body stream and re-finalize on the same instance would yield nothing.
     const maxAttempts = 3;
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        await _sendMultipartProgressed(request, (fraction) {
-          // Weight this chunk's per-byte fraction by its share of the file
-          // so the global progress bar advances smoothly across chunks.
-          onProgress(
-              ((index - 1) * chunkSizeBytes + fraction * length) / fileSize);
-        });
+        // For retries we need a fresh MultipartRequest because the previous
+        // attempt's body stream is now fully consumed.
+        final attemptRequest = attempt == 1
+            ? request
+            : (http.MultipartRequest(
+                'POST',
+                Uri.parse('$baseUrl/attachments/chunk/$uploadId/$index'),
+              )
+              ..headers['Authorization'] = 'Bearer $accessToken'
+              ..files.add(http.MultipartFile.fromBytes('chunk', chunk)));
+        final response = await _sendChunkRequest(attemptRequest);
+        // Drain the response body so the connection is freed back into the
+        // pool. Without this the next chunk PUT on the same connection can
+        // stall waiting for the previous response to be fully consumed.
+        await response.stream.drain<void>();
+        if (response.statusCode != 200) {
+          throw ApiException(response.statusCode,
+              'chunk $index upload failed (status ${response.statusCode})');
+        }
         lastError = null;
         break;
       } catch (e) {
