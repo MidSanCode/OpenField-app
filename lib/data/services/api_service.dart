@@ -2002,12 +2002,14 @@ class ApiService {
     List<int> attachmentIds = const [],
     List<int> mentions = const [],
     int checkId = 0,
+    int burnSeconds = 0,
   }) async {
     final body = <String, dynamic>{
       'content': content,
       'reply_to_id': replyToId,
       'attachment_ids': attachmentIds,
       if (checkId > 0) 'check_id': checkId,
+      if (burnSeconds > 0) 'burn_seconds': burnSeconds,
     };
     if (mentions.isNotEmpty) body['mentions'] = mentions;
     final response = await _post(
@@ -2021,6 +2023,26 @@ class ApiService {
     }
     throw ApiException(
         response.statusCode, _decodeError(response, 'Failed to send message'));
+  }
+
+  /// Reports that the current user has read [messageId] in [conversationId].
+  /// For burn-after-read messages the server arms the countdown on the first
+  /// read and returns the message with the absolute burn deadline; for
+  /// everything else the response is the unchanged message. Returns null when
+  /// the message no longer exists.
+  Future<ChatMessage?> markMessageBurnRead(
+      String accessToken, int conversationId, int messageId) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/conversations/$conversationId/messages/$messageId/read'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return ChatMessage.fromJson(data);
+    }
+    if (response.statusCode == 404) return null;
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to mark message read'));
   }
 
   /// Sets the current user's per-conversation notification preference

@@ -36,6 +36,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyTimezone = 'settings_timezone';
   static const _keyRegion = 'settings_region';
   static const _keyRegionLang = 'settings_region_lang';
+  static const _keyEncryptAttachments = 'settings_encrypt_attachments';
   static const String defaultServerHost = 'https://api.openfield.eu.cc';
 
   /// Sentinels for the client-side timezone setting. Empty means "follow the
@@ -148,6 +149,7 @@ class SettingsService extends ChangeNotifier {
   String _timezone = localTimezone;
   String _region = localRegion;
   String _regionLang = '';
+  bool _encryptAttachments = false;
 
   String? get locale => _locale;
   ThemeMode get themeMode => _themeMode;
@@ -182,6 +184,12 @@ class SettingsService extends ChangeNotifier {
   /// derived from the selected region.
   String get regionLang => _regionLang;
 
+  /// Whether files sent in end-to-end-encrypted conversations are encrypted
+  /// client-side before upload. Off by default: attachments upload directly
+  /// (room-private as usual), which keeps large uploads fast and avoids the
+  /// full-file encrypt pass. Text messages are always encrypted regardless.
+  bool get encryptAttachments => _encryptAttachments;
+
   /// The [RegionOption] matching the current [region], or null when none.
   RegionOption? get regionOption {
     if (_region.isEmpty) return null;
@@ -214,6 +222,7 @@ class SettingsService extends ChangeNotifier {
     _timezone = prefs.getString(_keyTimezone) ?? localTimezone;
     _region = prefs.getString(_keyRegion) ?? localRegion;
     _regionLang = prefs.getString(_keyRegionLang) ?? '';
+    _encryptAttachments = prefs.getBool(_keyEncryptAttachments) ?? false;
     notifyListeners();
   }
 
@@ -365,6 +374,13 @@ class SettingsService extends ChangeNotifier {
     _cardOpacity = value.clamp(0.0, 1.0);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_keyCardOpacity, _cardOpacity);
+    notifyListeners();
+  }
+
+  Future<void> setEncryptAttachments(bool value) async {
+    _encryptAttachments = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyEncryptAttachments, value);
     notifyListeners();
   }
 

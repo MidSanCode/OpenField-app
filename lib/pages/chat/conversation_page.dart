@@ -128,6 +128,15 @@ class _ConversationPageState extends State<ConversationPage> {
   int _recordSeconds = 0;
   Timer? _recordTimer;
 
+  /// Burn-after-read state. When [_burnMode] is on, every message sent from
+  /// this page is armed to self-destruct [burnDurationSeconds] after the first
+  /// recipient reads it. Message ids already reported as read are tracked so
+  /// the read report fires exactly once per message.
+  static const int burnDurationSeconds = 10;
+  bool _burnMode = false;
+  final Set<int> _burnReadRequested = {};
+  Timer? _burnTimer;
+
   /// 1 MiB read window used when staging a file for E2EE encryption. The
   /// upload chunk size is 4 MiB, so 1 MiB reads keep the in-memory copy bounded
   /// for multi-GB videos while still amortising syscall overhead.
@@ -144,6 +153,9 @@ class _ConversationPageState extends State<ConversationPage> {
     _load();
     _realtimeSub = RealtimeService.instance.events.listen(_onRealtimeEvent);
     _scrollController.addListener(_onScroll);
+    // 1 Hz tick keeps burn countdowns live and drops bubbles whose deadline
+    // has passed without waiting for the server sweeper's push.
+    _burnTimer = Timer.periodic(const Duration(seconds: 1), (_) => _onBurnTick());
   }
 
   /// After a page refresh the current profile may not be loaded yet, leaving
@@ -175,11 +187,84 @@ class _ConversationPageState extends State<ConversationPage> {
     }
     _typingTimers.clear();
     _recordTimer?.cancel();
+    _burnTimer?.cancel();
     _recorder.dispose();
     _inputController.dispose();
     _inputFocus.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// 1 Hz burn tick. Drops bubbles whose burn deadline has passed (the server
+  /// sweeper independently soft-deletes and pushes the tombstone) and rebuilds
+  /// the list while any countdown is running so the seconds label stays live.
+  void _onBurnTick() {
+    if (_messages.isEmpty) return;
+    final now = DateTime.now();
+    var needsRebuild = false;
+    final next = <ChatMessage>[];
+    for (final m in _messages) {
+      if (m.burnAt != null && !m.isDeleted && m.burnAt!.isBefore(now)) {
+        needsRebuild = true;
+        final tomb = m.copyWith(deletedAt: m.burnAt);
+        next.add(tomb);
+        _store.upsertMessage(tomb);
+      } else if (m.burnArmed) {
+        needsRebuild = true;
+        next.add(m);
+      } else {
+        next.add(m);
+      }
+    }
+    if (needsRebuild) {
+      setState(() => _messages = next);
+    }
+  }
+
+  /// Reports burn-armed messages from other members as read, once each. The
+  /// server arms the countdown on the first report; the response's burn_at is
+  /// stamped back onto the local bubble. Best-effort: a failed report is
+  /// un-marked so the next trigger retries.
+  Future<void> _triggerBurnRead() async {
+    if (!mounted || _myUserId == 0) return;
+    final targets = _messages
+        .where((m) =>
+            m.id > 0 &&
+            m.isBurn &&
+            m.burnAt == null &&
+            m.senderId != _myUserId &&
+            !_burnReadRequested.contains(m.id))
+        .map((m) => m.id)
+        .toList();
+    if (targets.isEmpty) return;
+    _burnReadRequested.addAll(targets);
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    for (final id in targets) {
+      try {
+        final updated =
+            await _apiService.markMessageBurnRead(token, widget.conversationId, id);
+        if (!mounted) return;
+        if (updated == null) continue;
+        setState(() {
+          _messages = _messages.map((m) {
+            if (m.id != id) return m;
+            // Only take the burn fields from the server payload; the local
+            // message already carries decrypted content and styling.
+            return m.copyWith(
+                burnSeconds: updated.burnSeconds, burnAt: updated.burnAt);
+          }).toList();
+        });
+      } catch (_) {
+        _burnReadRequested.remove(id);
+      }
+    }
+  }
+
+  /// Toggles burn-after-read mode for outgoing messages.
+  void _toggleBurnMode() {
+    setState(() => _burnMode = !_burnMode);
   }
 
   /// Handles realtime push events for this conversation.
@@ -221,13 +306,31 @@ class _ConversationPageState extends State<ConversationPage> {
         if (_isUndecryptedEnvelope(msg)) {
           unawaited(_syncE2EEAndRedecrypt());
         }
+        // A newly arrived burn-armed message from someone else starts its
+        // countdown as soon as it lands in the open conversation.
+        unawaited(_triggerBurnRead());
         break;
       case 'chat.message.updated':
         final msg = _decryptMessage(ChatMessage.fromJson(event.data));
         setState(() {
-          _messages = _messages.map((m) => m.id == msg.id ? msg : m).toList();
+          _messages = _messages.map((m) {
+            if (m.id != msg.id) return m;
+            // A burn stamp arrives through the generic updated event (no
+            // editedAt, no content change). Merge only the burn fields so the
+            // locally decrypted plaintext and styling survive. Any other
+            // update (a real edit) replaces the message wholesale.
+            if (msg.editedAt == null &&
+                msg.burnAt != null &&
+                m.burnAt == null &&
+                msg.content == m.content) {
+              return m.copyWith(
+                  burnSeconds: msg.burnSeconds, burnAt: msg.burnAt);
+            }
+            return msg;
+          }).toList();
         });
-        _store.upsertMessage(msg);
+        _store.upsertMessage(
+            _messages.firstWhere((m) => m.id == msg.id, orElse: () => msg));
         break;
       case 'chat.message.deleted':
         final msg = ChatMessage.fromJson(event.data);
@@ -513,6 +616,8 @@ class _ConversationPageState extends State<ConversationPage> {
         _isLoading = false;
         _hasOlder = messages.length >= 50;
       });
+      // Arm burn countdowns for unread burn-armed messages from others.
+      unawaited(_triggerBurnRead());
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
           _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -590,6 +695,8 @@ class _ConversationPageState extends State<ConversationPage> {
         _messages = [..._decryptBatch(merged), ..._messages];
         _loadingOlder = false;
       });
+      // Scrolled-back burn-armed messages count as read once loaded.
+      unawaited(_triggerBurnRead());
       await _store.appendMessages(widget.conversationId, merged);
     } catch (e) {
       if (!mounted) return;
@@ -1146,6 +1253,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final replyToId = _replyToId;
     final mentions = _extractMentions(content);
     final cipher = _isEncrypted ? _encryptOutgoing(content) : content;
+    final burnSeconds = _burnMode ? burnDurationSeconds : 0;
     // Capture and clear the staged attachments so the UI is reset immediately.
     final localPaths = List<String>.of(_pendingPaths);
     final existingIds = List<int>.of(_pendingExistingIds);
@@ -1178,6 +1286,7 @@ class _ConversationPageState extends State<ConversationPage> {
       clientId: generateClientId(),
       status: MessageStatus.sending,
       mentions: mentions,
+      burnSeconds: burnSeconds,
     );
     setState(() => _messages = _sorted([..._messages, local]));
     _scrollToBottom();
@@ -1223,11 +1332,17 @@ class _ConversationPageState extends State<ConversationPage> {
   ) async {
     _markStatus(local.clientId, MessageStatus.sending);
     final attachmentIds = List<int>.of(existingIds);
+    // Client-side attachment encryption is opt-in via app settings (default
+    // off): text stays E2EE always, but files upload directly unless the user
+    // explicitly asked for the encrypt pass. Read once before any await so we
+    // never touch context across an async gap.
+    final encryptFiles = _isEncrypted &&
+        Provider.of<SettingsService>(context, listen: false).encryptAttachments;
     try {
       for (var i = 0; i < localPaths.length; i++) {
         final srcPath = localPaths[i];
         String uploadPath = srcPath;
-        if (_isEncrypted) {
+        if (encryptFiles) {
           // Strip GPS/EXIF locally before reading bytes for encryption so the
           // location data never reaches the ciphertext envelope either.
           final cleanPath = await _stripGpsIfImage(srcPath);
@@ -1285,6 +1400,7 @@ class _ConversationPageState extends State<ConversationPage> {
         attachmentIds: attachmentIds,
         replyToId: local.replyToId,
         mentions: local.mentions,
+        burnSeconds: local.burnSeconds,
       );
       if (!mounted) return;
       final resolved = _isEncrypted ? _decryptMessage(msg) : msg;
@@ -1311,6 +1427,7 @@ class _ConversationPageState extends State<ConversationPage> {
         local.content,
         replyToId: local.replyToId,
         mentions: local.mentions,
+        burnSeconds: local.burnSeconds,
       );
       if (_isEncrypted) msg = _decryptMessage(msg);
       if (!mounted) return;
@@ -2266,6 +2383,16 @@ class _ConversationPageState extends State<ConversationPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                IconButton(
+                  onPressed: _toggleBurnMode,
+                  icon: Icon(
+                    _burnMode
+                        ? Icons.local_fire_department
+                        : Icons.local_fire_department_outlined,
+                    color: _burnMode ? theme.colorScheme.error : null,
+                  ),
+                  tooltip: 'burnAfterRead'.tr(),
+                ),
                 if (showVoiceToggle)
                   IconButton(
                     onPressed: _toggleVoiceMode,
@@ -2863,6 +2990,27 @@ class _MessageBubble extends StatelessWidget {
                             'chatEdited'.tr(),
                             style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
                           ),
+                        if (message.isBurn) ...[
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.local_fire_department,
+                            size: 12,
+                            color: Color(0xFFFF7043),
+                          ),
+                          // Countdown appears once a recipient has read the
+                          // message (burn_at known); before that the flame
+                          // alone marks the message as burn-on-read.
+                          if (message.secondsToBurn(DateTime.now()) != null) ...[
+                            const SizedBox(width: 2),
+                            Text(
+                              '${message.secondsToBurn(DateTime.now())}s',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontSize: 10,
+                                color: const Color(0xFFFF7043),
+                              ),
+                            ),
+                          ],
+                        ],
                       ],
                     ),
                   ),

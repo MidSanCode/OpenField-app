@@ -62,6 +62,15 @@ class ChatMessage {
   /// message while its file is still uploading.
   final double? uploadProgress;
 
+  /// Burn-after-read countdown armed on this message, in seconds. 0 = the
+  /// message never burns. The absolute deadline lives in [burnAt]; it is set
+  /// the first time a recipient (never the sender) reads the message.
+  final int burnSeconds;
+
+  /// The instant this message will burn (soft-deleted server-side and dropped
+  /// by every client). Null while nobody has read it yet.
+  final DateTime? burnAt;
+
   const ChatMessage({
     required this.id,
     required this.conversationId,
@@ -93,6 +102,8 @@ class ChatMessage {
     this.status = MessageStatus.sent,
     this.decryptedContent,
     this.uploadProgress,
+    this.burnSeconds = 0,
+    this.burnAt,
   }) : clientId = clientId ?? '';
 
   /// The sentinel user id stored in [mentions] for an @everyone mention.
@@ -136,6 +147,21 @@ class ChatMessage {
   bool get isPending => status == MessageStatus.sending;
   bool get isFailed => status == MessageStatus.failed;
 
+  /// True when this message is armed for burn-after-read and not yet deleted.
+  bool get isBurn => burnSeconds > 0 && !isDeleted;
+
+  /// True once a recipient has read the message and the countdown deadline is
+  /// known (burnAt set) but not yet reached.
+  bool get burnArmed => isBurn && burnAt != null;
+
+  /// Whole seconds left before this message burns, or null while the deadline
+  /// is unknown. Never negative.
+  int? secondsToBurn(DateTime now) {
+    if (!burnArmed) return null;
+    final left = burnAt!.difference(now).inSeconds;
+    return left < 0 ? 0 : left;
+  }
+
   String get displayName => senderName ?? 'Unknown';
 
   /// Stable ordering key: newest timestamp wins; ties broken by id so locally
@@ -178,6 +204,8 @@ class ChatMessage {
       clientId: clientId,
       status: status ?? MessageStatus.sent,
       decryptedContent: decryptedContent,
+      burnSeconds: burnSeconds,
+      burnAt: burnAt,
     );
   }
 
@@ -213,6 +241,8 @@ class ChatMessage {
     List<int>? mentions,
     String? clientId,
     MessageStatus? status,
+    int? burnSeconds,
+    Object? burnAt = _unset,
     Object? decryptedContent = _unset,
     Object? uploadProgress = _unset,
   }) {
@@ -245,6 +275,8 @@ class ChatMessage {
       mentions: mentions ?? this.mentions,
       clientId: clientId ?? this.clientId,
       status: status ?? this.status,
+      burnSeconds: burnSeconds ?? this.burnSeconds,
+      burnAt: identical(burnAt, _unset) ? this.burnAt : burnAt as DateTime?,
       decryptedContent: identical(decryptedContent, _unset)
           ? this.decryptedContent
           : decryptedContent as String?,
@@ -290,6 +322,8 @@ class ChatMessage {
       senderAvatarFrame: json['sender_avatar_frame'] as String? ?? '',
       attachments: attachments,
       mentions: _asIntList(json['mentions']),
+      burnSeconds: _asInt(json['burn_seconds']),
+      burnAt: _asDate(json['burn_at']),
     );
   }
 

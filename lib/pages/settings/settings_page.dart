@@ -47,6 +47,8 @@ class SettingsPage extends StatelessWidget {
                 const Divider(height: 1),
                 const _CardOpacityTile(),
                 const Divider(height: 1),
+                const _EncryptAttachmentsTile(),
+                const Divider(height: 1),
                 _DeveloperModeTile(),
               ],
             ),
@@ -496,6 +498,22 @@ class _LanguageTile extends StatelessWidget {
           }
         },
       ),
+    );
+  }
+}
+
+class _EncryptAttachmentsTile extends StatelessWidget {
+  const _EncryptAttachmentsTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsService>(context);
+    return SwitchListTile(
+      secondary: const Icon(Icons.lock_outline),
+      title: Text('encryptAttachments'.tr()),
+      subtitle: Text('encryptAttachmentsHint'.tr()),
+      value: settings.encryptAttachments,
+      onChanged: (value) => settings.setEncryptAttachments(value),
     );
   }
 }
