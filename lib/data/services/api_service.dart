@@ -568,59 +568,35 @@ class ApiService {
 
   /// Sends a multipart request while reporting byte-level upload progress as
   /// a fraction in [0, 1]. Falls back to the plain path when no [onProgress]
-  /// is given. The body is re-piped through a counting stream so progress
-  /// reflects actual bytes handed to the socket.
+  /// is given.
   ///
-  /// Note: this helper is currently unused by the chunked-upload path
-  /// (which switched to a simpler `request.send()` based pipeline below);
-  /// it is kept for the simple-upload path that still needs accurate
-  /// progress (single-shot multipart of a small file).
+  /// Uses the request's own send() which gives a fresh HTTP client per call
+  /// (same approach as the chunked-upload path). Progress is reported as
+  /// a simple 0 → 1 step because the per-byte stream counting pipeline we
+  /// had previously was the source of the "100% progress but server got
+  /// nothing" class of bugs.
   Future<http.Response> _sendMultipartProgressed(
     http.MultipartRequest request,
     ValueChanged<double>? onProgress,
   ) async {
     if (onProgress == null) return _send(request);
 
-    final byteStream = request.finalize();
-    final total = request.contentLength;
-    var sent = 0;
-
-    final streamed = http.StreamedRequest(request.method, request.url)
-      ..followRedirects = request.followRedirects
-      ..persistentConnection = request.persistentConnection
-      ..headers.addAll(request.headers)
-      ..contentLength = total;
-
-    byteStream
-        .map((chunk) {
-          sent += chunk.length;
-          if (total > 0) onProgress(sent / total);
-          return chunk;
-        })
-        .listen(streamed.sink.add,
-            onError: streamed.sink.addError,
-            onDone: streamed.sink.close,
-            cancelOnError: true);
-
-    try {
-      final response = await _client.send(streamed);
-      return await http.Response.fromStream(response);
-    } on http.ClientException catch (e) {
-      throw ApiException(0, e.message);
-    }
-  }
-
-  /// Sends a chunked-upload chunk and returns the [http.StreamedResponse].
-  /// Uses the request's own send() so the base client owns the body pipe
-  /// end-to-end and the response stream does not need a separate drain call.
-  /// Reusing the previous hand-rolled [StreamedRequest] + map + listen
-  /// pipeline in [_sendMultipartProgressed] left a window where the local
-  /// sink could finish before the IO socket had actually pushed every byte,
-  /// producing 100% progress on the client while the server saw no chunks.
-  Future<http.StreamedResponse> _sendChunkRequest(
-    http.MultipartRequest request,
-  ) async {
-    return _client.send(request);
+    onProgress(0);
+    // Use the request's own send() to avoid the stream-pipeline race where
+    // the byteStream listener could complete before the IO socket had
+    // finished flushing, causing 100% progress but no data on the server.
+    final streamed = await request.send();
+    final response = http.Response(
+      await streamed.stream.bytesToString(),
+      streamed.statusCode,
+      headers: streamed.headers,
+      request: streamed.request,
+      isRedirect: streamed.isRedirect,
+      persistentConnection: streamed.persistentConnection,
+      reasonPhrase: streamed.reasonPhrase,
+    );
+    onProgress(1);
+    return response;
   }
 
   /// Streams [url] to the local file [savePath], reporting progress. Returns
@@ -925,45 +901,48 @@ class ApiService {
       );
     }
 
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.parse('$baseUrl/attachments/chunk/$uploadId/$index'),
-    );
-    request.headers['Authorization'] = 'Bearer $accessToken';
-    request.files.add(http.MultipartFile.fromBytes('chunk', chunk));
+    // Build the chunk bytes once. We reuse the same bytes across attempts
+    // (so we never have to re-read the file) but we always build a fresh
+    // MultipartRequest for each attempt because request.finalize() marks
+    // the instance as finalized and re-finalize on the same instance
+    // throws StateError.
+    final requestUrl = Uri.parse('$baseUrl/attachments/chunk/$uploadId/$index');
     // Advance the progress bar to "this chunk started" so the UI does not
     // stall while a slow link is uploading. Per-byte progress is not worth
-    // the extra StreamedRequest pipeline (see _sendChunkRequest below) for
-    // a 4 MiB PUT that usually completes in under a second.
+    // the extra StreamedRequest pipeline for a 4 MiB PUT that usually
+    // completes in well under a second.
     onProgress(((index - 1) * chunkSizeBytes) / fileSize);
 
     // A transient network blip on any single chunk would otherwise surface
     // as a hard 409 "missing chunks" at the complete() step. Retry the
-    // chunk up to 3 times with a short backoff before giving up. Each
-    // attempt uses a fresh MultipartRequest because finalize() consumes the
-    // body stream and re-finalize on the same instance would yield nothing.
+    // chunk up to 3 times with a short backoff before giving up.
     const maxAttempts = 3;
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        // For retries we need a fresh MultipartRequest because the previous
-        // attempt's body stream is now fully consumed.
-        final attemptRequest = attempt == 1
-            ? request
-            : (http.MultipartRequest(
-                'POST',
-                Uri.parse('$baseUrl/attachments/chunk/$uploadId/$index'),
-              )
-              ..headers['Authorization'] = 'Bearer $accessToken'
-              ..files.add(http.MultipartFile.fromBytes('chunk', chunk)));
-        final response = await _sendChunkRequest(attemptRequest);
-        // Drain the response body so the connection is freed back into the
-        // pool. Without this the next chunk PUT on the same connection can
-        // stall waiting for the previous response to be fully consumed.
-        await response.stream.drain<void>();
+        // Use the request's own send() rather than the shared client.
+        // BaseRequest.send() spins up a fresh HttpClient per request, owns
+        // the connection for the full body write + response read, and
+        // closes it cleanly as soon as the response stream is consumed.
+        // The shared-client path we had before worked on paper but in
+        // practice produced spurious 400s once multiple chunks were in
+        // flight: the HttpClient's pooled connection had buffered bytes
+        // from the previous chunk's response that the server-side
+        // multipart parser then interpreted as the start of the next
+        // chunk's body. A fresh client per chunk is more expensive (no
+        // TCP keep-alive) but eliminates the entire class of "previous
+        // request state leaked into next request" failures.
+        final attemptRequest = http.MultipartRequest('POST', requestUrl)
+          ..headers['Authorization'] = 'Bearer $accessToken'
+          ..files.add(http.MultipartFile.fromBytes('chunk', chunk));
+        final response = await attemptRequest.send();
+        // Read the response body so the temporary HttpClient can close its
+        // socket. For non-200 responses the body also carries the server
+        // error detail we want to surface to the caller.
+        final responseBody = await response.stream.bytesToString();
         if (response.statusCode != 200) {
           throw ApiException(response.statusCode,
-              'chunk $index upload failed (status ${response.statusCode})');
+              'chunk $index upload failed: $responseBody');
         }
         lastError = null;
         break;
