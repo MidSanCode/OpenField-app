@@ -934,7 +934,12 @@ class ApiService {
         // request state leaked into next request" failures.
         final attemptRequest = http.MultipartRequest('POST', requestUrl)
           ..headers['Authorization'] = 'Bearer $accessToken'
-          ..files.add(http.MultipartFile.fromBytes('chunk', chunk));
+          // filename is REQUIRED: Go's multipart parser files parts without a
+          // filename= attribute under MultipartForm.Value, so the server's
+          // FormFile("chunk") misses them and rejects the upload with 400
+          // "missing chunk field" (the bug that broke every 16MB+ upload).
+          ..files.add(http.MultipartFile.fromBytes('chunk', chunk,
+              filename: 'chunk.bin'));
         final response = await attemptRequest.send();
         // Read the response body so the temporary HttpClient can close its
         // socket. For non-200 responses the body also carries the server
@@ -2043,6 +2048,27 @@ class ApiService {
     if (response.statusCode == 404) return null;
     throw ApiException(response.statusCode,
         _decodeError(response, 'Failed to mark message read'));
+  }
+
+  /// Arms the burn-after-view countdown of [attachmentId] on the first view
+  /// by someone other than the uploader (the server rejects the uploader's
+  /// own call with 404). Returns the absolute burn deadline the server
+  /// stamped. Returns null when the attachment does not exist.
+  Future<DateTime?> armAttachmentBurn(
+      String accessToken, int attachmentId, int burnSeconds) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/attachments/$attachmentId/burn-arm'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'burn_seconds': burnSeconds}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final at = data['burn_at'];
+      return at is String ? DateTime.tryParse(at) : null;
+    }
+    if (response.statusCode == 404) return null;
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to arm attachment burn'));
   }
 
   /// Sets the current user's per-conversation notification preference

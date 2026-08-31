@@ -129,12 +129,16 @@ class _ConversationPageState extends State<ConversationPage> {
   Timer? _recordTimer;
 
   /// Burn-after-read state. When [_burnMode] is on, every message sent from
-  /// this page is armed to self-destruct [burnDurationSeconds] after the first
-  /// recipient reads it. Message ids already reported as read are tracked so
-  /// the read report fires exactly once per message.
-  static const int burnDurationSeconds = 10;
+  /// this page is armed to self-destruct [_burnDurationSeconds] after the first
+  /// recipient reads it. The duration is user-selectable (presets plus a
+  /// custom value, 5..86400 seconds, matching the server's validation).
+  /// Message ids already reported as read are tracked so the read report
+  /// fires exactly once per message.
+  static const int defaultBurnDurationSeconds = 10;
+  int _burnDurationSeconds = defaultBurnDurationSeconds;
   bool _burnMode = false;
   final Set<int> _burnReadRequested = {};
+  final Set<int> _burnAttRequested = {};
   Timer? _burnTimer;
 
   /// 1 MiB read window used when staging a file for E2EE encryption. The
@@ -196,8 +200,9 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   /// 1 Hz burn tick. Drops bubbles whose burn deadline has passed (the server
-  /// sweeper independently soft-deletes and pushes the tombstone) and rebuilds
-  /// the list while any countdown is running so the seconds label stays live.
+  /// sweeper independently soft-deletes and pushes the tombstone), flips
+  /// burned attachments to their placeholder, and rebuilds the list while any
+  /// countdown is running so the seconds label stays live.
   void _onBurnTick() {
     if (_messages.isEmpty) return;
     final now = DateTime.now();
@@ -209,7 +214,11 @@ class _ConversationPageState extends State<ConversationPage> {
         final tomb = m.copyWith(deletedAt: m.burnAt);
         next.add(tomb);
         _store.upsertMessage(tomb);
-      } else if (m.burnArmed) {
+      } else if (m.burnArmed ||
+          m.attachments.any((a) => a.burnAt != null && !a.isBurned(now))) {
+        // Message countdown or an armed attachment countdown is running:
+        // rebuild so countdown labels stay live and burned placeholders
+        // appear the moment their deadline passes.
         needsRebuild = true;
         next.add(m);
       } else {
@@ -262,9 +271,195 @@ class _ConversationPageState extends State<ConversationPage> {
     }
   }
 
-  /// Toggles burn-after-read mode for outgoing messages.
-  void _toggleBurnMode() {
-    setState(() => _burnMode = !_burnMode);
+  /// A recipient opened one of [message]'s attachments. For burn-armed
+  /// messages this arms every still-armed attachment's burn-after-view
+  /// countdown with the message's burn duration (the uploader's own views are
+  /// rejected server-side and skipped locally). The stamped deadline is
+  /// written back onto the local message so the burned state renders
+  /// immediately, and the storage sweeper deletes the object when it passes.
+  Future<void> _onAttachmentViewed(ChatMessage message) async {
+    if (!message.isBurn || message.senderId == _myUserId) return;
+    final targets = message.attachments
+        .where((a) =>
+            a.id > 0 &&
+            a.burnAt == null &&
+            !_burnAttRequested.contains(a.id))
+        .map((a) => a.id)
+        .toList();
+    if (targets.isEmpty) return;
+    _burnAttRequested.addAll(targets);
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    for (final id in targets) {
+      try {
+        final armedAt = await _apiService.armAttachmentBurn(
+            token, id, message.burnSeconds);
+        if (!mounted) return;
+        setState(() {
+          _messages = _messages.map((m) {
+            if (m.id != message.id) return m;
+            if (armedAt == null) return m;
+            return m.copyWith(
+              attachments: m.attachments
+                  .map((a) => a.id == id
+                      ? Attachment(
+                          id: a.id,
+                          originalName: a.originalName,
+                          mimeType: a.mimeType,
+                          sizeBytes: a.sizeBytes,
+                          url: a.url,
+                          thumbUrl: a.thumbUrl,
+                          visibility: a.visibility,
+                          cryptoVersion: a.cryptoVersion,
+                          cryptoNonce: a.cryptoNonce,
+                          originalMime: a.originalMime,
+                          realName: a.realName,
+                          bucket: a.bucket,
+                          createdAt: a.createdAt,
+                          burnAt: armedAt,
+                        )
+                      : a)
+                  .toList(),
+            );
+          }).toList();
+        });
+      } catch (_) {
+        _burnAttRequested.remove(id);
+      }
+    }
+  }
+
+  /// Burned-attachment placeholders for a message: one row per attachment
+  /// whose burn-after-view deadline has passed. The server's storage sweeper
+  /// deletes the object at the same deadline, so nothing loadable remains.
+  List<Widget> _buildBurnedAttachmentPlaceholders(ChatMessage message) {
+    final now = DateTime.now();
+    return message.attachments
+        .where((a) => !a.isAudio && a.isBurned(now))
+        .map((a) => Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 2),
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.local_fire_department,
+                        size: 16, color: Color(0xFFFF7043)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'attachmentBurned'.tr(),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ))
+        .toList();
+  }
+
+  /// Opens the burn-after-read duration picker. Choosing "off" disables burn
+  /// mode; presets and a custom value (5..86400 seconds, matching the server
+  /// validation) arm it for subsequent messages.
+  Future<void> _showBurnPicker() async {
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      builder: (sheetContext) {
+        var custom = _burnMode ? _burnDurationSeconds : defaultBurnDurationSeconds;
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            Widget option(int seconds, String label) => ListTile(
+                  dense: true,
+                  leading: Icon(
+                    _burnMode && _burnDurationSeconds == seconds
+                        ? Icons.local_fire_department
+                        : Icons.local_fire_department_outlined,
+                    size: 20,
+                    color: _burnMode && _burnDurationSeconds == seconds
+                        ? Theme.of(sheetContext).colorScheme.error
+                        : null,
+                  ),
+                  title: Text(label),
+                  onTap: () => Navigator.of(sheetContext).pop(seconds),
+                );
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.local_fire_department,
+                            size: 18, color: Color(0xFFFF7043)),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('burnAfterRead'.tr())),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.block, size: 20),
+                    title: Text('off'.tr()),
+                    onTap: () => Navigator.of(sheetContext).pop(0),
+                  ),
+                  option(5, '5s'),
+                  option(10, '10s'),
+                  option(30, '30s'),
+                  option(60, '1min'),
+                  option(300, '5min'),
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.tune, size: 20),
+                    title: TextField(
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                        labelText: 'burnCustomSeconds'.tr(),
+                        hintText: '5 - 86400',
+                      ),
+                      onChanged: (v) =>
+                          setSheetState(() => custom = int.tryParse(v) ?? 0),
+                    ),
+                    trailing: TextButton(
+                      onPressed: custom >= 5 && custom <= 86400
+                          ? () => Navigator.of(sheetContext).pop(custom)
+                          : null,
+                      child: Text('confirm'.tr()),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (picked == 0) {
+        _burnMode = false;
+      } else {
+        _burnMode = true;
+        _burnDurationSeconds = picked;
+      }
+    });
   }
 
   /// Handles realtime push events for this conversation.
@@ -1253,7 +1448,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final replyToId = _replyToId;
     final mentions = _extractMentions(content);
     final cipher = _isEncrypted ? _encryptOutgoing(content) : content;
-    final burnSeconds = _burnMode ? burnDurationSeconds : 0;
+    final burnSeconds = _burnMode ? _burnDurationSeconds : 0;
     // Capture and clear the staged attachments so the UI is reset immediately.
     final localPaths = List<String>.of(_pendingPaths);
     final existingIds = List<int>.of(_pendingExistingIds);
@@ -2111,6 +2306,9 @@ class _ConversationPageState extends State<ConversationPage> {
                   onRetry: (message.isFailed && authToken != null)
                       ? () => _dispatchSend(message, authToken)
                       : null,
+                  onAttachmentViewed: () => _onAttachmentViewed(message),
+                  buildBurnedPlaceholders: () =>
+                      _buildBurnedAttachmentPlaceholders(message),
                 );
               }
               // The jump target from history search carries a GlobalKey so it
@@ -2384,14 +2582,16 @@ class _ConversationPageState extends State<ConversationPage> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 IconButton(
-                  onPressed: _toggleBurnMode,
+                  onPressed: _showBurnPicker,
                   icon: Icon(
                     _burnMode
                         ? Icons.local_fire_department
                         : Icons.local_fire_department_outlined,
                     color: _burnMode ? theme.colorScheme.error : null,
                   ),
-                  tooltip: 'burnAfterRead'.tr(),
+                  tooltip: _burnMode
+                      ? '${'burnAfterRead'.tr()} · ${_burnDurationSeconds}s'
+                      : 'burnAfterRead'.tr(),
                 ),
                 if (showVoiceToggle)
                   IconButton(
@@ -2734,6 +2934,13 @@ class _MessageBubble extends StatelessWidget {
   final VoidCallback onLongPress;
   final VoidCallback? onRetry;
 
+  /// Called when the recipient opens one of the message's attachments; arms
+  /// the burn-after-view countdown for burn-armed messages.
+  final VoidCallback? onAttachmentViewed;
+
+  /// Renders one burned placeholder row per expired attachment.
+  final List<Widget> Function()? buildBurnedPlaceholders;
+
   const _MessageBubble({
     required this.message,
     required this.isMine,
@@ -2746,6 +2953,8 @@ class _MessageBubble extends StatelessWidget {
     this.senderTitle = '',
     this.replyPreview,
     this.onRetry,
+    this.onAttachmentViewed,
+    this.buildBurnedPlaceholders,
   });
 
   @override
@@ -2938,11 +3147,20 @@ class _MessageBubble extends StatelessWidget {
                             ),
                           if (message.attachments.any((a) => !a.isAudio)) ...[
                             const SizedBox(height: 8),
+                            // Burn-after-view: attachments whose deadline has
+                            // passed render as a burned placeholder instead
+                            // of media; armed ones get a countdown strip and
+                            // the first recipient opening one arms the
+                            // countdown server-side.
+                            ...?buildBurnedPlaceholders?.call(),
                             AttachmentView(
                               attachments: message.attachments
-                                  .where((a) => !a.isAudio)
+                                  .where((a) =>
+                                      !a.isAudio &&
+                                      !a.isBurned(DateTime.now()))
                                   .toList(),
                               conversationId: conversationId,
+                              onOpen: onAttachmentViewed,
                             ),
                           ],
                         ],

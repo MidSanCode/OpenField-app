@@ -103,7 +103,12 @@ class _PluginsPageState extends State<PluginsPage> {
       ),
       body: Column(
         children: [
-          SecureBootBanner(probing: gate.state == PluginGateState.probing),
+          // Only render the secure-boot strip while the gate is actually
+          // blocking plugins. It used to render unconditionally, so even a
+          // fully-verified online session kept showing "cannot detect the
+          // server — plugins stopped" forever.
+          if (!gate.allowsPlugins)
+            SecureBootBanner(probing: gate.state == PluginGateState.probing),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Row(

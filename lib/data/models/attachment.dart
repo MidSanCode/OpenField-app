@@ -23,6 +23,12 @@ class Attachment {
   /// When the attachment was uploaded (server timestamp).
   final DateTime? createdAt;
 
+  /// Burn-after-view deadline (server timestamp). Set the first time someone
+  /// other than the uploader views the attachment; once it passes the server
+  /// deletes the object and every client shows the burned placeholder.
+  /// Null = not armed (attachment is not on a burn message / never viewed).
+  final DateTime? burnAt;
+
   Attachment({
     required this.id,
     required this.originalName,
@@ -37,6 +43,7 @@ class Attachment {
     this.realName = '',
     this.bucket = '',
     this.createdAt,
+    this.burnAt,
   });
 
   factory Attachment.fromJson(Map<String, dynamic> json) {
@@ -58,6 +65,9 @@ class Attachment {
       bucket: json['bucket'] as String? ?? '',
       createdAt: json['created_at'] is String
           ? DateTime.tryParse(json['created_at'] as String)
+          : null,
+      burnAt: json['burn_at'] is String
+          ? DateTime.tryParse(json['burn_at'] as String)
           : null,
     );
   }
@@ -129,6 +139,19 @@ class Attachment {
     if (mimeType.isNotEmpty && !_isGenericMime) return false;
     final ext = _extensionFromUrl.toLowerCase();
     return extensions.contains(ext);
+  }
+
+  /// True once the burn-after-view deadline has passed: the server has (or
+  /// will within one sweep tick) deleted the object, so render the burned
+  /// placeholder instead of the media.
+  bool isBurned(DateTime now) => burnAt != null && !burnAt!.isAfter(now);
+
+  /// Seconds left before the burn-after-view deadline, or null when unarmed /
+  /// already burned.
+  int? secondsToBurn(DateTime now) {
+    if (burnAt == null) return null;
+    final diff = burnAt!.difference(now).inSeconds;
+    return diff > 0 ? diff : null;
   }
 
   bool get _isGenericMime =>
