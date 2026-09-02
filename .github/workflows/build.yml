@@ -153,10 +153,12 @@ jobs:
         run: flutter pub get
       - name: Build
         run: flutter build macos --release --build-name=$BUILD_NAME --build-number=$BUILD_NUMBER --dart-define-from-file=config.json
-      - run: |
+      # Ship just the .app bundle — dSYMs / build logs / pod files from the
+      # Products directory are build debris nobody installs.
+      - name: Package app bundle
+        run: |
           cd build/macos/Build/Products/Release
-          zip -r ../../../../../openfield-macos-${{ env.BUILD_NAME }}.zip .
-          cd -
+          zip -qry ../../../../../openfield-macos-${{ env.BUILD_NAME }}.zip Runner.app
       - uses: actions/upload-artifact@v4
         with:
           name: openfield-macOS
@@ -331,7 +333,11 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
       - name: Build web
-        run: flutter build web --release --dart-define-from-file=config.json
+        # --no-wasm-dry-run: the wasm compatibility scan walks every
+        # transitive import and hard-fails on dart:ffi (flutter_js) and
+        # dart:html (flutter_secure_storage_web) even though we only ship the
+        # JS build. Skip the scan; no wasm artifact is produced either way.
+        run: flutter build web --release --no-wasm-dry-run --dart-define-from-file=config.json
       - name: Create zip archive
         run: |
           cd build/web
