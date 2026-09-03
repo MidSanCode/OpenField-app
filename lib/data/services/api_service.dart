@@ -688,6 +688,168 @@ class ApiService {
     return _uploadAttachmentChunked(file, size, accessToken, visibility: visibility, onProgress: onProgress);
   }
 
+  /// Uploads an in-memory byte buffer as an attachment. This is the web path
+  /// (browsers have no filesystem to read a path from) but works on every
+  /// platform. Small payloads go through the single-request endpoint; large
+  /// ones through the same chunked pipeline as [uploadAttachmentSmart].
+  Future<Attachment> uploadAttachmentBytes(
+    List<int> bytes,
+    String filename,
+    String accessToken, {
+    String visibility = 'public',
+    ValueChanged<double>? onProgress,
+  }) async {
+    final existing = await _findAttachmentByHash(
+      sha256.convert(bytes).toString(),
+      accessToken,
+    );
+    if (existing != null) {
+      onProgress?.call(1);
+      return existing;
+    }
+
+    if (bytes.length < chunkedUploadThreshold) {
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/attachments'));
+      request.headers['Authorization'] = 'Bearer $accessToken';
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: filename,
+        contentType: _mediaTypeFor(filename),
+      ));
+      request.fields['visibility'] = visibility;
+      final response = await _sendMultipartProgressed(request, onProgress);
+      final data = _decodeMap(response);
+      if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
+        return Attachment.fromJson(data);
+      }
+      throw ApiException(
+          response.statusCode,
+          _decodeError(response, 'Upload failed (${response.statusCode})'));
+    }
+    return _uploadAttachmentBytesChunked(
+        Uint8List.fromList(bytes), filename, accessToken,
+        visibility: visibility, onProgress: onProgress);
+  }
+
+  /// Chunked upload for an in-memory buffer: mirrors
+  /// [_uploadAttachmentChunked] but slices [bytes] instead of reading a file.
+  Future<Attachment> _uploadAttachmentBytesChunked(
+    Uint8List bytes,
+    String filename,
+    String accessToken, {
+    required String visibility,
+    ValueChanged<double>? onProgress,
+  }) async {
+    final fileSize = bytes.length;
+    final totalChunks = (fileSize / chunkSizeBytes).ceil();
+    final mimeType = _mediaTypeFor(filename).toString();
+
+    final init = await _post(
+      Uri.parse('$baseUrl/attachments/chunk/init'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        'filename': filename,
+        'size': fileSize,
+        'total_chunks': totalChunks,
+        'mime_type': mimeType,
+        'visibility': visibility,
+      }),
+    );
+    final initData = _decodeMap(init);
+    if (init.statusCode != 201 || initData == null) {
+      throw ApiException(init.statusCode, _decodeError(init, 'Failed to start upload'));
+    }
+    final uploadId = initData['upload_id'] as String;
+
+    final uploaded = await _uploadedChunks(uploadId, accessToken);
+    for (var attempt = 1; attempt <= _maxCompleteAttempts; attempt++) {
+      final pending = _missingChunks(uploaded, totalChunks);
+      if (pending.isEmpty) break;
+      for (final index in pending) {
+        final start = (index - 1) * chunkSizeBytes;
+        final length = (start + chunkSizeBytes > fileSize)
+            ? fileSize - start
+            : chunkSizeBytes;
+        final chunk = bytes.sublist(start, start + length);
+        await _uploadChunkBytes(chunk, uploadId, accessToken, index, fileSize,
+            onProgress);
+        uploaded.add(index);
+      }
+
+      final complete = await _post(
+        Uri.parse('$baseUrl/attachments/chunk/$uploadId/complete'),
+        headers: _headers(token: accessToken),
+        body: jsonEncode({
+          'filename': filename,
+          'size': fileSize,
+          'total_chunks': totalChunks,
+          'mime_type': mimeType,
+          'visibility': visibility,
+        }),
+      );
+      if (complete.statusCode == 200 || complete.statusCode == 201) {
+        final data = _decodeMap(complete);
+        if (data != null) {
+          onProgress?.call(1);
+          return Attachment.fromJson(data);
+        }
+        throw ApiException(complete.statusCode,
+            _decodeError(complete, 'Failed to finish upload'));
+      }
+      if (complete.statusCode != 409) {
+        throw ApiException(complete.statusCode,
+            _decodeError(complete, 'Failed to finish upload'));
+      }
+      final refreshed = await _uploadedChunks(uploadId, accessToken);
+      uploaded
+        ..clear()
+        ..addAll(refreshed);
+    }
+    final stillMissing = _missingChunks(uploaded, totalChunks);
+    final detail = stillMissing.isEmpty
+        ? ''
+        : ' (still missing chunks: ${stillMissing.join(', ')})';
+    throw ApiException(
+        409, 'missing chunks$detail — upload aborted after $_maxCompleteAttempts retries');
+  }
+
+  /// Single chunk PUT from an in-memory buffer, with the same 3-attempt
+  /// retry/backoff policy as the file-based path.
+  Future<void> _uploadChunkBytes(
+    Uint8List chunk,
+    String uploadId,
+    String accessToken,
+    int index,
+    int fileSize,
+    ValueChanged<double>? onProgress,
+  ) async {
+    final requestUrl = Uri.parse('$baseUrl/attachments/chunk/$uploadId/$index');
+    onProgress?.call(((index - 1) * chunkSizeBytes) / fileSize);
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final attemptRequest = http.MultipartRequest('POST', requestUrl)
+          ..headers['Authorization'] = 'Bearer $accessToken'
+          // filename is REQUIRED: Go's multipart parser files parts without a
+          // filename= attribute under MultipartForm.Value, so the server's
+          // FormFile("chunk") misses them and rejects the upload with 400.
+          ..files.add(http.MultipartFile.fromBytes('chunk', chunk,
+              filename: 'chunk.bin'));
+        final response = await attemptRequest.send();
+        final responseBody = await response.stream.bytesToString();
+        if (response.statusCode != 200) {
+          throw ApiException(response.statusCode,
+              'chunk $index upload failed: $responseBody');
+        }
+        return;
+      } catch (e) {
+        if (attempt == maxAttempts) rethrow;
+        await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
+      }
+    }
+  }
+
   /// Computes the hex-encoded SHA-256 of a file without loading it fully into
   /// memory, so even large files can be hashed for upload deduplication.
   Future<String> _fileSha256(String filePath) async {

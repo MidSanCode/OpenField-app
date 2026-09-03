@@ -80,6 +80,9 @@ class _ConversationPageState extends State<ConversationPage> {
   /// are uploaded together with the text caption when the user hits send, so
   /// a message can carry several attachments and a caption at once.
   final List<String> _pendingPaths = [];
+  /// Staged web picks: browsers have no filesystem, so FilePicker hands back
+  /// in-memory bytes + a name instead of a path. Held until send.
+  final List<StagedWebFile> _pendingWebFiles = [];
   /// Staged existing server attachment ids reused from past uploads.
   final List<int> _pendingExistingIds = [];
   int? _replyToId;
@@ -1424,7 +1427,9 @@ class _ConversationPageState extends State<ConversationPage> {
       return;
     }
     final content = _inputController.text.trim();
-    final hasPending = _pendingPaths.isNotEmpty || _pendingExistingIds.isNotEmpty;
+    final hasPending = _pendingPaths.isNotEmpty ||
+        _pendingWebFiles.isNotEmpty ||
+        _pendingExistingIds.isNotEmpty;
     // Allow a caption-less media message, but never send an empty message.
     if (content.isEmpty && !hasPending) return;
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -1451,6 +1456,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final burnSeconds = _burnMode ? _burnDurationSeconds : 0;
     // Capture and clear the staged attachments so the UI is reset immediately.
     final localPaths = List<String>.of(_pendingPaths);
+    final webFiles = List<StagedWebFile>.of(_pendingWebFiles);
     final existingIds = List<int>.of(_pendingExistingIds);
     setState(() {
       _inputController.clear();
@@ -1458,6 +1464,7 @@ class _ConversationPageState extends State<ConversationPage> {
       _mentionCandidates = [];
       _mentionShowEveryone = false;
       _pendingPaths.clear();
+      _pendingWebFiles.clear();
       _pendingExistingIds.clear();
     });
     // Keep keyboard focus on the composer: on desktop the send button grabs
@@ -1485,8 +1492,8 @@ class _ConversationPageState extends State<ConversationPage> {
     );
     setState(() => _messages = _sorted([..._messages, local]));
     _scrollToBottom();
-    if (localPaths.isNotEmpty || existingIds.isNotEmpty) {
-      _dispatchSendWithAttachments(local, token, localPaths, existingIds);
+    if (localPaths.isNotEmpty || webFiles.isNotEmpty || existingIds.isNotEmpty) {
+      _dispatchSendWithAttachments(local, token, localPaths, webFiles, existingIds);
     } else {
       _dispatchSend(local, token);
     }
@@ -1519,10 +1526,13 @@ class _ConversationPageState extends State<ConversationPage> {
   /// Dispatches a message carrying one or more attachments plus an optional
   /// text caption. Each staged file is uploaded (with GPS stripping for E2EE
   /// images) and the resulting attachment ids are sent in a single message.
+  /// Web picks arrive as in-memory [webFiles] (no filesystem on browsers);
+  /// native picks arrive as [localPaths].
   Future<void> _dispatchSendWithAttachments(
     ChatMessage local,
     String token,
     List<String> localPaths,
+    List<StagedWebFile> webFiles,
     List<int> existingIds,
   ) async {
     _markStatus(local.clientId, MessageStatus.sending);
@@ -1534,6 +1544,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final encryptFiles = _isEncrypted &&
         Provider.of<SettingsService>(context, listen: false).encryptAttachments;
     try {
+      final totalCount = localPaths.length + webFiles.length;
       for (var i = 0; i < localPaths.length; i++) {
         final srcPath = localPaths[i];
         String uploadPath = srcPath;
@@ -1573,13 +1584,42 @@ class _ConversationPageState extends State<ConversationPage> {
           await cipherFile.writeAsBytes(crypto.cipher, flush: true);
           uploadPath = cipherFile.path;
         }
-        final base = i / localPaths.length;
+        final base = i / totalCount;
         final attachment = await _apiService.uploadAttachmentSmart(
           uploadPath,
           token,
           visibility: _isEncrypted ? 'private' : 'public',
           onProgress: (p) => _updateUploadProgress(
-              local.clientId, (base + p / localPaths.length).clamp(0.0, 1.0)),
+              local.clientId, (base + p / totalCount).clamp(0.0, 1.0)),
+        );
+        attachmentIds.add(attachment.id);
+      }
+      for (var i = 0; i < webFiles.length; i++) {
+        final staged = webFiles[i];
+        var bytes = staged.bytes;
+        if (encryptFiles) {
+          final crypto = await E2eeService.instance
+              .encryptAttachment(widget.conversationId, bytes);
+          if (crypto == null) {
+            if (mounted) {
+              _markStatus(local.clientId, MessageStatus.failed);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(_e2eeWaitForMember
+                      ? 'e2eeWaitOtherMember'.tr()
+                      : 'e2eeKeysPending'.tr())));
+            }
+            return;
+          }
+          bytes = crypto.cipher;
+        }
+        final base = (localPaths.length + i) / totalCount;
+        final attachment = await _apiService.uploadAttachmentBytes(
+          bytes,
+          staged.name,
+          token,
+          visibility: _isEncrypted ? 'private' : 'public',
+          onProgress: (p) => _updateUploadProgress(
+              local.clientId, (base + p / totalCount).clamp(0.0, 1.0)),
         );
         attachmentIds.add(attachment.id);
       }
@@ -2553,7 +2593,9 @@ class _ConversationPageState extends State<ConversationPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_pendingPaths.isNotEmpty || _pendingExistingIds.isNotEmpty)
+            if (_pendingPaths.isNotEmpty ||
+                _pendingWebFiles.isNotEmpty ||
+                _pendingExistingIds.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
                 child: Wrap(
@@ -2567,6 +2609,14 @@ class _ConversationPageState extends State<ConversationPage> {
                         deleteIcon: const Icon(Icons.close, size: 16),
                         onDeleted: () =>
                             setState(() => _pendingPaths.remove(path)),
+                      ),
+                    for (final staged in _pendingWebFiles)
+                      Chip(
+                        label: Text(staged.name,
+                            overflow: TextOverflow.ellipsis),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () =>
+                            setState(() => _pendingWebFiles.remove(staged)),
                       ),
                     for (final id in _pendingExistingIds)
                       Chip(
@@ -2747,22 +2797,53 @@ class _ConversationPageState extends State<ConversationPage> {
       final picker = ImagePicker();
       final files = await picker.pickMultiImage();
       if (!mounted || files.isEmpty) return;
-      setState(() => _pendingPaths
-          .addAll(files.map((f) => f.path).where((p) => p.isNotEmpty)));
+      if (kIsWeb) {
+        // Browsers return XFile bytes without any path: stage the in-memory
+        // bytes directly instead of dropping the pick silently.
+        final staged = <StagedWebFile>[];
+        for (final f in files) {
+          final bytes = await f.readAsBytes();
+          staged.add(StagedWebFile(name: f.name, bytes: bytes));
+        }
+        if (!mounted) return;
+        setState(() => _pendingWebFiles.addAll(staged));
+      } else {
+        setState(() => _pendingPaths
+            .addAll(files.map((f) => f.path).where((p) => p.isNotEmpty)));
+      }
     } else if (source == 'file') {
       final result = await FilePicker.platform.pickFiles(
-          type: FileType.any, allowMultiple: true);
+          type: FileType.any, allowMultiple: true, withData: kIsWeb);
       if (!mounted) return;
-      final paths = (result?.files ?? const [])
-          .where((f) => f.path != null)
-          .map((f) => f.path!)
-          .toList();
-      if (paths.isEmpty) return;
-      setState(() => _pendingPaths.addAll(paths));
+      if (kIsWeb) {
+        final staged = (result?.files ?? const [])
+            .where((f) => f.bytes != null)
+            .map((f) => StagedWebFile(name: f.name, bytes: f.bytes!))
+            .toList();
+        if (staged.isEmpty) return;
+        setState(() => _pendingWebFiles.addAll(staged));
+      } else {
+        final paths = (result?.files ?? const [])
+            .where((f) => f.path != null)
+            .map((f) => f.path!)
+            .toList();
+        if (paths.isEmpty) return;
+        setState(() => _pendingPaths.addAll(paths));
+      }
     } else if (source == 'uploads') {
       await _pickExistingAttachments();
     }
   }
+}
+
+/// A file picked inside the browser: pickers hand back in-memory bytes and a
+/// filename (there is no filesystem path on web). Uploaded through the
+/// byte-based attachment APIs.
+class StagedWebFile {
+  StagedWebFile({required this.name, required this.bytes});
+
+  final String name;
+  final Uint8List bytes;
 }
 
 /// Lets the user reuse previously uploaded files by picking one or more
