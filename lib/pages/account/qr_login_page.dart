@@ -159,6 +159,9 @@ class _QrApproverViewState extends State<_QrApproverView> {
 
   @override
   void dispose() {
+    // stop() before dispose(): on iOS the AVCaptureSession teardown races
+    // an active session and can abort the app when disposing mid-stream.
+    _controller.stop().catchError((_) {});
     _controller.dispose();
     super.dispose();
   }
@@ -192,10 +195,28 @@ class _QrApproverViewState extends State<_QrApproverView> {
         children: [
           MobileScanner(
             controller: _controller,
+            errorBuilder: (context, error, child) {
+              // Camera permission denied / camera unavailable: show a
+              // readable screen instead of an empty preview.
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'qrLoginCameraUnavailable'.tr(),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              );
+            },
             onDetect: (capture) {
+              // Barcode frames keep arriving while the approval request is
+              // in flight; the guard also stops double-fires racing the
+              // controller stop + page pop (a known crash shape on iOS).
+              if (_approving) return;
               final code = capture.barcodes.firstOrNull?.rawValue;
               if (code != null && code.isNotEmpty) {
-                _controller.stop();
+                _controller.stop().catchError((_) {});
                 _approve(code);
               }
             },

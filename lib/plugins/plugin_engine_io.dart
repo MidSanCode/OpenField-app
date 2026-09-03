@@ -54,6 +54,9 @@ class PluginEngineImpl implements PluginEngine {
   @override
   bool get running => _started && _runtime != null;
 
+  /// Storage namespace prefix, isolated per plugin id.
+  String get _storageNamespace => 'plugin_${manifest.id}_';
+
   // ------------------------------------------------------------------
   // Lifecycle
   // ------------------------------------------------------------------

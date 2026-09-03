@@ -684,6 +684,7 @@
   "qrLoginWaiting": "等待批准…",
   "qrLoginExpired": "二维码已过期，点击刷新",
   "qrLoginScanHint": "将摄像头对准另一台设备上显示的二维码",
+  "qrLoginCameraUnavailable": "相机不可用。请在系统设置中允许 OpenField 使用相机。",
   "qrLoginApprove": "批准登录",
   "qrLoginApproved": "已批准登录",
   "qrLoginSubtitle": "在其他设备上登录",

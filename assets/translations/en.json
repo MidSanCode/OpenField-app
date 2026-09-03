@@ -684,6 +684,7 @@
   "qrLoginWaiting": "Waiting for approval…",
   "qrLoginExpired": "Code expired, tap to refresh",
   "qrLoginScanHint": "Point your camera at the code shown on your other device",
+  "qrLoginCameraUnavailable": "Camera unavailable. Check that OpenField has camera permission in Settings.",
   "qrLoginApprove": "Approve login",
   "qrLoginApproved": "Login approved",
   "qrLoginSubtitle": "Sign in on another device",

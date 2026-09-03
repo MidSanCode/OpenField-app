@@ -39,6 +39,8 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>OpenField needs camera access so you can scan QR codes for cross-device login.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>OpenField needs microphone access so you can record voice messages in chats.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
