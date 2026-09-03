@@ -1,20 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:openfield/core/log/log_overlay.dart' show appNavigatorKey;
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/plugins/plugin_engine.dart';
+import 'package:openfield/plugins/plugin_fs.dart';
 import 'package:openfield/plugins/plugin_gate.dart';
 import 'package:openfield/plugins/plugin_manifest.dart';
+import 'package:openfield/plugins/plugin_prefs_box.dart';
 
 final _log = Logger('PluginManager');
+
+/// Platform file layer (dart:io on native; a clear-error stub on web).
+final PluginFileSystem _fs = getPluginFileSystem();
 
 /// Where one installed plugin came from.
 enum PluginOrigin { store, imported }
@@ -88,10 +91,7 @@ class PluginManager extends ChangeNotifier {
     if (_initialized) return;
     _initialized = true;
 
-    final support = await getApplicationSupportDirectory();
-    _pluginsDir =
-        '${support.path}${Platform.pathSeparator}plugins';
-    await Directory(_pluginsDir!).create(recursive: true);
+    _pluginsDir = await _fs.rootDir();
     await PluginPrefsBox.instance.ensureLoaded();
 
     await _scanInstalled();
@@ -137,24 +137,18 @@ class PluginManager extends ChangeNotifier {
   }
 
   Future<void> _scanInstalled() async {
-    final dir = Directory(_pluginsDir!);
-    if (!dir.existsSync()) return;
-    for (final entity in dir.listSync()) {
-      if (entity is! Directory) continue;
+    for (final entity in _fs.listDirs(_pluginsDir!)) {
       try {
-        final mfFile =
-            File('${entity.path}${Platform.pathSeparator}manifest.json');
-        if (!mfFile.existsSync()) continue;
-        final manifest = PluginManifest.fromJson(
-            jsonDecode(mfFile.readAsStringSync()) as Map<String, dynamic>);
+        final raw = _fs.readText('${entity.path}/manifest.json');
+        if (raw == null) continue;
+        final manifest =
+            PluginManifest.fromJson(jsonDecode(raw) as Map<String, dynamic>);
         var origin = PluginOrigin.imported;
         var verified = false;
-        final metaFile =
-            File('${entity.path}${Platform.pathSeparator}.ofmeta.json');
-        if (metaFile.existsSync()) {
+        final metaRaw = _fs.readText('${entity.path}/.ofmeta.json');
+        if (metaRaw != null) {
           try {
-            final meta =
-                jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
+            final meta = jsonDecode(metaRaw) as Map<String, dynamic>;
             origin = meta['origin'] == 'store'
                 ? PluginOrigin.store
                 : PluginOrigin.imported;
@@ -241,26 +235,21 @@ class PluginManager extends ChangeNotifier {
       throw FormatException('缺少入口脚本 ${manifest.entry}');
     }
 
-    final target =
-        Directory('$_pluginsDir${Platform.pathSeparator}${manifest.id}');
-    if (target.existsSync()) target.deleteSync(recursive: true);
-    target.createSync(recursive: true);
+    final target = '$_pluginsDir/${manifest.id}';
+    _fs.deleteRecursive(target);
     for (final entry in files.entries) {
-      File('${target.path}${Platform.pathSeparator}${entry.key}')
-          .writeAsBytesSync(entry.value);
+      _fs.writeBytes('$target/${entry.key}', entry.value);
     }
-    File('${target.path}${Platform.pathSeparator}manifest.json')
-        .writeAsStringSync(
-            const JsonEncoder.withIndent('  ').convert(manifest.toJson()));
-    File('${target.path}${Platform.pathSeparator}.ofmeta.json')
-        .writeAsStringSync(jsonEncode({
+    _fs.writeText('$target/manifest.json',
+        const JsonEncoder.withIndent('  ').convert(manifest.toJson()));
+    _fs.writeText('$target/.ofmeta.json', jsonEncode({
       'origin': origin.name,
       'verified': verified,
     }));
 
     final installed = InstalledPlugin(
       manifest: manifest,
-      dir: target.path,
+      dir: target,
       origin: origin,
       verifiedFromStore: verified,
     );
@@ -279,7 +268,7 @@ class PluginManager extends ChangeNotifier {
     if (installed != null) {
       PluginPrefsBox.instance.removeNamespace('plugin_${installed.manifest.id}_');
       try {
-        Directory(installed.dir).deleteSync(recursive: true);
+        _fs.deleteRecursive(installed.dir);
       } catch (_) {}
     }
     await _persistPrefs();
