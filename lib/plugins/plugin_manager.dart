@@ -325,7 +325,7 @@ class PluginManager extends ChangeNotifier {
     // Tear down any previous instance first (upgrade / grant change).
     await _engines[id]?.stop();
 
-    final engine = PluginEngine(
+    final engine = PluginEngineImpl(
       manifest: installed.manifest,
       pluginDir: installed.dir,
     )

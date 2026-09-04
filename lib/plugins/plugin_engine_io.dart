@@ -104,7 +104,7 @@ class PluginEngineImpl implements PluginEngine {
   }
 
   /// Invokes `onUnload` (when defined) and tears the runtime down. Safe to
-  /// call repeatedly — used by disable/uninstall and by the secure-boot
+  /// call repeatedly 鈥?used by disable/uninstall and by the secure-boot
   /// offline shutdown path.
   @override
   Future<void> stop() async {
@@ -203,7 +203,7 @@ var of = {
 ''');
   }
 
-  /// Bridge entry: validate shape → check permission → execute → deliver.
+  /// Bridge entry: validate shape 鈫?check permission 鈫?execute 鈫?deliver.
   /// All failures are delivered back as rejected promises; nothing throws
   /// into the engine's dispatch loop.
   void _onBridgeRequest(dynamic args, Future<bool> Function(String) permCheck) {
@@ -369,7 +369,7 @@ var of = {
 
   /// Outbound HTTP limited to hosts declared in the manifest's allow-list.
   /// Even with the `http.fetch` permission granted, an undeclared host is
-  /// refused — this keeps a malicious "weather widget" from quietly
+  /// refused 鈥?this keeps a malicious "weather widget" from quietly
   /// exfiltrating data anywhere it likes.
   Future<Map<String, dynamic>> _httpFetch(String url, dynamic options) async {
     final uri = Uri.tryParse(url);
