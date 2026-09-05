@@ -123,6 +123,10 @@ class _ConversationPageState extends State<ConversationPage> {
   final GlobalKey _jumpKey = GlobalKey();
   int? _jumpTargetId;
 
+  /// Multi-select (forward) state. When non-empty the list is in selection
+  /// mode: taps toggle bubbles, the input bar is replaced by a forward bar.
+  final Set<int> _selectedMessageIds = {};
+
   /// Voice recording state. A tap on the mic starts recording; the input bar
   /// is replaced by a recording bar with cancel/send actions.
   final AudioRecorder _recorder = AudioRecorder();
@@ -1812,8 +1816,57 @@ class _ConversationPageState extends State<ConversationPage> {
     setState(() => _pendingExistingIds.addAll(picked));
   }
 
-  Future<void> _onMessageLongPress(ChatMessage message) async {
-    final isMine = message.senderId == _myUserId;
+  /// A message is forwardable when it carries something to copy (text or
+  /// attachments), has no burn timer and is not a tombstone. Check messages
+  /// are rejected server-side as well; the local check just hides the entry.
+  bool _isForwardable(ChatMessage message) {
+    if (message.isDeleted) return false;
+    if (message.burnSeconds > 0 || message.burnAt != null) return false;
+    return message.displayContent.trim().isNotEmpty ||
+        message.attachments.isNotEmpty;
+  }
+
+  /// Opens the target-conversation picker for the selected messages and, on
+  /// confirmation, calls the forward API. Selection mode exits afterwards.
+  Future<void> _openForwardPicker() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null) return;
+    try {
+      final conversations = await _apiService.listConversations(token);
+      if (!mounted) return;
+      final targets = await showModalBottomSheet<List<int>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => _ForwardPickerDialog(
+          conversations: conversations
+              .where((c) => c.id != widget.conversationId)
+              .toList(),
+        ),
+      );
+      if (targets == null || targets.isEmpty) return;
+      final forwarded = await _apiService.forwardMessages(
+        token,
+        widget.conversationId,
+        _selectedMessageIds.toList(),
+        targets,
+      );
+      if (!mounted) return;
+      setState(() => _selectedMessageIds.clear());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(
+                'chatForwardDone'.tr(namedArgs: {'count': '$forwarded'}))),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _selectedMessageIds.clear());
+        _showErrorSnackBar(e);
+      }
+    }
+  }
+
+  Future<void> _onMessageLongPress(ChatMessage message) async {    final isMine = message.senderId == _myUserId;
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     final action = await showModalBottomSheet<String>(
@@ -1835,6 +1888,18 @@ class _ConversationPageState extends State<ConversationPage> {
               title: Text('chatQuoteReply'.tr()),
               onTap: () => Navigator.of(ctx).pop('reply'),
             ),
+            if (!_isEncrypted && !message.isDeleted && _isForwardable(message)) ...[
+              ListTile(
+                leading: const Icon(Icons.shortcut_outlined),
+                title: Text('chatForward'.tr()),
+                onTap: () => Navigator.of(ctx).pop('forward'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.checklist_outlined),
+                title: Text('chatMultiSelect'.tr()),
+                onTap: () => Navigator.of(ctx).pop('multiselect'),
+              ),
+            ],
             if (isMine && !message.isDeleted) ...[
               const Divider(height: 1),
               ListTile(
@@ -1861,6 +1926,19 @@ class _ConversationPageState extends State<ConversationPage> {
         break;
       case 'reply':
         setState(() => _replyToId = message.id);
+        break;
+      case 'forward':
+        setState(() {
+          _selectedMessageIds.clear();
+          _selectedMessageIds.add(message.id);
+        });
+        await _openForwardPicker();
+        break;
+      case 'multiselect':
+        setState(() {
+          _selectedMessageIds.clear();
+          _selectedMessageIds.add(message.id);
+        });
         break;
       case 'edit':
         await _editMessage(message);
@@ -2321,6 +2399,7 @@ class _ConversationPageState extends State<ConversationPage> {
               }
               final msgIndex = index - (_hasOlder ? 1 : 0);
               final message = _messages[msgIndex];
+              final selected = _selectedMessageIds.contains(message.id);
               Widget child;
               if (message.isSystem) {
                 child = _SystemMessage(message: message);
@@ -2342,7 +2421,17 @@ class _ConversationPageState extends State<ConversationPage> {
                       ?.title ??
                       '',
                   replyPreview: replyTo,
-                  onLongPress: () => _onMessageLongPress(message),
+                  onLongPress: _selectedMessageIds.isEmpty
+                      ? () => _onMessageLongPress(message)
+                      : null,
+                  onTap: _selectedMessageIds.isNotEmpty
+                      ? () => setState(() {
+                            selected
+                                ? _selectedMessageIds.remove(message.id)
+                                : _selectedMessageIds.add(message.id);
+                          })
+                      : null,
+                  selected: selected,
                   onRetry: (message.isFailed && authToken != null)
                       ? () => _dispatchSend(message, authToken)
                       : null,
@@ -2376,8 +2465,71 @@ class _ConversationPageState extends State<ConversationPage> {
           ),
         if (_mentionCandidates.isNotEmpty || _mentionShowEveryone)
           _buildMentionSuggestions(),
-        _buildInputArea(),
+        if (_selectedMessageIds.isNotEmpty)
+          _buildForwardSelectionBar()
+        else
+          _buildInputArea(),
       ],
+    );
+  }
+
+  /// The action bar shown while messages are selected: selected count,
+  /// forward action, select-all and cancel. Replaces the input bar so a
+  /// stray keystroke cannot land in the wrong conversation.
+  Widget _buildForwardSelectionBar() {
+    final theme = Theme.of(context);
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final canSelectMore = _messages
+        .any((m) => !m.isSystem && _isForwardable(m) && !_selectedMessageIds.contains(m.id));
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        border: Border(
+            top: BorderSide(color: theme.colorScheme.outlineVariant)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'cancel'.tr(),
+              onPressed: () => setState(() => _selectedMessageIds.clear()),
+            ),
+            Expanded(
+              child: Text(
+                'chatForwardSelected'
+                    .tr(namedArgs: {'count': '${_selectedMessageIds.length}'}),
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+            TextButton(
+              onPressed: canSelectMore
+                  ? () => setState(() {
+                        for (final m in _messages) {
+                          if (!m.isSystem &&
+                              _isForwardable(m) &&
+                              m.id > 0 &&
+                              !_selectedMessageIds.contains(m.id)) {
+                            _selectedMessageIds.add(m.id);
+                          }
+                        }
+                      })
+                  : null,
+              child: Text('chatSelectAll'.tr()),
+            ),
+            const SizedBox(width: 4),
+            FilledButton.icon(
+              onPressed: authService.accessToken == null
+                  ? null
+                  : _openForwardPicker,
+              icon: const Icon(Icons.shortcut_outlined, size: 18),
+              label: Text('chatForward'.tr()),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -3012,7 +3164,12 @@ class _MessageBubble extends StatelessWidget {
   final String? senderAvatar;
   final String senderTitle;
   final ChatMessage? replyPreview;
-  final VoidCallback onLongPress;
+  final VoidCallback? onLongPress;
+  /// While messages are selected, taps toggle the selection instead of doing
+  /// nothing (bubbles have no other tap action).
+  final VoidCallback? onTap;
+  /// Selection highlight for the multi-select forward mode.
+  final bool selected;
   final VoidCallback? onRetry;
 
   /// Called when the recipient opens one of the message's attachments; arms
@@ -3030,6 +3187,8 @@ class _MessageBubble extends StatelessWidget {
     required this.isMentioned,
     required this.showSenderName,
     required this.onLongPress,
+    this.onTap,
+    this.selected = false,
     this.senderAvatar,
     this.senderTitle = '',
     this.replyPreview,
@@ -3070,7 +3229,21 @@ class _MessageBubble extends StatelessWidget {
           Flexible(
             child: GestureDetector(
               onLongPress: onLongPress,
-              child: Column(
+              onTap: onTap,
+              child: Container(
+                decoration: selected
+                    ? BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: theme.colorScheme.primary,
+                          width: 2,
+                        ),
+                      )
+                    : null,
+                padding: selected
+                    ? const EdgeInsets.all(2)
+                    : EdgeInsets.zero,
+                child: Column(
                 crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
                   if (showSenderName && message.displayName.isNotEmpty)
@@ -3331,6 +3504,7 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 ],
               ),
+              ),
             ),
           ),
           if (isMine) ...[
@@ -3571,6 +3745,133 @@ class _ReplyBar extends StatelessWidget {
             onPressed: onCancel,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Target picker for message forwarding: lists the user's conversations
+/// (excluding the source, handled by the caller) with multi-select checkboxes.
+/// Encrypted conversations are shown disabled — their ciphertext is bound to
+/// the conversation key, so plain copies would be undecryptable there.
+/// Confirming pops with the list of selected conversation ids.
+class _ForwardPickerDialog extends StatefulWidget {
+  final List<Conversation> conversations;
+
+  const _ForwardPickerDialog({required this.conversations});
+
+  @override
+  State<_ForwardPickerDialog> createState() => _ForwardPickerDialogState();
+}
+
+class _ForwardPickerDialogState extends State<_ForwardPickerDialog> {
+  final Set<int> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Text('chatForwardPick'.tr(),
+                      style: theme.textTheme.titleMedium),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(<int>[]),
+                    child: Text('cancel'.tr()),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: widget.conversations.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text('chatNoOtherConversations'.tr()),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: widget.conversations.length,
+                      itemBuilder: (context, index) {
+                        final conv = widget.conversations[index];
+                        final selected = _selected.contains(conv.id);
+                        final encrypted = conv.encrypted;
+                        return ListTile(
+                          enabled: !encrypted,
+                          leading: Avatar(
+                            radius: 18,
+                            imageUrl: conv.avatarUrl,
+                            initials: conv.title.isNotEmpty
+                                ? conv.title.substring(0, 1).toUpperCase()
+                                : '?',
+                          ),
+                          title: Text(
+                            conv.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: encrypted
+                              ? Text('chatForwardEncryptedDisabled'.tr(),
+                                  style: theme.textTheme.bodySmall)
+                              : null,
+                          trailing: encrypted
+                              ? const Icon(Icons.lock_outline, size: 18)
+                              : Checkbox(
+                                  value: selected,
+                                  onChanged: (v) => setState(() {
+                                    v == true
+                                        ? _selected.add(conv.id)
+                                        : _selected.remove(conv.id);
+                                  }),
+                                ),
+                          onTap: encrypted
+                              ? null
+                              : () => setState(() {
+                                    selected
+                                        ? _selected.remove(conv.id)
+                                        : _selected.add(conv.id);
+                                  }),
+                        );
+                      },
+                    ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _selected.isEmpty
+                          ? 'chatForwardHint'.tr()
+                          : 'chatForwardSelected'.tr(
+                              namedArgs: {'count': '${_selected.length}'}),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _selected.isEmpty
+                        ? null
+                        : () => Navigator.of(context)
+                            .pop(_selected.toList(growable: false)),
+                    icon: const Icon(Icons.shortcut_outlined, size: 18),
+                    label: Text('chatForward'.tr()),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

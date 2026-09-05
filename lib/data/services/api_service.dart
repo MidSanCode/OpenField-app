@@ -2214,6 +2214,32 @@ class ApiService {
         _decodeError(response, 'Failed to mark message read'));
   }
 
+  /// Forwards [messageIds] from [sourceConversationId] into every conversation
+  /// of [targetConversationIds]. The copies are new messages authored by the
+  /// current user (content + attachments re-linked; replies, checks, burn
+  /// timers and mentions are stripped server-side). Returns the total number
+  /// of created messages.
+  Future<int> forwardMessages(
+      String accessToken,
+      int sourceConversationId,
+      List<int> messageIds,
+      List<int> targetConversationIds) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/conversations/$sourceConversationId/messages/forward'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        'message_ids': messageIds,
+        'target_conversation_ids': targetConversationIds,
+      }),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return (data['forwarded'] as num?)?.toInt() ?? 0;
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to forward messages'));
+  }
+
   /// Arms the burn-after-view countdown of [attachmentId] on the first view
   /// by someone other than the uploader (the server rejects the uploader's
   /// own call with 404). Returns the absolute burn deadline the server
