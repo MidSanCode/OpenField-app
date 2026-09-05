@@ -39,6 +39,16 @@ class Post {
   /// The check attached to this post, when present (null otherwise).
   final Check? check;
 
+  /// The post this post quotes or reposts (null when not a quote). When
+  /// [quotedPostId] is set but this is null, the quoted post was deleted or
+  /// is not visible to the viewer — clients render a placeholder.
+  final int quotedPostId;
+  final Post? quotedPost;
+
+  /// True when this post carries no commentary of its own and only embeds
+  /// the quoted post (a pure repost).
+  bool get isPureRepost => quotedPostId > 0 && content.trim().isEmpty;
+
   Post({
     required this.id,
     required this.userId,
@@ -70,6 +80,8 @@ class Post {
     this.myReaction = '',
     this.check,
     this.tags = const [],
+    this.quotedPostId = 0,
+    this.quotedPost,
   });
 
   String get authorName => (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
@@ -126,6 +138,10 @@ class Post {
       myReaction: json['my_reaction'] as String? ?? '',
       check: json['check'] is Map<String, dynamic>
           ? Check.fromJson(json['check'] as Map<String, dynamic>)
+          : null,
+      quotedPostId: _asInt(json['quoted_post_id']),
+      quotedPost: json['quoted_post'] is Map<String, dynamic>
+          ? Post.fromJson(json['quoted_post'] as Map<String, dynamic>)
           : null,
     );
   }
@@ -187,6 +203,8 @@ class Post {
     String? myReaction,
     Check? check,
     List<String>? tags,
+    int? quotedPostId,
+    Post? quotedPost,
   }) {
     return Post(
       id: id ?? this.id,
@@ -219,6 +237,8 @@ class Post {
       myReaction: myReaction ?? this.myReaction,
       check: check ?? this.check,
       tags: tags ?? this.tags,
+      quotedPostId: quotedPostId ?? this.quotedPostId,
+      quotedPost: quotedPost ?? this.quotedPost,
     );
   }
 

@@ -8,6 +8,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
+import 'package:openfield/pages/posts/posts_page.dart';
 import 'package:openfield/pages/posts/reply_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
 import 'package:openfield/widgets/reply_tile.dart';
@@ -92,6 +93,42 @@ class _PostDetailPageState extends State<PostDetailPage> {
         visibility: 'public',
       );
     });
+  }
+
+  /// Opens the posts feed composer prefilled with a quote of this post.
+  /// The composer lives in PostsPage; quoting from the detail page navigates
+  /// back to the feed with the composition pre-bound.
+  void _quotePost(Post post) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PostsPage(quotePost: post),
+      ),
+    );
+  }
+
+  /// Reposts this post as-is (empty content + quoted reference).
+  Future<void> _repostPost(Post post) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('loginWithOIDC'.tr())),
+      );
+      return;
+    }
+    try {
+      await _apiService.createPost('', token, quotedPostId: post.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('repostSuccess'.tr())),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
   }
 
   Future<void> _sendReply() async {
@@ -298,6 +335,8 @@ class _PostDetailPageState extends State<PostDetailPage> {
                             showReplies: false,
                             showFullContent: true,
                             token: Provider.of<AuthService>(context).accessToken,
+                            onQuote: () => _quotePost(_post),
+                            onRepost: () => _repostPost(_post),
                             onPostChanged: (updated) => setState(() => _post = updated),
                           ),
                           const Divider(),

@@ -37,6 +37,11 @@ class PostCard extends StatefulWidget {
   /// Tapping a tag chip filters the feed by that tag. Null disables the
   /// affordance (e.g. inside the post detail page).
   final ValueChanged<String>? onTapTag;
+  /// Opens the composer prefilled with a quote of this post. Null hides the
+  /// menu entry.
+  final VoidCallback? onQuote;
+  /// Reposts this post as-is (no commentary). Null hides the menu entry.
+  final Future<void> Function()? onRepost;
 
   const PostCard({
     super.key,
@@ -53,6 +58,8 @@ class PostCard extends StatefulWidget {
     this.showFullContent = false,
     this.onTap,
     this.onTapTag,
+    this.onQuote,
+    this.onRepost,
   });
 
   @override
@@ -82,6 +89,8 @@ class _PostCardState extends State<PostCard> {
     final items = buildContentMenuItems(
       isMine: widget.isMine,
       isFavorite: post.isFavorite,
+      showQuote: widget.onQuote != null,
+      showRepost: widget.onRepost != null,
     );
     final action = position != null
         ? await showContentMenuAt(context, position, items: items)
@@ -108,6 +117,10 @@ class _PostCardState extends State<PostCard> {
       case ContentAction.favorite:
       case ContentAction.unfavorite:
         await _toggleFavorite();
+      case ContentAction.quote:
+        widget.onQuote?.call();
+      case ContentAction.repost:
+        await widget.onRepost?.call();
     }
   }
 
@@ -273,6 +286,8 @@ class _PostCardState extends State<PostCard> {
                       if (value == 'edit') widget.onEdit?.call();
                       if (value == 'delete') widget.onDelete?.call();
                       if (value == 'favorite') _toggleFavorite();
+                      if (value == 'quote') widget.onQuote?.call();
+                      if (value == 'repost') widget.onRepost?.call();
                       if (value == 'copyLink') {
                         Clipboard.setData(
                           ClipboardData(text: postLink(post.id)),
@@ -287,6 +302,16 @@ class _PostCardState extends State<PostCard> {
                         value: 'copyLink',
                         child: Text('copyPostLink'.tr()),
                       ),
+                      if (widget.onQuote != null)
+                        PopupMenuItem(
+                          value: 'quote',
+                          child: Text('postQuote'.tr()),
+                        ),
+                      if (widget.onRepost != null)
+                        PopupMenuItem(
+                          value: 'repost',
+                          child: Text('postRepost'.tr()),
+                        ),
                       PopupMenuItem(
                         value: 'favorite',
                         child: Text(
@@ -312,6 +337,14 @@ class _PostCardState extends State<PostCard> {
               ),
               const SizedBox(height: 12),
               MarkdownContent(data: _displayContent),
+              if (post.quotedPostId > 0) ...[
+                const SizedBox(height: 10),
+                _QuotedPostCard(
+                  quoted: post.quotedPost,
+                  quotedPostId: post.quotedPostId,
+                  onTapQuoted: widget.onTap,
+                ),
+              ],
               if (_isTruncated && !_expanded) ...[
                 const SizedBox(height: 4),
                 InkWell(
@@ -461,5 +494,119 @@ class _PostCardState extends State<PostCard> {
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+}
+
+/// The embedded quoted-post preview inside a quote/repost card. Renders the
+/// referenced post compactly (author line + truncated content + attachment
+/// hint); when the referenced post was deleted or is not visible to the
+/// viewer ([quoted] is null while [quotedPostId] is set), a placeholder keeps
+/// the card layout stable.
+class _QuotedPostCard extends StatelessWidget {
+  final Post? quoted;
+  final int quotedPostId;
+  final VoidCallback? onTapQuoted;
+
+  const _QuotedPostCard({
+    required this.quoted,
+    required this.quotedPostId,
+    this.onTapQuoted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final q = quoted;
+    return InkWell(
+      onTap: (q != null) ? onTapQuoted : null,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+          ),
+        ),
+        child: q == null
+            ? Row(
+                children: [
+                  Icon(Icons.remove_circle_outline,
+                      size: 16, color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'quotedPostUnavailable'.tr(),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Avatar(
+                        radius: 12,
+                        imageUrl: q.avatarUrl ?? '',
+                        initials: q.authorName.isNotEmpty
+                            ? q.authorName.substring(0, 1).toUpperCase()
+                            : '',
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: VerifiedName(
+                          name: q.authorName,
+                          verified: q.authorVerified,
+                          bot: q.isBot,
+                          memberLevel: q.memberLevel,
+                          memberActive: q.memberActive,
+                          nameColor: q.nameColor,
+                          nameColorTo: q.nameColorTo,
+                          nameColors: q.nameColors,
+                          nameGradientDirection: q.nameGradientDirection,
+                          nameDynamic: q.nameDynamic,
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    q.content.isEmpty
+                        ? (q.attachments.isNotEmpty
+                            ? 'postMediaOnly'.tr()
+                            : '')
+                        : q.content,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  if (q.attachments.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.image_outlined,
+                            size: 14, color: theme.colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${q.attachments.length}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+      ),
+    );
   }
 }

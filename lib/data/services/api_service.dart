@@ -1326,7 +1326,8 @@ class ApiService {
       {List<int> attachmentIds = const [],
       String visibility = 'public',
       int checkId = 0,
-      List<String> tags = const []}) async {
+      List<String> tags = const [],
+      int quotedPostId = 0}) async {
     final response = await _post(
       Uri.parse('$baseUrl/posts'),
       headers: _headers(token: accessToken),
@@ -1336,6 +1337,7 @@ class ApiService {
         'visibility': visibility,
         if (checkId > 0) 'check_id': checkId,
         if (tags.isNotEmpty) 'tags': tags,
+        if (quotedPostId > 0) 'quoted_post_id': quotedPostId,
       }),
     );
     final data = _decodeMap(response);

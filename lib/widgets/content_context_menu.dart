@@ -21,15 +21,21 @@ class ContentAction {
   static const String delete = 'delete';
   static const String reply = 'reply';
   static const String visibility = 'visibility';
+  static const String quote = 'quote';
+  static const String repost = 'repost';
 }
 
 /// Builds the shared menu items for a post or a reply. Only an authenticated,
 /// authoring user gets [ContentAction.edit]/[ContentAction.delete]; favorite /
-/// unfavorite toggle on the current state.
+/// unfavorite toggle on the current state. [showQuote]/[showRepost] reveal the
+/// quote/repost entries; callers hide them when the matching callback is
+/// unavailable (e.g. unauthenticated context).
 List<PopupMenuEntry<String>> buildContentMenuItems({
   required bool isMine,
   required bool isFavorite,
   bool includeReply = false,
+  bool showQuote = false,
+  bool showRepost = false,
 }) {
   final items = <PopupMenuEntry<String>>[
     PopupMenuItem(
@@ -45,6 +51,22 @@ List<PopupMenuEntry<String>> buildContentMenuItems({
         child: _MenuLabel(
           icon: Icons.reply,
           text: 'reply'.tr(),
+        ),
+      ),
+    if (showQuote)
+      PopupMenuItem(
+        value: ContentAction.quote,
+        child: _MenuLabel(
+          icon: Icons.format_quote_outlined,
+          text: 'postQuote'.tr(),
+        ),
+      ),
+    if (showRepost)
+      PopupMenuItem(
+        value: ContentAction.repost,
+        child: _MenuLabel(
+          icon: Icons.repeat_outlined,
+          text: 'postRepost'.tr(),
         ),
       ),
     PopupMenuItem(
@@ -132,6 +154,10 @@ IconData _iconFor(String value) {
       return Icons.link;
     case ContentAction.reply:
       return Icons.reply;
+    case ContentAction.quote:
+      return Icons.format_quote_outlined;
+    case ContentAction.repost:
+      return Icons.repeat_outlined;
     case ContentAction.favorite:
       return Icons.bookmark_border;
     case ContentAction.unfavorite:
@@ -153,6 +179,10 @@ String _labelFor(String value) {
       return 'copyPostLink'.tr();
     case ContentAction.reply:
       return 'reply'.tr();
+    case ContentAction.quote:
+      return 'postQuote'.tr();
+    case ContentAction.repost:
+      return 'postRepost'.tr();
     case ContentAction.favorite:
       return 'addFavorite'.tr();
     case ContentAction.unfavorite:

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -50,7 +50,11 @@ class ComposerMedia {
 }
 
 class PostsPage extends StatefulWidget {
-  const PostsPage({super.key});
+  /// When set, the page opens with the composer pre-bound to a quote of this
+  /// post (entry point from the post detail page's quote action).
+  final Post? quotePost;
+
+  const PostsPage({super.key, this.quotePost});
 
   @override
   State<PostsPage> createState() => _PostsPageState();
@@ -77,6 +81,14 @@ class _PostsPageState extends State<PostsPage> {
   bool get _hasFilters =>
       _authorFilter.isNotEmpty || _fromFilter != null || _toFilter != null;
 
+  /// Desktop and web have no pull-to-refresh, so the AppBar carries a manual
+  /// refresh button instead. Mobile keeps the RefreshIndicator only.
+  bool get _showRefreshButton =>
+      kIsWeb ||
+      Platform.isWindows ||
+      Platform.isLinux ||
+      Platform.isMacOS;
+
   StreamSubscription<PushEvent>? _realtimeSub;
 
   @override
@@ -84,6 +96,13 @@ class _PostsPageState extends State<PostsPage> {
     super.initState();
     _loadPosts();
     _realtimeSub = RealtimeService.instance.events.listen(_onRealtimeEvent);
+    // Detail-page quote entry point: open the composer bound to the quoted
+    // post as soon as the feed scaffolding is up.
+    if (widget.quotePost != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openComposer(quoted: widget.quotePost);
+      });
+    }
   }
 
   @override
@@ -298,7 +317,7 @@ class _PostsPageState extends State<PostsPage> {
     );
   }
 
-  void _openComposer() {
+  void _openComposer({Post? quoted}) {
     final authService = Provider.of<AuthService>(context, listen: false);
     if (!authService.isAuthenticated) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -311,10 +330,42 @@ class _PostsPageState extends State<PostsPage> {
       barrierDismissible: false,
       builder: (_) => _ComposerDialog(
         onSubmit: (content, media, visibility, checkId, tags) =>
-            _submitPost(content, media, visibility: visibility, checkId: checkId, tags: tags),
+            _submitPost(content, media,
+                visibility: visibility,
+                checkId: checkId,
+                tags: tags,
+                quotedPostId: quoted?.id ?? 0),
         isPosting: _isPosting,
+        initialQuoted: quoted,
       ),
     );
+  }
+
+  /// Reposts [post] as-is: an empty-content post referencing it. Pure reposts
+  /// appear in the feed as a card that embeds the original.
+  Future<void> _repostPost(Post post) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('loginWithOIDC'.tr())),
+      );
+      return;
+    }
+    try {
+      await _apiService.createPost('', token, quotedPostId: post.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('repostSuccess'.tr())),
+      );
+      await _loadPosts();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
   }
 
   void _openEdit(Post post) {
@@ -343,8 +394,11 @@ class _PostsPageState extends State<PostsPage> {
       {int? postId,
       String visibility = 'public',
       int checkId = 0,
-      List<String> tags = const []}) async {
-    if (content.trim().isEmpty && media.isEmpty) return false;
+      List<String> tags = const [],
+      int quotedPostId = 0}) async {
+    if (content.trim().isEmpty && media.isEmpty && quotedPostId <= 0) {
+      return false;
+    }
 
     final authService = Provider.of<AuthService>(context, listen: false);
     setState(() => _isPosting = true);
@@ -397,7 +451,8 @@ class _PostsPageState extends State<PostsPage> {
             attachmentIds: attachmentIds,
             visibility: visibility,
             checkId: checkId,
-            tags: tags);
+            tags: tags,
+            quotedPostId: quotedPostId);
       } else {
         await _apiService.updatePost(postId, content, token,
             attachmentIds: attachmentIds, visibility: visibility);
@@ -470,6 +525,18 @@ class _PostsPageState extends State<PostsPage> {
               )
             : Text('appTitle'.tr()),
         actions: [
+          if (_showRefreshButton)
+            IconButton(
+              icon: _isLoading
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    )
+                  : const Icon(Icons.refresh),
+              tooltip: 'refresh'.tr(),
+              onPressed: _isLoading ? null : _loadPosts,
+            ),
           IconButton(
             icon: Icon(
               Icons.tune,
@@ -489,8 +556,7 @@ class _PostsPageState extends State<PostsPage> {
         onPressed: _openComposer,
         tooltip: 'createPost'.tr(),
         child: const Icon(Icons.edit),
-      ),
-      body: _buildFeed(currentUserId),
+      ),      body: _buildFeed(currentUserId),
     );
   }
 
@@ -566,6 +632,8 @@ class _PostsPageState extends State<PostsPage> {
                   onTap: () => _openPostDetail(post),
                   token: authService.accessToken,
                   onTapTag: (tag) => _setTag(tag),
+                  onQuote: () => _openComposer(quoted: post),
+                  onRepost: () => _repostPost(post),
                   onPostChanged: (updated) {
                     setState(() {
                       _posts = _posts.map((p) => p.id == updated.id ? updated : p).toList();
@@ -593,6 +661,9 @@ class _ComposerDialog extends StatefulWidget {
   final List<ComposerMedia> initialMedia;
   final String initialVisibility;
   final bool isEditing;
+  /// When set, the dialog shows a quoted-post preview bar and the submission
+  /// creates a quote post referencing it.
+  final Post? initialQuoted;
 
   const _ComposerDialog({
     required this.onSubmit,
@@ -601,6 +672,7 @@ class _ComposerDialog extends StatefulWidget {
     this.initialMedia = const [],
     this.initialVisibility = 'public',
     this.isEditing = false,
+    this.initialQuoted,
   });
 
   @override
@@ -614,6 +686,9 @@ class _ComposerDialogState extends State<_ComposerDialog> {
   late String _visibility;
   String? _currentDraftId;
   bool _isSubmitting = false;
+  /// The quoted post bound to this composition (null = plain post). The user
+  /// may detach it before submitting, turning the post back into a plain one.
+  Post? _quoted;
 
   /// Check created via the compose dialog and attached to this post on
   /// submit. A check left unattached (composer cancelled) simply expires and
@@ -631,6 +706,7 @@ class _ComposerDialogState extends State<_ComposerDialog> {
     _controller = TextEditingController(text: widget.initialContent);
     _media = List.of(widget.initialMedia);
     _visibility = widget.initialVisibility;
+    _quoted = widget.initialQuoted;
   }
 
   @override
@@ -768,6 +844,8 @@ class _ComposerDialogState extends State<_ComposerDialog> {
 
   Future<void> _submit() async {
     setState(() => _isSubmitting = true);
+    // The quoted post (if any) is bound in the onSubmit closure created by
+    // _openComposer, so plain and quote compositions share this path.
     final success = await widget.onSubmit(
         _controller.text.trim(), _media, _visibility, _pendingCheckId ?? 0, _pendingTags);
     if (mounted && success) {
@@ -840,6 +918,13 @@ class _ComposerDialogState extends State<_ComposerDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                      if (_quoted != null)
+                        _QuotedComposerBar(
+                          quoted: _quoted!,
+                          onRemove: isBusy
+                              ? null
+                              : () => setState(() => _quoted = null),
+                        ),
                       Expanded(
                         child: TextField(
                           controller: _controller,
@@ -1420,6 +1505,66 @@ class _UploadProgressDialog extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// The compact quoted-post bar inside the composer: shows the author and a
+/// one-line content preview with a remove affordance. Removing detaches the
+/// quote so the submission becomes a plain post.
+class _QuotedComposerBar extends StatelessWidget {
+  final Post quoted;
+  final VoidCallback? onRemove;
+
+  const _QuotedComposerBar({required this.quoted, this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.format_quote_outlined,
+              size: 16, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  quoted.authorName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                if (quoted.content.trim().isNotEmpty)
+                  Text(
+                    quoted.content,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            tooltip: 'removeAttachment'.tr(),
+            onPressed: onRemove,
+          ),
+        ],
       ),
     );
   }
