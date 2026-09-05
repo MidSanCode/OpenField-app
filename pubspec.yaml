@@ -50,6 +50,18 @@ dependencies:
 dependency_overrides:
   record_linux: ^1.0.0
   record_platform_interface: ^1.6.0
+  # Hot-restart SIGABRT on Flutter 3.38+ ("Callback invoked after it has been
+  # deleted"): the mpv core thread keeps firing the wakeup callback after the
+  # restart destroyed the Dart NativeCallable. media_kit 1.2.6 (latest on pub)
+  # predates the fix (media-kit#1340). Pinned to the upstream fix merge
+  # (media-kit PR #1416, commit 44ba261) which clears the wakeup callbacks
+  # before sending quit to stale native handles; bump/remove once a release
+  # containing it lands on pub.
+  media_kit:
+    git:
+      url: https://github.com/media-kit/media-kit.git
+      path: media_kit
+      ref: 44ba261c463f5e2cef926d35438a95ee63cc5cf9
 
 dev_dependencies:
   flutter_test:
