@@ -45,6 +45,13 @@ class Post {
   final int quotedPostId;
   final Post? quotedPost;
 
+  /// True when the author pinned this post (floats to the top of their
+  /// profile; the feed renders a badge).
+  final bool pinned;
+
+  /// The camp (贴吧-style community) this post belongs to; 0 = global feed.
+  final int campId;
+
   /// True when this post carries no commentary of its own and only embeds
   /// the quoted post (a pure repost).
   bool get isPureRepost => quotedPostId > 0 && content.trim().isEmpty;
@@ -82,6 +89,8 @@ class Post {
     this.tags = const [],
     this.quotedPostId = 0,
     this.quotedPost,
+    this.pinned = false,
+    this.campId = 0,
   });
 
   String get authorName => (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
@@ -143,6 +152,8 @@ class Post {
       quotedPost: json['quoted_post'] is Map<String, dynamic>
           ? Post.fromJson(json['quoted_post'] as Map<String, dynamic>)
           : null,
+      pinned: json['pinned'] as bool? ?? false,
+      campId: _asInt(json['camp_id']),
     );
   }
 
@@ -205,6 +216,8 @@ class Post {
     List<String>? tags,
     int? quotedPostId,
     Post? quotedPost,
+    bool? pinned,
+    int? campId,
   }) {
     return Post(
       id: id ?? this.id,
@@ -239,6 +252,8 @@ class Post {
       tags: tags ?? this.tags,
       quotedPostId: quotedPostId ?? this.quotedPostId,
       quotedPost: quotedPost ?? this.quotedPost,
+      pinned: pinned ?? this.pinned,
+      campId: campId ?? this.campId,
     );
   }
 

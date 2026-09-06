@@ -5,11 +5,24 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/chat_unread_service.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:openfield/widgets/app_shell_announcement.dart';
 
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  @override
+  void initState() {
+    super.initState();
+    // Startup app announcement: fetched best-effort, once per cold start.
+    maybeShowStartupAnnouncement(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,23 +32,23 @@ class AppShell extends StatelessWidget {
         children: [
           if (isWideScreen)
             _Sidebar(
-              selectedIndex: navigationShell.currentIndex,
+              selectedIndex: widget.navigationShell.currentIndex,
               onDestinationSelected: _goBranch,
             ),
-          Expanded(child: navigationShell),
+          Expanded(child: widget.navigationShell),
         ],
       ),
       bottomNavigationBar: isWideScreen ? null : _BottomBar(
-        selectedIndex: navigationShell.currentIndex,
+        selectedIndex: widget.navigationShell.currentIndex,
         onDestinationSelected: _goBranch,
       ),
     );
   }
 
   void _goBranch(int index) {
-    navigationShell.goBranch(
+    widget.navigationShell.goBranch(
       index,
-      initialLocation: index == navigationShell.currentIndex,
+      initialLocation: index == widget.navigationShell.currentIndex,
     );
   }
 }

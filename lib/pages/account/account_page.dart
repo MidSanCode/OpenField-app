@@ -15,6 +15,7 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/chat_local_db.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:openfield/pages/account/app_announcement_page.dart';
 import 'package:openfield/pages/account/qr_scan_page.dart';
 import 'package:openfield/pages/account/qr_login_page.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
@@ -679,6 +680,17 @@ class _AccountPageState extends State<AccountPage> {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                );
+              },
+            ),
+            const Divider(height: 1),
+            _NavTile(
+              icon: Icons.campaign_outlined,
+              title: 'announcementHistory'.tr(),
+              subtitle: 'announcementHistoryHint'.tr(),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AppAnnouncementPage()),
                 );
               },
             ),

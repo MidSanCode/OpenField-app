@@ -23,19 +23,23 @@ class ContentAction {
   static const String visibility = 'visibility';
   static const String quote = 'quote';
   static const String repost = 'repost';
+  static const String pin = 'pin';
+  static const String unpin = 'unpin';
 }
 
 /// Builds the shared menu items for a post or a reply. Only an authenticated,
 /// authoring user gets [ContentAction.edit]/[ContentAction.delete]; favorite /
 /// unfavorite toggle on the current state. [showQuote]/[showRepost] reveal the
 /// quote/repost entries; callers hide them when the matching callback is
-/// unavailable (e.g. unauthenticated context).
+/// unavailable (e.g. unauthenticated context). [pinned] reveals the
+/// pin/unpin toggle for the author's own posts.
 List<PopupMenuEntry<String>> buildContentMenuItems({
   required bool isMine,
   required bool isFavorite,
   bool includeReply = false,
   bool showQuote = false,
   bool showRepost = false,
+  bool pinned = false,
 }) {
   final items = <PopupMenuEntry<String>>[
     PopupMenuItem(
@@ -67,6 +71,14 @@ List<PopupMenuEntry<String>> buildContentMenuItems({
         child: _MenuLabel(
           icon: Icons.repeat_outlined,
           text: 'postRepost'.tr(),
+        ),
+      ),
+    if (isMine)
+      PopupMenuItem(
+        value: pinned ? ContentAction.unpin : ContentAction.pin,
+        child: _MenuLabel(
+          icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+          text: pinned ? 'unpinPost'.tr() : 'pinPost'.tr(),
         ),
       ),
     PopupMenuItem(
@@ -158,6 +170,10 @@ IconData _iconFor(String value) {
       return Icons.format_quote_outlined;
     case ContentAction.repost:
       return Icons.repeat_outlined;
+    case ContentAction.pin:
+      return Icons.push_pin_outlined;
+    case ContentAction.unpin:
+      return Icons.push_pin;
     case ContentAction.favorite:
       return Icons.bookmark_border;
     case ContentAction.unfavorite:
@@ -183,6 +199,10 @@ String _labelFor(String value) {
       return 'postQuote'.tr();
     case ContentAction.repost:
       return 'postRepost'.tr();
+    case ContentAction.pin:
+      return 'pinPost'.tr();
+    case ContentAction.unpin:
+      return 'unpinPost'.tr();
     case ContentAction.favorite:
       return 'addFavorite'.tr();
     case ContentAction.unfavorite:

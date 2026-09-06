@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 import '../../core/config/app_config.dart';
 import '../models/attachment.dart';
+import '../models/camp.dart';
 import '../models/chat_message.dart';
 import '../models/check.dart';
 import '../models/consent_request.dart';
@@ -1327,7 +1328,8 @@ class ApiService {
       String visibility = 'public',
       int checkId = 0,
       List<String> tags = const [],
-      int quotedPostId = 0}) async {
+      int quotedPostId = 0,
+      int campId = 0}) async {
     final response = await _post(
       Uri.parse('$baseUrl/posts'),
       headers: _headers(token: accessToken),
@@ -1338,6 +1340,7 @@ class ApiService {
         if (checkId > 0) 'check_id': checkId,
         if (tags.isNotEmpty) 'tags': tags,
         if (quotedPostId > 0) 'quoted_post_id': quotedPostId,
+        if (campId > 0) 'camp_id': campId,
       }),
     );
     final data = _decodeMap(response);
@@ -1346,6 +1349,283 @@ class ApiService {
     }
     throw ApiException(
         response.statusCode, _decodeError(response, 'Failed to create post'));
+  }
+
+  /// Pins or unpins the caller's own post.
+  Future<void> setPostPinned(int postId, bool pinned, String accessToken) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/posts/$postId/pin'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'pinned': pinned}),
+    );
+    if (response.statusCode != 204) {
+      throw ApiException(
+          response.statusCode, _decodeError(response, 'Failed to pin post'));
+    }
+  }
+
+  // ---- camps (贴吧-style communities) ----
+
+  Future<List<Camp>> listCamps(String? token, {String query = '', bool mine = false}) async {
+    final params = <String, String>{
+      if (query.isNotEmpty) 'q': query,
+      if (mine) 'mine': '1',
+    };
+    final uri = Uri.parse('$baseUrl/camps').replace(queryParameters: params);
+    final response = await _get(uri, headers: _headers(token: token, json: false));
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['camps'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((c) => Camp.fromJson(c)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load camps'));
+  }
+
+  Future<Camp> getCamp(int campId, {String? token}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/camps/$campId'),
+      headers: _headers(token: token, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Camp.fromJson(data);
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load camp'));
+  }
+
+  Future<Camp> createCamp(String name, String accessToken,
+      {String description = '', bool isVisible = true, bool directJoin = true}) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/camps'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        'name': name,
+        'description': description,
+        'is_visible': isVisible,
+        'direct_join': directJoin,
+      }),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 201 && data != null) {
+      return Camp.fromJson(data);
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to create camp'));
+  }
+
+  Future<void> updateCamp(int campId, String accessToken,
+      {String? name, String? description, bool? isVisible, bool? directJoin}) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/camps/$campId'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        ?name,
+        ?description,
+        ?isVisible,
+        ?directJoin,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to update camp'));
+    }
+  }
+
+  Future<void> deleteCamp(int campId, String accessToken) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/camps/$campId'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 204) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to delete camp'));
+    }
+  }
+
+  Future<void> joinCamp(int campId, String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/camps/$campId/join'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to join camp'));
+    }
+  }
+
+  Future<void> leaveCamp(int campId, String accessToken) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/camps/$campId/members/me'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 204) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to leave camp'));
+    }
+  }
+
+  Future<List<Post>> listCampPosts(int campId, {String? token, int limit = 20}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/camps/$campId/posts?limit=$limit'),
+      headers: _headers(token: token, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['posts'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((p) => Post.fromJson(p)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load camp posts'));
+  }
+
+  // ---- group announcements / todos / files ----
+
+  Future<List<GroupAnnouncement>> listAnnouncements(int convId, String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/conversations/$convId/announcements'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['announcements'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((a) => GroupAnnouncement.fromJson(a)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load announcements'));
+  }
+
+  Future<GroupAnnouncement> createAnnouncement(
+      int convId, String title, String content, String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/conversations/$convId/announcements'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'title': title, 'content': content}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 201 && data != null) {
+      return GroupAnnouncement.fromJson(data);
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to publish announcement'));
+  }
+
+  Future<void> deleteAnnouncement(int convId, int announcementId, String accessToken) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/conversations/$convId/announcements/$announcementId'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 204) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to delete announcement'));
+    }
+  }
+
+  Future<List<GroupTodo>> listTodos(int convId, String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/conversations/$convId/todos'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['todos'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((t) => GroupTodo.fromJson(t)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load todos'));
+  }
+
+  Future<GroupTodo> createTodo(int convId, String title, String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/conversations/$convId/todos'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'title': title}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 201 && data != null) {
+      return GroupTodo.fromJson(data);
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to create todo'));
+  }
+
+  Future<void> setTodoDone(int convId, int todoId, bool done, String accessToken) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/conversations/$convId/todos/$todoId'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'done': done}),
+    );
+    if (response.statusCode != 204) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to update todo'));
+    }
+  }
+
+  Future<void> deleteTodo(int convId, int todoId, String accessToken) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/conversations/$convId/todos/$todoId'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 204) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to delete todo'));
+    }
+  }
+
+  Future<List<GroupFile>> listGroupFiles(int convId, String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/conversations/$convId/files'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['files'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((f) => GroupFile.fromJson(f)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load files'));
+  }
+
+  // ---- app announcements ----
+
+  Future<List<AppAnnouncement>> listAppAnnouncements({String? token, bool all = false}) async {
+    final uri = Uri.parse('$baseUrl/announcements').replace(
+      queryParameters: all ? {'all': '1'} : const {},
+    );
+    final response = await _get(uri, headers: _headers(token: token, json: false));
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['announcements'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((a) => AppAnnouncement.fromJson(a)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load announcements'));
+  }
+
+  Future<AppAnnouncement> createAppAnnouncement(String title, String content, String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/announcements'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'title': title, 'content': content}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 201 && data != null) {
+      return AppAnnouncement.fromJson(data);
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to create announcement'));
+  }
+
+  Future<void> setAnnouncementActive(int id, bool active, String accessToken) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/announcements/$id'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'active': active}),
+    );
+    if (response.statusCode != 204) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to update announcement'));
+    }
   }
 
   Future<Post> updatePost(int postId, String content, String accessToken,

@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/pages/account/account_page.dart';
+import 'package:openfield/pages/account/app_announcement_page.dart';
 import 'package:openfield/pages/chat/chat_page.dart';
 import 'package:openfield/pages/posts/posts_page.dart';
 import 'package:openfield/widgets/app_shell.dart';
@@ -32,6 +33,11 @@ GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigat
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/announcements',
+        name: 'announcements',
+        builder: (context, state) => const AppAnnouncementPage(),
       ),
     ],
   );

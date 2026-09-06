@@ -93,6 +93,29 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Pins/unpins one of my posts; the profile reloads so the pinned post
+  /// floats to the top.
+  Future<void> _pinPost(Post post, bool pinned) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final token = auth.accessToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      await _apiService.setPostPinned(post.id, pinned, token);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(pinned ? 'postPinned'.tr() : 'postUnpinned'.tr())),
+        );
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -154,6 +177,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     MaterialPageRoute(
                         builder: (_) => PostDetailPage(post: post)),
                   ),
+                  onPin: _isMyProfile ? (pinned) => _pinPost(post, pinned) : null,
                 ),
           ],
         ),

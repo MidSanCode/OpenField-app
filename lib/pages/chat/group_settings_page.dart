@@ -10,6 +10,7 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/e2ee_service.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
 import 'package:openfield/widgets/verified_badge.dart';
+import 'package:openfield/pages/chat/group_extras_pages.dart';
 import 'package:openfield/widgets/qr_share_dialog.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 
@@ -620,6 +621,37 @@ title: VerifiedName(
                     builder: (_) => QrShareDialog(
                       title: _title,
                       data: 'openfield://group/${widget.conversation.id}',
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.campaign_outlined),
+                  title: Text('groupAnnouncements'.tr()),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GroupAnnouncementsPage(
+                        conversationId: widget.conversation.id,
+                        canManage: _canManage,
+                      ),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.checklist_outlined),
+                  title: Text('groupTodos'.tr()),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GroupTodosPage(conversationId: widget.conversation.id),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text('groupFiles'.tr()),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GroupFilesPage(conversationId: widget.conversation.id),
                     ),
                   ),
                 ),

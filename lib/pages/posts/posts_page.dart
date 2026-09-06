@@ -13,6 +13,7 @@ import 'package:openfield/data/services/draft_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
+import 'package:openfield/pages/posts/camps_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
 import 'package:openfield/widgets/check_card.dart';
@@ -53,8 +54,13 @@ class PostsPage extends StatefulWidget {
   /// When set, the page opens with the composer pre-bound to a quote of this
   /// post (entry point from the post detail page's quote action).
   final Post? quotePost;
+  /// When set, the page shows this camp's posts instead of the global feed
+  /// and new posts are scoped to the camp.
+  final int? campId;
+  /// Camp display name for the camp-mode app bar.
+  final String? campName;
 
-  const PostsPage({super.key, this.quotePost});
+  const PostsPage({super.key, this.quotePost, this.campId, this.campName});
 
   @override
   State<PostsPage> createState() => _PostsPageState();
@@ -283,6 +289,18 @@ class _PostsPageState extends State<PostsPage> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
+      if (widget.campId != null) {
+        final posts = await _apiService.listCampPosts(
+          widget.campId!,
+          token: authService.accessToken,
+        );
+        if (!mounted) return;
+        setState(() {
+          _posts = posts;
+          _isLoading = false;
+        });
+        return;
+      }
       final posts = await _apiService.getPosts(
         token: authService.accessToken,
         query: _query,
@@ -308,6 +326,12 @@ class _PostsPageState extends State<PostsPage> {
   void _openAuthorProfile(int userId) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => ProfilePage(userId: userId)),
+    );
+  }
+
+  void _openCamps() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => CampsPage()),
     );
   }
 
@@ -368,6 +392,33 @@ class _PostsPageState extends State<PostsPage> {
     }
   }
 
+  /// Pins/unpins one of the caller's own posts. The list refreshes so the
+  /// pinned post floats to its new position.
+  Future<void> _pinPost(Post post, bool pinned) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('loginWithOIDC'.tr())),
+      );
+      return;
+    }
+    try {
+      await _apiService.setPostPinned(post.id, pinned, token);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(pinned ? 'postPinned'.tr() : 'postUnpinned'.tr())),
+      );
+      await _loadPosts();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
   void _openEdit(Post post) {
     final authService = Provider.of<AuthService>(context, listen: false);
     if (!authService.isAuthenticated) return;
@@ -395,7 +446,8 @@ class _PostsPageState extends State<PostsPage> {
       String visibility = 'public',
       int checkId = 0,
       List<String> tags = const [],
-      int quotedPostId = 0}) async {
+      int quotedPostId = 0,
+      int? campId}) async {
     if (content.trim().isEmpty && media.isEmpty && quotedPostId <= 0) {
       return false;
     }
@@ -452,7 +504,8 @@ class _PostsPageState extends State<PostsPage> {
             visibility: visibility,
             checkId: checkId,
             tags: tags,
-            quotedPostId: quotedPostId);
+            quotedPostId: quotedPostId,
+            campId: campId ?? widget.campId ?? 0);
       } else {
         await _apiService.updatePost(postId, content, token,
             attachmentIds: attachmentIds, visibility: visibility);
@@ -523,9 +576,26 @@ class _PostsPageState extends State<PostsPage> {
                   border: InputBorder.none,
                 ),
               )
-            : Text('appTitle'.tr()),
+            : widget.campId != null
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          widget.campName ?? 'campTitle'.tr(),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text('campSuffix'.tr(),
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              )),
+                    ],
+                  )
+                : Text('appTitle'.tr()),
         actions: [
-          if (_showRefreshButton)
+          if (widget.campId == null && _showRefreshButton)
             IconButton(
               icon: _isLoading
                   ? SizedBox(
@@ -545,11 +615,18 @@ class _PostsPageState extends State<PostsPage> {
             tooltip: 'postFilterTitle'.tr(),
             onPressed: _openPostFilters,
           ),
-          IconButton(
-            icon: Icon(_searchActive ? Icons.close : Icons.search),
-            tooltip: 'searchPosts'.tr(),
-            onPressed: _toggleSearch,
-          ),
+          if (widget.campId == null)
+            IconButton(
+              icon: const Icon(Icons.flag_outlined),
+              tooltip: 'camps'.tr(),
+              onPressed: _openCamps,
+            ),
+          if (widget.campId == null)
+            IconButton(
+              icon: Icon(_searchActive ? Icons.close : Icons.search),
+              tooltip: 'searchPosts'.tr(),
+              onPressed: _toggleSearch,
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -634,6 +711,7 @@ class _PostsPageState extends State<PostsPage> {
                   onTapTag: (tag) => _setTag(tag),
                   onQuote: () => _openComposer(quoted: post),
                   onRepost: () => _repostPost(post),
+                  onPin: (pinned) => _pinPost(post, pinned),
                   onPostChanged: (updated) {
                     setState(() {
                       _posts = _posts.map((p) => p.id == updated.id ? updated : p).toList();

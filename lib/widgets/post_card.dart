@@ -42,6 +42,8 @@ class PostCard extends StatefulWidget {
   final VoidCallback? onQuote;
   /// Reposts this post as-is (no commentary). Null hides the menu entry.
   final Future<void> Function()? onRepost;
+  /// Pins/unpins this post (author only). Null hides the menu entry.
+  final Future<void> Function(bool pinned)? onPin;
 
   const PostCard({
     super.key,
@@ -60,6 +62,7 @@ class PostCard extends StatefulWidget {
     this.onTapTag,
     this.onQuote,
     this.onRepost,
+    this.onPin,
   });
 
   @override
@@ -91,6 +94,7 @@ class _PostCardState extends State<PostCard> {
       isFavorite: post.isFavorite,
       showQuote: widget.onQuote != null,
       showRepost: widget.onRepost != null,
+      pinned: post.pinned,
     );
     final action = position != null
         ? await showContentMenuAt(context, position, items: items)
@@ -121,6 +125,10 @@ class _PostCardState extends State<PostCard> {
         widget.onQuote?.call();
       case ContentAction.repost:
         await widget.onRepost?.call();
+      case ContentAction.pin:
+        await widget.onPin?.call(true);
+      case ContentAction.unpin:
+        await widget.onPin?.call(false);
     }
   }
 
@@ -240,6 +248,24 @@ class _PostCardState extends State<PostCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (post.pinned)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.push_pin, size: 14, color: theme.colorScheme.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'pinnedPost'.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Row(
                 children: [
                   InkWell(
@@ -288,6 +314,8 @@ class _PostCardState extends State<PostCard> {
                       if (value == 'favorite') _toggleFavorite();
                       if (value == 'quote') widget.onQuote?.call();
                       if (value == 'repost') widget.onRepost?.call();
+                      if (value == 'pin') widget.onPin?.call(true);
+                      if (value == 'unpin') widget.onPin?.call(false);
                       if (value == 'copyLink') {
                         Clipboard.setData(
                           ClipboardData(text: postLink(post.id)),
@@ -311,6 +339,11 @@ class _PostCardState extends State<PostCard> {
                         PopupMenuItem(
                           value: 'repost',
                           child: Text('postRepost'.tr()),
+                        ),
+                      if (widget.isMine && widget.onPin != null)
+                        PopupMenuItem(
+                          value: post.pinned ? 'unpin' : 'pin',
+                          child: Text(post.pinned ? 'unpinPost'.tr() : 'pinPost'.tr()),
                         ),
                       PopupMenuItem(
                         value: 'favorite',

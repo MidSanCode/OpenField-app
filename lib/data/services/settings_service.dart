@@ -37,6 +37,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyRegion = 'settings_region';
   static const _keyRegionLang = 'settings_region_lang';
   static const _keyEncryptAttachments = 'settings_encrypt_attachments';
+  static const _keyDismissedAnnouncements = 'announcements_dismissed_ids';
   static const String defaultServerHost = 'https://api.openfield.eu.cc';
 
   /// Sentinels for the client-side timezone setting. Empty means "follow the
@@ -223,6 +224,23 @@ class SettingsService extends ChangeNotifier {
     _region = prefs.getString(_keyRegion) ?? localRegion;
     _regionLang = prefs.getString(_keyRegionLang) ?? '';
     _encryptAttachments = prefs.getBool(_keyEncryptAttachments) ?? false;
+    _dismissedAnnouncementIds.clear();
+    _dismissedAnnouncementIds
+        .addAll((prefs.getStringList(_keyDismissedAnnouncements) ?? const []).map(int.parse));
+    notifyListeners();
+  }
+
+  final Set<int> _dismissedAnnouncementIds = {};
+
+  /// Announcement ids the user chose "don't show again" for.
+  Set<int> get dismissedAnnouncementIds => _dismissedAnnouncementIds;
+
+  /// Records an announcement as dismissed so the startup banner skips it.
+  Future<void> dismissAnnouncement(int id) async {
+    _dismissedAnnouncementIds.add(id);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+        _keyDismissedAnnouncements, _dismissedAnnouncementIds.map((e) => e.toString()).toList());
     notifyListeners();
   }
 
