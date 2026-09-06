@@ -1,6 +1,6 @@
 name: openfield
 description: "OpenField - An open social media platform."
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.12.2
