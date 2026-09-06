@@ -10,6 +10,7 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/e2ee_service.dart';
 import 'package:openfield/pages/chat/start_chat_page.dart';
 import 'package:openfield/widgets/verified_badge.dart';
+import 'package:openfield/widgets/qr_share_dialog.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 
 /// Group chat settings (owner-managed): avatar/icon, name, public visibility,
@@ -609,6 +610,19 @@ title: VerifiedName(
           : ListView(
               children: [
                 _buildHeader(theme),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.qr_code_2_outlined),
+                  title: Text('groupQrCode'.tr()),
+                  subtitle: Text('groupQrHint'.tr()),
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => QrShareDialog(
+                      title: _title,
+                      data: 'openfield://group/${widget.conversation.id}',
+                    ),
+                  ),
+                ),
                 const Divider(height: 1),
                 if (_isOwner) ...[
                   SwitchListTile(

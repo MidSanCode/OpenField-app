@@ -2879,10 +2879,11 @@ class ApiService {
   /// Kicks off a QR login handshake: the caller shows the returned code as a
   /// QR code; an already-authenticated device scans and approves it; this
   /// device polls [pollQrLogin] until it sees the access/refresh tokens.
-  Future<String> createQrLogin(String accessToken) async {
+  /// No authentication required — the requesting device is by definition not
+  /// signed in yet.
+  Future<String> createQrLogin() async {
     final response = await _post(
       Uri.parse('$baseUrl/auth/qr'),
-      headers: _headers(token: accessToken),
     );
     final data = _decodeMap(response);
     if (response.statusCode == 200 && data != null) {

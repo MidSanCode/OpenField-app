@@ -5,6 +5,9 @@ class Attachment {
   final int sizeBytes;
   final String url;
   final String thumbUrl;
+  /// Mid-size compressed rendition (longest edge 1440px) generated on
+  /// upload; empty for uploads made before the server generated previews.
+  final String previewSrcUrl;
   final String visibility;
 
   /// E2EE attachment metadata, populated only for attachments shared in an
@@ -36,6 +39,7 @@ class Attachment {
     required this.sizeBytes,
     required this.url,
     this.thumbUrl = '',
+    this.previewSrcUrl = '',
     this.visibility = 'public',
     this.cryptoVersion,
     this.cryptoNonce = '',
@@ -55,6 +59,7 @@ class Attachment {
       sizeBytes: json['size_bytes'] is num ? (json['size_bytes'] as num).toInt() : 0,
       url: json['url'] as String? ?? '',
       thumbUrl: json['thumb_url'] as String? ?? '',
+      previewSrcUrl: json['preview_url'] as String? ?? '',
       visibility: json['visibility'] as String? ?? 'public',
       cryptoVersion: json['crypto_version'] is num
           ? (json['crypto_version'] as num).toInt()
@@ -80,6 +85,7 @@ class Attachment {
       'size_bytes': sizeBytes,
       'url': url,
       'thumb_url': thumbUrl,
+      'preview_url': previewSrcUrl,
       'visibility': visibility,
       if (cryptoVersion != null) 'crypto_version': cryptoVersion,
       if (cryptoNonce.isNotEmpty) 'crypto_nonce': cryptoNonce,
@@ -104,6 +110,7 @@ class Attachment {
       sizeBytes: sizeBytes,
       url: url,
       thumbUrl: '',
+      previewSrcUrl: '',
       visibility: visibility,
       cryptoVersion: version,
       cryptoNonce: nonce,
@@ -112,9 +119,20 @@ class Attachment {
     );
   }
 
-  /// The URL to load for a compact preview; falls back to the original when no
-  /// thumbnail exists.
-  String get previewUrl => thumbUrl.isNotEmpty ? thumbUrl : url;
+  /// The URL to load for a compact preview: prefers the server-generated
+  /// mid-size preview (sharp enough for full-screen quick viewing at a
+  /// fraction of the original's bytes), then the small thumbnail, then the
+  /// original itself.
+  String get previewUrl {
+    if (previewSrcUrl.isNotEmpty) return previewSrcUrl;
+    if (thumbUrl.isNotEmpty) return thumbUrl;
+    return url;
+  }
+
+  /// True when [previewUrl] is a rendition rather than the original — the
+  /// viewer then offers an explicit "load original" action.
+  bool get hasOriginalUpgrade =>
+      previewSrcUrl.isNotEmpty || thumbUrl.isNotEmpty;
 
   bool get isImage => _matches('image/', {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic'});
   bool get isAudio => _matches('audio/', {'mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'opus'});

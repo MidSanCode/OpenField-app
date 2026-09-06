@@ -3055,7 +3055,8 @@ class _ExistingAttachmentsDialogState extends State<_ExistingAttachmentsDialog> 
                           ? SizedBox(
                               width: 40,
                               height: 40,
-                              child: MediaImage(url: att.url, fit: BoxFit.cover),
+                              child: MediaImage(
+                                  url: att.previewUrl, fit: BoxFit.cover),
                             )
                           : const Icon(Icons.insert_drive_file_outlined),
                       title: Text(att.originalName.isNotEmpty

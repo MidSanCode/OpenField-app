@@ -34,6 +34,11 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
   int _rotation = 0; // multiples of 90 degrees
   double _zoom = 1.0;
 
+  /// Whether the image is currently displayed from the compressed preview
+  /// rendition instead of the original bytes. True by default when the
+  /// server generated a preview/thumbnail; the "original" button switches.
+  bool _showingPreview = true;
+
   /// Decoded pixel dimensions of the image (null until loaded).
   int? _imageWidth;
   int? _imageHeight;
@@ -49,24 +54,49 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
     super.initState();
     if (widget.attachment.isImage) {
       _decodeDimensions();
+      _showingPreview = widget.attachment.hasOriginalUpgrade;
     }
     if (_isPlayable) {
       _initPlayer();
     }
   }
 
+  /// Switches the image source between the compressed preview rendition and
+  /// the original bytes. Metadata (dimensions) is decoded for whichever
+  /// source is loaded.
+  void _toggleOriginal() {
+    if (!widget.attachment.hasOriginalUpgrade) return;
+    setState(() {
+      _showingPreview = !_showingPreview;
+      _imageWidth = null;
+      _imageHeight = null;
+    });
+    _decodeDimensions();
+  }
+
+  /// The URL currently displayed for images: the compressed preview when
+  /// available (and not switched away from), the original otherwise.
+  String get _displayUrl {
+    final att = widget.attachment;
+    if (att.isImage && _showingPreview && att.hasOriginalUpgrade) {
+      return att.previewUrl;
+    }
+    return att.url;
+  }
+
   /// Reads the pixel dimensions of the displayed image from the already
   /// resolved image cache (network or local file), for the metadata sheet.
   Future<void> _decodeDimensions() async {
     final att = widget.attachment;
-    if (att.url.isEmpty || att.mimeType.contains('svg')) return;
+    final url = _displayUrl;
+    if (url.isEmpty || att.mimeType.contains('svg')) return;
     final ImageProvider provider;
-    final uri = Uri.tryParse(att.url);
+    final uri = Uri.tryParse(url);
     if (uri != null && uri.scheme.startsWith('http')) {
-      provider = NetworkImage(att.url);
+      provider = NetworkImage(url);
     } else {
-      if (!File(att.url).existsSync()) return;
-      provider = FileImage(File(att.url));
+      if (!File(url).existsSync()) return;
+      provider = FileImage(File(url));
     }
     try {
       final stream = provider.resolve(ImageConfiguration.empty);
@@ -267,6 +297,18 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
         ),
         actions: [
           if (att.isImage) ...[
+            if (att.hasOriginalUpgrade)
+              IconButton(
+                icon: Icon(
+                  _showingPreview
+                      ? Icons.hd_outlined
+                      : Icons.compress_outlined,
+                ),
+                tooltip: _showingPreview
+                    ? 'viewOriginal'.tr()
+                    : 'viewPreview'.tr(),
+                onPressed: _toggleOriginal,
+              ),
             IconButton(
               icon: const Icon(Icons.rotate_left),
               tooltip: 'Rotate left',
@@ -344,7 +386,8 @@ class _MediaPreviewPageState extends State<MediaPreviewPage> {
               angle: angle,
               child: Center(
                 child: MediaImage(
-                  url: att.url,
+                  key: ValueKey(_displayUrl),
+                  url: _displayUrl,
                   fit: BoxFit.contain,
                   dark: true,
                 ),

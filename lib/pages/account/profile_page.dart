@@ -9,6 +9,7 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/follow_list_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
+import 'package:openfield/widgets/qr_share_dialog.dart';
 import 'package:openfield/widgets/experience_bar.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/post_card.dart';
@@ -162,9 +163,30 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_user?.displayName ?? ''),
+        actions: [
+          if (_user != null && _isMyProfile)
+            IconButton(
+              icon: const Icon(Icons.qr_code_2_outlined),
+              tooltip: 'myQrCode'.tr(),
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => QrShareDialog(
+                  title: 'myQrCode'.tr(),
+                  data: 'openfield://user/${_user!.id}',
+                ),
+              ),
+            ),
+        ],
       ),
       body: body,
     );
+  }
+
+  /// True when this profile page shows the signed-in user themselves — only
+  /// then is the "my QR code" action offered.
+  bool get _isMyProfile {
+    final me = Provider.of<AuthService>(context, listen: false).user;
+    return me != null && me.id == widget.userId;
   }
 
   Widget _buildHeader(

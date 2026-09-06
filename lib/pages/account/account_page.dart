@@ -15,6 +15,8 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/chat_local_db.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:openfield/pages/account/qr_scan_page.dart';
+import 'package:openfield/pages/account/qr_login_page.dart';
 import 'package:openfield/pages/account/attachments_page.dart';
 import 'package:openfield/pages/account/favorites_page.dart';
 import 'package:openfield/pages/account/follow_list_page.dart';
@@ -31,7 +33,6 @@ import 'package:openfield/pages/register/register_page.dart';
 import 'package:openfield/pages/settings/settings_page.dart';
 import 'package:openfield/pages/account/sessions_page.dart';
 import 'package:openfield/pages/account/notifications_page.dart';
-import 'package:openfield/pages/account/qr_login_page.dart';
 import 'package:openfield/widgets/experience_bar.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
@@ -381,6 +382,18 @@ class _AccountPageState extends State<AccountPage> {
                 label: Text('loginWithOIDC'.tr()),
               ),
               const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _isLoggingIn
+                    ? null
+                    : () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const QrLoginPage()),
+                        );
+                      },
+                icon: const Icon(Icons.qr_code_scanner_outlined),
+                label: Text('qrLoginSubtitle'.tr()),
+              ),
+              const SizedBox(height: 12),
               _buildAdvancedLogin(context),
               const SizedBox(height: 24),
               OutlinedButton.icon(
@@ -649,12 +662,12 @@ class _AccountPageState extends State<AccountPage> {
             if (user != null) const Divider(height: 1),
             if (user != null)
               _NavTile(
-                icon: Icons.qr_code_2_outlined,
-                title: 'qrLoginSubtitle'.tr(),
-                subtitle: 'qrLoginTitle'.tr(),
+                icon: Icons.qr_code_scanner_outlined,
+                title: 'qrScanTitle'.tr(),
+                subtitle: 'qrScanSubtitle'.tr(),
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const QrLoginPage()),
+                    MaterialPageRoute(builder: (_) => const QrScanPage()),
                   );
                 },
               ),
