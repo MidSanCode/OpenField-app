@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/services/chat_cache_store.dart';
+import 'package:openfield/data/services/chat_db_scope.dart';
 import 'package:openfield/data/services/e2ee_service.dart';
 import 'package:openfield/data/services/encrypted_chat_payload.dart';
 import 'package:openfield/data/services/idb_database.dart';
@@ -15,6 +16,9 @@ import 'package:openfield/data/services/idb_database.dart';
 /// key derived from the user's E2EE identity private key. The store therefore
 /// cannot be read without that key, and logging in as a different account
 /// makes any leftover rows undecryptable placeholders.
+///
+/// Like the plaintext web store, one database exists per server host (see
+/// [ChatDbScope]) — ids are server-local and sharing one would mix chats.
 class EncryptedChatDb implements ChatCacheStore {
   EncryptedChatDb._();
 
@@ -22,6 +26,7 @@ class EncryptedChatDb implements ChatCacheStore {
 
   IdbDatabase? _db;
   Uint8List? _key;
+  String? _openedScope;
 
   /// The web build always supports the IndexedDB cache.
   static bool get supported => true;
@@ -29,10 +34,14 @@ class EncryptedChatDb implements ChatCacheStore {
   static const _store = 'messages';
 
   Future<IdbDatabase> _open() async {
+    final scope = ChatDbScope.suffix();
     final existing = _db;
-    if (existing != null) return existing;
+    if (existing != null) {
+      if (_openedScope == scope) return existing;
+      _db = null; // The server host changed at runtime: drop the old shard.
+    }
     final db = await IdbDatabase.open(
-      name: 'openfield_e2ee',
+      name: ChatDbScope.dbName('openfield_e2ee'),
       version: 1,
       onUpgradeNeeded: (txn, oldVersion, newVersion) {
         if (oldVersion < 1) {
@@ -41,6 +50,7 @@ class EncryptedChatDb implements ChatCacheStore {
       },
     );
     _db = db;
+    _openedScope = scope;
     return db;
   }
 

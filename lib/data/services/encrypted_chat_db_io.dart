@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/services/chat_cache_store.dart';
+import 'package:openfield/data/services/chat_db_scope.dart';
 import 'package:openfield/data/services/e2ee_service.dart';
 import 'package:openfield/data/services/encrypted_chat_payload.dart';
 
@@ -18,6 +19,9 @@ import 'package:openfield/data/services/encrypted_chat_payload.dart';
 /// key. The file therefore cannot be read, merged into a backup or exfiltrated
 /// without that key, and logging in as a different account (a different
 /// identity) makes any leftover rows undecryptable.
+///
+/// Like the plaintext store, one database file exists per server host (see
+/// [ChatDbScope]) — ids are server-local and sharing a file would mix chats.
 class EncryptedChatDb implements ChatCacheStore {
   EncryptedChatDb._();
 
@@ -29,12 +33,19 @@ class EncryptedChatDb implements ChatCacheStore {
 
   Database? _db;
   Uint8List? _key;
+  String? _openedScope;
   bool _ffiInitialized = false;
 
   Future<Database?> _open() async {
     if (!supported) return null;
+    final scope = ChatDbScope.suffix();
     final existing = _db;
-    if (existing != null && existing.isOpen) return existing;
+    if (existing != null && existing.isOpen) {
+      if (_openedScope == scope) return existing;
+      // The server host changed at runtime: drop the old shard.
+      await existing.close();
+      _db = null;
+    }
 
     if (defaultTargetPlatform != TargetPlatform.android &&
         defaultTargetPlatform != TargetPlatform.iOS) {
@@ -46,7 +57,7 @@ class EncryptedChatDb implements ChatCacheStore {
     }
 
     final dir = await getApplicationSupportDirectory();
-    final path = p.join(dir.path, 'openfield_e2ee.db');
+    final path = p.join(dir.path, ChatDbScope.fileName('openfield_e2ee'));
     final db = await openDatabase(
       path,
       version: 1,
@@ -66,6 +77,7 @@ class EncryptedChatDb implements ChatCacheStore {
       },
     );
     _db = db;
+    _openedScope = scope;
     return db;
   }
 

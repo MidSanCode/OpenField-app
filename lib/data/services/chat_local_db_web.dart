@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/services/chat_cache_store.dart';
+import 'package:openfield/data/services/chat_db_scope.dart';
 import 'package:openfield/data/services/idb_database.dart';
 
 /// IndexedDB cache for chat messages of non-encrypted conversations (web).
@@ -12,12 +13,18 @@ import 'package:openfield/data/services/idb_database.dart';
 /// [conversationId, messageId, attachmentId], so the UI code path is
 /// identical across platforms and the offline-first render works in the
 /// browser too.
+///
+/// One database exists per server host (see [ChatDbScope]): ids are
+/// server-local, so sharing a database across servers would mix unrelated
+/// chats. The store re-resolves its shard on every access, so switching
+/// servers at runtime lands in the right database.
 class ChatLocalDb implements ChatCacheStore {
   ChatLocalDb._();
 
   static final ChatLocalDb instance = ChatLocalDb._();
 
   IdbDatabase? _db;
+  String? _openedScope;
 
   /// The web build always supports the IndexedDB cache.
   static bool get supported => true;
@@ -26,10 +33,14 @@ class ChatLocalDb implements ChatCacheStore {
   static const _attachments = 'message_attachments';
 
   Future<IdbDatabase> _open() async {
+    final scope = ChatDbScope.suffix();
     final existing = _db;
-    if (existing != null) return existing;
+    if (existing != null) {
+      if (_openedScope == scope) return existing;
+      _db = null; // The server host changed at runtime: drop the old shard.
+    }
     final db = await IdbDatabase.open(
-      name: 'openfield_chat',
+      name: ChatDbScope.dbName('openfield_chat'),
       version: 1,
       onUpgradeNeeded: (txn, oldVersion, newVersion) {
         if (oldVersion < 1) {
@@ -39,6 +50,7 @@ class ChatLocalDb implements ChatCacheStore {
       },
     );
     _db = db;
+    _openedScope = scope;
     return db;
   }
 

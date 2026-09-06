@@ -7,18 +7,25 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/services/chat_cache_store.dart';
+import 'package:openfield/data/services/chat_db_scope.dart';
 
 /// Plaintext SQLite store for chat messages of non-encrypted conversations
 /// (IO platforms). It caches messages per conversation so the UI can render
 /// instantly (offline-first) and only talk to the server for messages the
 /// cache does not yet have. MLS-encrypted conversations are cached in
 /// [EncryptedChatDb] instead, so plaintext never lands here.
+///
+/// One database file exists per server host (see [ChatDbScope]): message and
+/// conversation ids are server-local, so sharing a file across servers would
+/// mix unrelated chats. The store re-resolves its shard on every access, so
+/// switching servers at runtime lands in the right database.
 class ChatLocalDb implements ChatCacheStore {
   ChatLocalDb._();
 
   static final ChatLocalDb instance = ChatLocalDb._();
 
   Database? _db;
+  String? _openedScope;
   bool _ffiInitialized = false;
 
   /// SQLite caching is only available on mobile and desktop; the web target
@@ -27,8 +34,14 @@ class ChatLocalDb implements ChatCacheStore {
 
   Future<Database?> _open() async {
     if (!supported) return null;
+    final scope = ChatDbScope.suffix();
     final existing = _db;
-    if (existing != null && existing.isOpen) return existing;
+    if (existing != null && existing.isOpen) {
+      if (_openedScope == scope) return existing;
+      // The server host changed at runtime: drop the old shard.
+      await existing.close();
+      _db = null;
+    }
 
     if (defaultTargetPlatform != TargetPlatform.android &&
         defaultTargetPlatform != TargetPlatform.iOS) {
@@ -40,7 +53,7 @@ class ChatLocalDb implements ChatCacheStore {
     }
 
     final dir = await getApplicationSupportDirectory();
-    final path = p.join(dir.path, 'openfield_chat.db');
+    final path = p.join(dir.path, ChatDbScope.fileName('openfield_chat'));
     final db = await openDatabase(
       path,
       version: 5,
@@ -99,6 +112,7 @@ class ChatLocalDb implements ChatCacheStore {
       },
     );
     _db = db;
+    _openedScope = scope;
     return db;
   }
 
@@ -356,6 +370,7 @@ class ChatLocalDb implements ChatCacheStore {
   Future<void> close() async {
     final db = _db;
     _db = null;
+    _openedScope = null;
     if (db != null && db.isOpen) {
       await db.close();
     }
