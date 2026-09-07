@@ -86,6 +86,11 @@ class _Sidebar extends StatelessWidget {
           label: Text('posts'.tr()),
         ),
         NavigationRailDestination(
+          icon: const Icon(Icons.holiday_village_outlined),
+          selectedIcon: const Icon(Icons.holiday_village),
+          label: Text('camps'.tr()),
+        ),
+        NavigationRailDestination(
           icon: const _ChatTabIcon(),
           selectedIcon: const _ChatTabIcon(selected: true),
           label: Text('chat'.tr()),
@@ -189,6 +194,11 @@ class _BottomBar extends StatelessWidget {
           icon: const Icon(Icons.forum_outlined),
           selectedIcon: const Icon(Icons.forum),
           label: 'posts'.tr(),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.holiday_village_outlined),
+          selectedIcon: const Icon(Icons.holiday_village),
+          label: 'camps'.tr(),
         ),
         NavigationDestination(
           icon: const _ChatTabIcon(),

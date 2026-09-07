@@ -4,12 +4,14 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/pages/account/account_page.dart';
 import 'package:openfield/pages/account/app_announcement_page.dart';
 import 'package:openfield/pages/chat/chat_page.dart';
+import 'package:openfield/pages/posts/camps_page.dart';
 import 'package:openfield/pages/posts/posts_page.dart';
 import 'package:openfield/widgets/app_shell.dart';
 
 /// Builds the app's [GoRouter]: a bottom-shell [StatefulShellRoute] with the
-/// three tab branches (`/posts`, `/chat`, `/account`) plus the standalone
-/// `/announcements` page. Starts on `/posts`; no auth redirects here.
+/// four tab branches (`/posts`, `/camps`, `/chat`, `/account`) plus the
+/// standalone `/announcements` page. Starts on `/posts`; no auth redirects
+/// here.
 GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigatorKey) {
   return GoRouter(
     navigatorKey: navigatorKey,
@@ -23,6 +25,11 @@ GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigat
           StatefulShellBranch(
             routes: [
               GoRoute(path: '/posts', name: 'posts', builder: (context, state) => const PostsPage()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/camps', name: 'camps', builder: (context, state) => const CampsPage()),
             ],
           ),
           StatefulShellBranch(

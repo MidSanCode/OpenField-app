@@ -234,9 +234,11 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Exchanges the refresh token for a fresh access token. On success the new
-  /// tokens are persisted and the auto-refresh loop is rescheduled. On failure
-  /// (expired or revoked refresh token) the session is cleared and the user
-  /// must log in again.
+  /// tokens are persisted and the auto-refresh loop is rescheduled. A
+  /// definitive rejection from the server (4xx/5xx — expired or revoked
+  /// refresh token) clears the session and the user must log in again; a
+  /// transient failure (server unreachable, timeout, offline) keeps the
+  /// session intact so a flaky connection never logs a valid user out.
   Future<bool> refreshAccessToken() async {
     final refresh = _refreshToken;
     if (refresh == null || refresh.isEmpty) return false;
@@ -254,29 +256,42 @@ class AuthService extends ChangeNotifier {
         refreshExpiresIn: (result['refresh_expires_in'] as num?)?.toInt(),
       );
       return true;
+    } on ApiException catch (e) {
+      // statusCode == null means the request never got a response (offline,
+      // timeout, DNS failure) and 5xx means the server side is down — in
+      // both cases the session itself is still valid, so keep it and let
+      // the next refresh attempt (or direct validation) retry. Only a 4xx
+      // answer is a definitive rejection of this refresh token.
+      if (e.statusCode != null && e.statusCode! >= 400 && e.statusCode! < 500) {
+        await clearTokens();
+      }
+      return false;
     } catch (_) {
-      // Refresh token invalid/expired or server unreachable: force re-login.
-      await clearTokens();
+      // SocketException / TimeoutException / any non-HTTP failure: the
+      // server was simply unreachable. Never treat this as an invalid
+      // session — keep the tokens so the user stays signed in and the
+      // retry loop reconnects once the network returns.
       return false;
     }
   }
 
   /// Kicks off a periodic timer that refreshes the access token shortly before
-  /// it expires, keeping the session alive while the user is active. When the
-  /// refresh fails the session is cleared (auto logout).
+  /// it expires, keeping the session alive while the user is active. Only a
+  /// definitive server rejection (expired/revoked token) clears the session;
+  /// transient failures are retried on the next tick so temporary network
+  /// loss never logs a valid user out.
   void _startRefreshLoop() {
     _refreshTimer?.cancel();
     // Poll every minute and refresh when the access token is close to expiry.
     _refreshTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
       final exp = _accessExpiresAt;
       if (exp == null) return;
-      // Refresh when within 5 minutes of expiry (or already past it). If the
-      // refresh is not possible or fails, the session is over: clear it so the
-      // user can log in again instead of being stuck with a dead token.
+      // Refresh when within 5 minutes of expiry (or already past it).
+      // refreshAccessToken itself decides whether a failure is definitive
+      // (server rejected → it clears the session) or transient (tokens are
+      // kept and retried), so the loop must not clear on every false return.
       if (exp.difference(DateTime.now()) < const Duration(minutes: 5)) {
-        if (!await refreshAccessToken()) {
-          await clearTokens();
-        }
+        await refreshAccessToken();
       }
     });
   }
