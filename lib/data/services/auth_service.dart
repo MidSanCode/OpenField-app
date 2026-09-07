@@ -5,6 +5,13 @@ import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/secure_kv.dart';
 
+/// Authentication state manager: token persistence, login/registration flows
+/// and the periodic token-refresh and presence heartbeat loops.
+///
+/// Sessions are bound to the server host that issued them (see
+/// [switchServer]): tokens are kept in the platform secure store, profile
+/// metadata in shared preferences, and each host's session is saved
+/// separately. Notifies listeners on every auth state change.
 class AuthService extends ChangeNotifier {
   static const _keyAccessToken = 'access_token';
   static const _keyRefreshToken = 'refresh_token';
@@ -39,14 +46,25 @@ class AuthService extends ChangeNotifier {
   /// their server so the account can be restored when the host changes.
   String? _boundHost;
 
+  /// True when an access token is held (the session is considered signed in).
   bool get isAuthenticated => _accessToken != null;
+  /// True while the persisted session is still being restored at startup.
   bool get isLoading => _isLoading;
+  /// Current access token, or null when signed out.
   String? get accessToken => _accessToken;
+  /// Current refresh token, or null when the server issued none.
   String? get refreshToken => _refreshToken;
+  /// When the current access token expires (local clock), or null when
+  /// signed out.
   DateTime? get accessExpiresAt => _accessExpiresAt;
+  /// Cached profile username, or null before it is known.
   String? get username => _username;
+  /// Cached profile email, or null before it is known.
   String? get email => _email;
+  /// Cached profile avatar URL, or null before it is known.
   String? get avatarUrl => _avatarUrl;
+  /// Full profile of the signed-in user, or null until the session has been
+  /// verified against the server.
   User? get user => _user;
 
   /// True when the stored access token has expired and can no longer be used.
@@ -57,6 +75,8 @@ class AuthService extends ChangeNotifier {
   /// awaits this before touching the session to avoid racing startup.
   late final Future<void> _loadFuture;
 
+  /// Creates the service and starts restoring the persisted session in the
+  /// background; [isLoading] flips to false once that completes.
   AuthService() {
     _loadFuture = _load();
   }
@@ -147,6 +167,8 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Updates the cached profile fields and persists them to shared
+  /// preferences. Null arguments keep the current value; notifies listeners.
   Future<void> setUser({String? username, String? email, String? avatarUrl}) async {
     if (username != null) _username = username;
     if (email != null) _email = email;
@@ -158,10 +180,13 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists [username] as the profile's username.
   Future<void> setUsername(String username) => setUser(username: username);
 
+  /// Persists [email] as the profile's email.
   Future<void> setEmail(String email) => setUser(email: email);
 
+  /// Persists [avatarUrl] as the profile's avatar URL.
   Future<void> setAvatarUrl(String avatarUrl) => setUser(avatarUrl: avatarUrl);
 
   /// Logs in with username + password (local accounts created by admins).
@@ -301,6 +326,10 @@ class AuthService extends ChangeNotifier {
     _refreshTimer = null;
   }
 
+  /// Signs out: stops the refresh and heartbeat loops, clears every
+  /// in-memory token/profile field, deletes the persisted tokens (secure
+  /// storage) and profile metadata, and drops the session saved for the
+  /// current host. Safe to call when already signed out; notifies listeners.
   Future<void> clearTokens() async {
     _stopRefreshLoop();
     stopHeartbeat();
@@ -442,6 +471,8 @@ class AuthService extends ChangeNotifier {
   String _normalizeHost(String host) =>
       host.trim().replaceAll(RegExp(r'/+$'), '');
 
+  /// Cancels the periodic token-refresh timer before the notifier goes away;
+  /// the heartbeat is stopped separately by [stopHeartbeat].
   @override
   void dispose() {
     _stopRefreshLoop();

@@ -2094,6 +2094,9 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load requests'));
   }
 
+  /// Accepts a chat consent request; returns the resulting conversation, or
+  /// null when the server's 200 response carries no conversation payload.
+  /// Throws [ApiException] on failure.
   Future<Conversation?> acceptConsentRequest(String accessToken, int requestId) async {
     final response = await _post(
       Uri.parse('$baseUrl/consent-requests/$requestId/accept'),
@@ -2109,6 +2112,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to accept request'));
   }
 
+  /// Declines a chat consent request. Throws [ApiException] on failure.
   Future<void> declineConsentRequest(String accessToken, int requestId) async {
     final response = await _post(
       Uri.parse('$baseUrl/consent-requests/$requestId/decline'),
@@ -2414,6 +2418,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to store e2ee keys'));
   }
 
+  /// Assigns a member role ('member', 'admin', ...) in a conversation.
   Future<void> setMemberRole(String accessToken, int conversationId, int userId, String role) async {
     final response = await _put(
       Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/role'),
@@ -2441,6 +2446,7 @@ class ApiService {
     }
   }
 
+  /// Mutes a member for [durationMinutes].
   Future<void> muteMember(String accessToken, int conversationId, int userId, int durationMinutes) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/mute'),
@@ -2453,6 +2459,7 @@ class ApiService {
     }
   }
 
+  /// Lifts a member's mute.
   Future<void> unmuteMember(String accessToken, int conversationId, int userId) async {
     final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId/members/$userId/mute'),
@@ -2464,6 +2471,7 @@ class ApiService {
     }
   }
 
+  /// Mutes every member in a group for [durationMinutes].
   Future<void> muteAllMembers(String accessToken, int conversationId, int durationMinutes) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/mute-all'),
@@ -2476,6 +2484,7 @@ class ApiService {
     }
   }
 
+  /// Lifts a group-wide mute.
   Future<void> unmuteAllMembers(String accessToken, int conversationId) async {
     final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId/mute-all'),
@@ -2489,6 +2498,8 @@ class ApiService {
 
   // ---- Chat: messages ----
 
+  /// Loads up to [limit] messages of a conversation; [before] is a
+  /// message-id cursor for history paging (0 = the newest page).
   Future<List<ChatMessage>> listMessages(
     String accessToken,
     int conversationId, {
@@ -2557,6 +2568,9 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to search messages'));
   }
 
+  /// Sends a chat message with optional reply target, attachments, mentions,
+  /// a linked check (red packet) and a burn-after-read timer. Returns the
+  /// stored message.
   Future<ChatMessage> sendChatMessage(
     String accessToken,
     int conversationId,
@@ -3044,6 +3058,7 @@ class ApiService {
         _decodeError(response, 'Failed to load membership purchases'));
   }
 
+  /// Edits the content of the caller's message; returns the updated message.
   Future<ChatMessage> editChatMessage(String accessToken, int conversationId, int messageId, String content) async {
     final response = await _put(
       Uri.parse('$baseUrl/conversations/$conversationId/messages/$messageId'),
@@ -3058,6 +3073,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to edit message'));
   }
 
+  /// Deletes a message. Throws [ApiException] unless the server answers 204.
   Future<void> deleteChatMessage(String accessToken, int conversationId, int messageId) async {
     final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId/messages/$messageId'),
@@ -3318,15 +3334,21 @@ class ApiService {
 
 /// One bot account as listed by GET /bots (owner-facing view).
 class BotAccount {
+  /// Server-side bot user id.
   final int id;
+  /// Bot login name.
   final String username;
+  /// Bot display nickname.
   final String nickname;
+  /// Avatar URL, empty when unset.
   final String avatarUrl;
+  /// When the bot account was created (null when the server omits it).
   final DateTime? createdAt;
 
   /// When the current API token was issued (regeneration resets it).
   final DateTime? tokenCreatedAt;
 
+  /// Creates a bot account descriptor.
   const BotAccount({
     required this.id,
     required this.username,
@@ -3336,8 +3358,10 @@ class BotAccount {
     this.tokenCreatedAt,
   });
 
+  /// The nickname, falling back to the username when it is empty.
   String get displayName => nickname.isNotEmpty ? nickname : username;
 
+  /// Builds a bot account from the GET /bots JSON row.
   factory BotAccount.fromJson(Map<String, dynamic> json) {
     return BotAccount(
       id: json['id'] is num ? (json['id'] as num).toInt() : 0,
@@ -3362,18 +3386,27 @@ class BotAccount {
 
 /// One plugin listed by the store (server-side row of the catalog).
 class StorePlugin {
+  /// Unique plugin id used to download the bundle.
   final String id;
+  /// Display name.
   final String name;
+  /// Bundle version string.
   final String version;
+  /// Author name, empty when the manifest omits it.
   final String author;
+  /// Short description, empty when omitted.
   final String description;
 
   /// Raw permission keys requested by the bundle's manifest.
   final List<String> permissions;
+  /// Minimum app version the bundle requires, empty when unconstrained.
   final String minAppVersion;
+  /// True when the server has verified the bundle's publisher.
   final bool verified;
+  /// Total download count reported by the store.
   final int downloads;
 
+  /// Creates a store catalog entry.
   const StorePlugin({
     required this.id,
     required this.name,
@@ -3386,6 +3419,7 @@ class StorePlugin {
     this.downloads = 0,
   });
 
+  /// Builds a store entry from the plugin catalog JSON row.
   factory StorePlugin.fromJson(Map<String, dynamic> json) {
     String asString(Object? v) => v?.toString() ?? '';
     final perms = json['permissions'];
@@ -3405,17 +3439,23 @@ class StorePlugin {
 
 /// Storage statistics for the signed-in user, from GET /storage/usage.
 class StorageUsage {
+  /// Number of attachment objects stored.
   final int totalCount;
+  /// Total stored size in bytes.
   final int totalBytes;
 
   /// Optional quota block; null when the server runs without quotas.
   final int? quotaBaseBytes;
+  /// Bonus storage in bytes granted by membership perks; null without quotas.
   final int? quotaBonusBytes;
+  /// Base + bonus quota in bytes, as the server computes it; null without
+  /// quotas.
   final int? quotaEffectiveBytes;
 
   /// Per-bucket breakdown sorted by size (server-side).
   final List<BucketUsage> buckets;
 
+  /// Creates a usage snapshot.
   const StorageUsage({
     required this.totalCount,
     required this.totalBytes,
@@ -3425,6 +3465,8 @@ class StorageUsage {
     this.buckets = const [],
   });
 
+  /// Parses a usage snapshot; quota fields are null when the payload omits
+  /// the quota block.
   factory StorageUsage.fromJson(Map<String, dynamic> json) {
     int asInt(Object? v) => v is num ? v.toInt() : 0;
     final bucketList = json['buckets'];
@@ -3453,6 +3495,8 @@ class StorageUsage {
     );
   }
 
+  /// Used storage as a fraction of the effective quota, clamped to 0..1;
+  /// 0.0 when no quota is configured.
   double get quotaFraction =>
       quotaEffectiveBytes != null && quotaEffectiveBytes! > 0
           ? (totalBytes / quotaEffectiveBytes!).clamp(0.0, 1.0)
@@ -3461,16 +3505,21 @@ class StorageUsage {
 
 /// Attachment count and size for one storage bucket.
 class BucketUsage {
+  /// Bucket name (e.g. `attachments`, `avatars`).
   final String bucket;
+  /// Number of stored objects in this bucket.
   final int count;
+  /// Total stored size in bytes.
   final int sizeBytes;
 
+  /// Creates a per-bucket breakdown entry.
   const BucketUsage({
     required this.bucket,
     required this.count,
     required this.sizeBytes,
   });
 
+  /// Parses a bucket entry; missing counts/sizes default to 0.
   factory BucketUsage.fromJson(Map<String, dynamic> json) {
     int asInt(Object? v) => v is num ? v.toInt() : 0;
     return BucketUsage(
@@ -3483,12 +3532,19 @@ class BucketUsage {
 
 /// A device the current user is logged in on.
 class SessionDevice {
+  /// Server-side session id.
   final int id;
+  /// Human-readable device label reported at login (e.g. "Windows Chrome").
   final String deviceLabel;
+  /// Last IP address the session was used from.
   final String lastIp;
+  /// When the session was created.
   final DateTime createdAt;
+  /// Last activity time; null when the session has never been used since
+  /// creation.
   final DateTime? lastUsedAt;
 
+  /// Creates a session entry.
   SessionDevice({
     required this.id,
     required this.deviceLabel,
@@ -3497,6 +3553,8 @@ class SessionDevice {
     required this.lastUsedAt,
   });
 
+  /// Parses a session entry; unparseable dates fall back to the epoch or
+  /// null rather than throwing.
   factory SessionDevice.fromJson(Map<String, dynamic> json) {
     DateTime? parse(Object? v) {
       if (v == null) return null;
@@ -3519,12 +3577,18 @@ class SessionDevice {
 
 /// A page of notifications plus the unread badge count.
 class NotificationPage {
+  /// The requested page of notifications, newest first.
   final List<AppNotification> items;
+  /// Total number of notifications server-side.
   final int total;
+  /// Unread count used to drive the navigation badge.
   final int unread;
 
+  /// Creates a page snapshot.
   NotificationPage({required this.items, required this.total, required this.unread});
 
+  /// Parses a page; a missing total falls back to the item count and a
+  /// missing unread count to 0.
   factory NotificationPage.fromJson(Map<String, dynamic> json) {
     final raw = (json['notifications'] as List?) ?? const [];
     return NotificationPage(
@@ -3539,13 +3603,20 @@ class NotificationPage {
 
 /// A single inbox entry.
 class AppNotification {
+  /// Server-side notification id.
   final int id;
+  /// Notification type key (e.g. `reply`, `follow`, `system`).
   final String type;
+  /// Short display title.
   final String title;
+  /// Display body text.
   final String body;
+  /// When the notification was created.
   final DateTime createdAt;
+  /// When the notification was read; null while unread.
   final DateTime? readAt;
 
+  /// Creates an inbox entry.
   AppNotification({
     required this.id,
     required this.type,
@@ -3555,8 +3626,11 @@ class AppNotification {
     required this.readAt,
   });
 
+  /// True while the notification has not been read yet ([readAt] is null).
   bool get unread => readAt == null;
 
+  /// Parses an entry; unparseable dates fall back to the epoch instead of
+  /// throwing.
   factory AppNotification.fromJson(Map<String, dynamic> json) {
     DateTime parse(Object? v) {
       try {
@@ -3581,13 +3655,20 @@ class AppNotification {
 /// the caller keeps polling; once status flips to confirmed the access and
 /// refresh tokens are ready for the requesting device to adopt.
 class QrLoginResult {
+  /// The QR login code being polled.
   final String code;
+  /// Handshake state: `pending`, `confirmed` or `expired`.
   final String status; // pending | confirmed | expired
+  /// Access token to adopt once confirmed; null before that.
   final String? accessToken;
+  /// Refresh token to adopt once confirmed; null before that.
   final String? refreshToken;
+  /// Access token lifetime in seconds; null while pending/expired.
   final int? expiresIn;
+  /// Refresh token lifetime in seconds; null while pending/expired.
   final int? refreshExpiresIn;
 
+  /// Creates a polling result.
   QrLoginResult({
     required this.code,
     required this.status,
@@ -3597,8 +3678,10 @@ class QrLoginResult {
     this.refreshExpiresIn,
   });
 
+  /// True when the handshake completed and the tokens are available.
   bool get isConfirmed => status == 'confirmed' && accessToken != null;
 
+  /// Parses a poll response; missing status defaults to `pending`.
   factory QrLoginResult.fromJson(Map<String, dynamic> json) {
     return QrLoginResult(
       code: json['code']?.toString() ?? '',

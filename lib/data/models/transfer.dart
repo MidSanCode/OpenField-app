@@ -50,6 +50,9 @@ class Transfer {
     this.recipientAvatar = '',
   });
 
+  /// Deserializes from the server's transfer payload, tolerating missing or
+  /// mistyped fields (defaults apply per field; unparseable creation dates
+  /// fall back to the Unix epoch).
   factory Transfer.fromJson(Map<String, dynamic> json) {
     return Transfer(
       id: _asInt(json['id']),
@@ -71,9 +74,13 @@ class Transfer {
     );
   }
 
+  /// True while waiting for the recipient to accept or decline.
   bool get isPending => status == 'pending';
+  /// True when the recipient accepted the transfer.
   bool get isAccepted => status == 'accepted';
+  /// True when the recipient declined the transfer.
   bool get isDeclined => status == 'declined';
+  /// True when the transfer was refunded to the sender.
   bool get isRefunded => status == 'refunded';
 
   static int _asInt(Object? v) {

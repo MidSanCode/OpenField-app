@@ -1,7 +1,9 @@
 /// A red-packet style check: money escrowed by the creator and claimable by
 /// other users until it expires. Mirrors the server's `checks` table.
 class Check {
+  /// Server-assigned check id.
   final int id;
+  /// User id of the check's creator (who escrowed the money).
   final int creatorId;
 
   /// Escrowed total, in cents.
@@ -9,7 +11,9 @@ class Check {
 
   /// How many users may claim a share.
   final int shares;
+  /// How the total is split between claims.
   final String mode; // random | average
+  /// Lifecycle state of the check.
   final String status; // active | settled | refunded
   /// Post this check is attached to; null when it is not tied to a post.
   final int? postId;

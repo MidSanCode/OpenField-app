@@ -18,6 +18,7 @@ import 'package:openfield/data/services/media_cache.dart';
 class EncryptedAttachmentService {
   EncryptedAttachmentService._();
 
+  /// The process-wide singleton.
   static final EncryptedAttachmentService instance =
       EncryptedAttachmentService._();
 

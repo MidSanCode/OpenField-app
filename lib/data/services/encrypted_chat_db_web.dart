@@ -22,6 +22,7 @@ import 'package:openfield/data/services/idb_database.dart';
 class EncryptedChatDb implements ChatCacheStore {
   EncryptedChatDb._();
 
+  /// The process-wide singleton.
   static final EncryptedChatDb instance = EncryptedChatDb._();
 
   IdbDatabase? _db;
@@ -65,6 +66,8 @@ class EncryptedChatDb implements ChatCacheStore {
     return key;
   }
 
+  /// Returns the lowest cached message id for [conversationId], or null when
+  /// the store is empty or the sealing key is not available yet.
   @override
   Future<int?> minMessageId(int conversationId) async {
     final db = await _open();
@@ -87,6 +90,9 @@ class EncryptedChatDb implements ChatCacheStore {
     return minId;
   }
 
+  /// Loads up to [limit] cached messages oldest-first, strictly older than
+  /// [beforeId] when given. Decrypts every row; returns an empty list when
+  /// the sealing key is not available yet.
   @override
   Future<List<ChatMessage>> loadMessages(
     int conversationId, {
@@ -116,6 +122,9 @@ class EncryptedChatDb implements ChatCacheStore {
     return rows.reversed.map((r) => _fromRow(r, key)).toList();
   }
 
+  /// Loads up to [limit] cached messages with ids greater than [afterId],
+  /// oldest-first. Decrypts every row; returns an empty list when the
+  /// sealing key is not available yet.
   @override
   Future<List<ChatMessage>> loadMessagesFrom(
     int conversationId,
@@ -144,6 +153,9 @@ class EncryptedChatDb implements ChatCacheStore {
     return rows.map((r) => _fromRow(r, key)).toList();
   }
 
+  /// Atomically replaces the cached window for [conversationId] with
+  /// [messages] (all deletions and inserts inside one IndexedDB
+  /// transaction). A no-op when the sealing key is not available yet.
   @override
   Future<void> replaceConversation(
       int conversationId, List<ChatMessage> messages) async {
@@ -174,6 +186,9 @@ class EncryptedChatDb implements ChatCacheStore {
     );
   }
 
+  /// Appends [messages] to the cache in one IndexedDB transaction,
+  /// overwriting rows with the same (conversation, id) key. A no-op when the
+  /// list is empty or the sealing key is not available yet.
   @override
   Future<void> appendMessages(
       int conversationId, List<ChatMessage> messages) async {
@@ -193,6 +208,9 @@ class EncryptedChatDb implements ChatCacheStore {
     );
   }
 
+  /// Stores [message] under its (conversation, id) key, overwriting any
+  /// existing row. A no-op when the sealing key is not available yet or the
+  /// payload cannot be sealed.
   @override
   Future<void> upsertMessage(ChatMessage message) async {
     final db = await _open();
@@ -220,6 +238,8 @@ class EncryptedChatDb implements ChatCacheStore {
     }, [conversationId, m.id]);
   }
 
+  /// Removes the cached row for [messageId]; missing rows are ignored. No
+  /// key is needed because the sealed payload is discarded unread.
   @override
   Future<void> deleteMessage(int conversationId, int messageId) async {
     final db = await _open();
@@ -232,6 +252,8 @@ class EncryptedChatDb implements ChatCacheStore {
     );
   }
 
+  /// Removes every cached row for [conversationId] (the store itself is
+  /// kept); missing rows are ignored.
   @override
   Future<void> deleteConversation(int conversationId) async {
     final db = await _open();

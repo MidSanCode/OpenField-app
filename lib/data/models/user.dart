@@ -11,8 +11,11 @@ const int _maxLevel = 200;
 /// A named, colour-coded band of levels. Every ten levels the account moves to
 /// a new tier whose name and colour drive the experience bar.
 class LevelTier {
+  /// First level (inclusive) that belongs to this tier.
   final int minLevel;
+  /// Last level (inclusive) that belongs to this tier.
   final int maxLevel;
+  /// Tier display name.
   final String name;
 
   /// The solid colour of the experience bar for this tier.
@@ -22,6 +25,8 @@ class LevelTier {
   /// gradient instead of the solid [color] (used by the final "source" tier).
   final List<Color> gradientColors;
 
+  /// Creates a tier band spanning [minLevel]..[maxLevel] with optional
+  /// gradient colours for the experience bar.
   const LevelTier(
     this.minLevel,
     this.maxLevel,
@@ -68,48 +73,90 @@ const List<LevelTier> kTiers = [
   ),
 ];
 
+/// A user account: identity, contact info, storage quota, social graph
+/// counters, membership state and name/avatar styling (viewer-relative flags
+/// such as [isFollowing] apply to whichever user the payload describes).
 class User {
+  /// Server-assigned user id; 0 when the payload omits it.
   final int id;
+  /// Login name (unique handle).
   final String username;
+  /// Display nickname ('' when unset; see [displayName]).
   final String nickname;
+  /// Email address ('' when unset or hidden).
   final String email;
+  /// Avatar image URL ('' when unset).
   final String avatarUrl;
+  /// Profile banner image URL ('' when unset).
   final String bannerUrl;
+  /// Account role; 'user' by default, operators get elevated values.
   final String role;
+  /// Whether the account still needs to finish first-time registration.
   final bool needsRegistration;
+  /// Base storage quota in bytes (before membership bonus).
   final int storageQuota;
+  /// Storage currently used in bytes.
   final int storageUsed;
+  /// Logical storage bucket the account is assigned to ('default' normally).
   final String storageBucket;
+  /// OAuth2 provider the account is bound to ('' = password-only account).
   final String oauth2Provider;
+  /// Account name at the OAuth2 provider ('' when unbound).
   final String oauth2Username;
+  /// Profile biography ('' when unset).
   final String bio;
+  /// Whether the account carries a verification badge.
   final bool isVerified;
+  /// Verification summary text ('' when unverified).
   final String verifiedNote;
+  /// Which operator granted the verification ('' when unverified).
   final String verifiedBy;
+  /// Number of users following this account.
   final int followerCount;
+  /// Number of users this account follows.
   final int followingCount;
+  /// Number of mutual friends.
   final int friendCount;
+  /// Whether the current viewer follows this user.
   final bool isFollowing;
+  /// Whether the current viewer is friends with this user.
   final bool isFriend;
+  /// Whether the user hides their follower/following lists.
   final bool hideFollowLists;
+  /// Lifetime experience points; drives the derived [level] getter.
   final int exp;
+  /// When the user last claimed the daily bonus; null when never claimed.
   final DateTime? lastDailyBonusAt;
+  /// Membership tier (0 = none).
   final int memberLevel;
+  /// When the membership expires; null when not a member.
   final DateTime? memberExpiresAt;
+  /// Name colour as a hex string ('' = default rendering).
   final String nameColor;
+  /// Second name colour for gradients ('' = none).
   final String nameColorTo;
+  /// Whether the name colour animates over time.
   final bool nameDynamic;
+  /// Palette for dynamic names; empty = use [nameColor]/[nameColorTo].
   final List<String> nameColors;
+  /// Gradient direction hint for the name colours ('' = default).
   final String nameGradientDirection;
+  /// Avatar frame asset key ('' = no frame).
   final String avatarFrame;
+  /// Whether the user has set a wallet PIN (gates money-related actions).
   final bool hasPin;
+  /// Whether the account is a bot.
   final bool isBot;
+  /// When the account was created; null when the payload omits it.
   final DateTime? createdAt;
   /// Presence: true when the user pinged a heartbeat within the last few
   /// minutes. [lastSeenAt] powers the "last seen" fallback when offline.
   final bool online;
+  /// When the user was last seen online; null when unknown. Falls back to
+  /// this when [online] is false.
   final DateTime? lastSeenAt;
 
+  /// Creates a user; see [fromJson] for payload defaults.
   User({
     required this.id,
     required this.username,
@@ -151,6 +198,8 @@ class User {
     this.lastSeenAt,
   });
 
+  /// Deserializes from the server's user payload, tolerating missing or
+  /// mistyped fields (defaults apply per field).
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: (json['id'] as num?)?.toInt() ?? 0,
@@ -194,8 +243,10 @@ class User {
     );
   }
 
+  /// True when the account is bound to an OAuth2 provider.
   bool get hasOAuthBinding => oauth2Provider.isNotEmpty;
 
+  /// Display name: nickname when non-empty, else username.
   String get displayName => nickname.isNotEmpty ? nickname : username;
 
   /// Whether the user currently holds an active membership (a tier above 0
@@ -373,6 +424,8 @@ class User {
     return thresholds;
   }
 
+  /// Returns a copy with the given fields replaced (null keeps the current
+  /// value).
   User copyWith({
     int? id,
     String? username,

@@ -33,8 +33,11 @@ Uint8List _runEncrypt(_EncryptJob job) {
 /// Thrown when a synchronous E2EE operation cannot run because the service has
 /// not been initialised or the conversation has no usable group key.
 class E2eeException implements Exception {
+  /// Human-readable reason the operation failed.
   final String message;
+  /// Creates the exception with [message] as its full [toString] output.
   E2eeException(this.message);
+  /// Returns the bare [message] rather than the default "Exception: " prefix.
   @override
   String toString() => message;
 }
@@ -66,6 +69,7 @@ class _ChainRec {
 class E2eeService {
   E2eeService._();
 
+  /// The process-wide singleton; E2EE state is inherently per-user.
   static final E2eeService instance = E2eeService._();
 
   static const _keyIdentityPrivate = 'e2ee_identity_private';
@@ -182,6 +186,7 @@ class E2eeService {
   Uint8List? _groupKeyFor(int conversationId, int version) =>
       _groupKeys[conversationId]?[version];
 
+  /// True when at least one group-key version is cached for [conversationId].
   bool hasGroupKey(int conversationId) => currentVersion(conversationId) != null;
 
   /// Fetches the conversation's key envelopes from the server and decrypts the
