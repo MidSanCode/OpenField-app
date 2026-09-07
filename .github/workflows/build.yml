@@ -154,11 +154,15 @@ jobs:
       - name: Build
         run: flutter build macos --release --build-name=$BUILD_NAME --build-number=$BUILD_NUMBER --dart-define-from-file=config.json
       # Ship just the .app bundle — dSYMs / build logs / pod files from the
-      # Products directory are build debris nobody installs.
+      # Products directory are build debris nobody installs. The bundle is
+      # named after the product (openfield.app), NOT Runner.app; glob for
+      # *.app so a product-name change never breaks packaging again.
       - name: Package app bundle
         run: |
           cd build/macos/Build/Products/Release
-          zip -qry ../../../../../openfield-macos-${{ env.BUILD_NAME }}.zip Runner.app
+          APP_NAME=$(ls -d *.app | head -n 1)
+          echo "packaging $APP_NAME"
+          zip -qry ../../../../../openfield-macos-${{ env.BUILD_NAME }}.zip "$APP_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: openfield-macOS

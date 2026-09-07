@@ -72,9 +72,31 @@ lib/
 
 - **Posts**: feed with public/friends-only visibility, rich text/markdown,
   attachments, reactions, favorites, replies (nested), and author navigation.
+  Authors can pin their own posts (pin/unpin in the context menu); pinned
+  posts carry a badge and float to the top of the profile. Posts can be
+  published into 贴吧-style **camps** (see below).
+- **Camps**: a camp directory (search, mine/all toggle) reachable from the
+  feed app bar. Camps support visibility (hidden camps are member-only) and a
+  direct-join switch; camp posts live outside the global feed and the composer
+  scopes new posts to the camp. Creation is quota-limited (100 per user,
+  boosted by membership).
 - **Chat**: consent-based private chats and groups, E2E-encrypted
-  conversations, @mentions, quote replies, read receipts, typing indicators
-  and offline message caches.
+  conversations, @mentions, quote replies, message forwarding, read receipts,
+  typing indicators and offline message caches. Groups gain **announcements**
+  (manager-published), a shared **to-do checklist**, and a **group files**
+  view over the attachments shared in the conversation.
+- **Group quotas**: creating groups is limited to 1000 owned groups (joined
+  groups don't count) with a +25%-per-membership-level bonus.
+- **Images**: uploads produce a 512px thumbnail and a 1440px preview; lists
+  and the viewer load the preview first and fetch the original only through
+  the viewer's "load original" toggle.
+- **QR login & share codes**: the signing-in device shows a 5-minute QR on
+  its login screen; already-signed-in devices scan and approve. Personal and
+  group QR codes (`openfield://user/<id>`, `openfield://group/<id>`) open
+  profiles or offer to join a group when scanned.
+- **App announcements**: the latest server notice shows in a startup dialog
+  with a per-notice "don't show again" and a history page; permission holders
+  can publish/retire notices from the app.
 - **Wallet**: balance in cents, transaction history, transfers with a payment
   PIN dialog.
 - **Membership**: tier catalog and purchase (paid with wallet coins + PIN),
