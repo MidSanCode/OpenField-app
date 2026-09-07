@@ -14,9 +14,12 @@ import '../../data/services/media_cache.dart';
 /// failures surface as [NetworkImageLoadException] exactly like the built-in
 /// network image.
 class CachedNetworkImageProvider extends ImageProvider<CachedNetworkImageProvider> {
+  /// Creates a provider for [url]; [scale] scales the decoded image.
   const CachedNetworkImageProvider(this.url, {this.scale = 1.0});
 
+  /// Remote image URL; also the [MediaCache] lookup key.
   final String url;
+  /// Scale to apply to the decoded image (1.0 = logical pixels).
   final double scale;
 
   @override

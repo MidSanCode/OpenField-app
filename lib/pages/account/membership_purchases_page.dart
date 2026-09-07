@@ -16,6 +16,8 @@ class MembershipPurchasesPage extends StatefulWidget {
       _MembershipPurchasesPageState();
 }
 
+/// State for [MembershipPurchasesPage]: loads the latest 100 purchase /
+/// renewal / upgrade records and renders them newest first.
 class _MembershipPurchasesPageState extends State<MembershipPurchasesPage> {
   final ApiService _apiService = ApiService();
   List<MembershipPurchase> _purchases = const [];

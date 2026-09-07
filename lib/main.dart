@@ -26,6 +26,10 @@ import 'package:openfield/core/theme/app_theme.dart';
 import 'package:openfield/plugins/plugin_gate.dart';
 import 'package:openfield/plugins/plugin_manager.dart';
 
+/// Application entry point: initializes Flutter bindings, the media playback
+/// engine and localization, loads persisted [AppConfig], registers the
+/// openfield:// URL scheme on Windows, installs the console logging bridges,
+/// then launches [OpenFieldApp].
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
@@ -82,6 +86,10 @@ void _initConsoleLogging() {
   };
 }
 
+/// Root application widget: wires the global providers (auth, settings, chat
+/// unread state, plugin gate/manager), builds the router-backed MaterialApp
+/// with the persisted theme/locale, overlays the optional background image and
+/// handles openfield:// deep links (Windows argument fallback included).
 class OpenFieldApp extends StatefulWidget {
   const OpenFieldApp({super.key});
 
@@ -89,6 +97,9 @@ class OpenFieldApp extends StatefulWidget {
   State<OpenFieldApp> createState() => _OpenFieldAppState();
 }
 
+/// State for [OpenFieldApp]: owns the router, the auth/settings listeners
+/// that drive realtime connections and server-host switches, and the
+/// deep-link handler that applies OAuth tokens or bind results.
 class _OpenFieldAppState extends State<OpenFieldApp> {
   final AuthService _authService = AuthService();
   final SettingsService _settingsService = SettingsService();

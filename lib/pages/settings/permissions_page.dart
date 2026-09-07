@@ -4,6 +4,8 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+/// Shows the current user's permission keys and group memberships fetched
+/// from the server (read-only; entries are informational chips and lists).
 class PermissionsPage extends StatefulWidget {
   const PermissionsPage({super.key});
 
@@ -11,6 +13,8 @@ class PermissionsPage extends StatefulWidget {
   State<PermissionsPage> createState() => _PermissionsPageState();
 }
 
+/// State for [PermissionsPage]: fetches the permission / group report on
+/// entry with loading, error and empty states.
 class _PermissionsPageState extends State<PermissionsPage> {
   final ApiService _apiService = ApiService();
   List<String> _permissions = [];

@@ -6,38 +6,68 @@ import 'attachment.dart';
 /// [failed] are local-only states for optimistic UI.
 enum MessageStatus { sending, sent, failed }
 
+/// A chat message: text or a system event, with reply metadata, sender
+/// profile/styling, attachments, E2EE state and burn-after-read info.
 class ChatMessage {
+  /// Server-assigned message id; 0 for optimistic local sends that have not
+  /// been confirmed yet (see [isLocal]).
   final int id;
+  /// Conversation the message belongs to.
   final int conversationId;
+  /// Sender's user id.
   final int senderId;
+  /// Raw body text; for E2EE conversations this holds the ciphertext envelope
+  /// until decrypted (see [decryptedContent] and [displayContent]).
   final String content;
 
   /// Server-side message kind: 'text' or system kinds such as
   /// 'system.join' / 'system.leave' / 'system.mute' / 'system.unmute' /
   /// 'system.mute.all' / 'system.unmute.all'.
   final String kind;
+  /// Id of the message this one replies to; null when not a reply.
   final int? replyToId;
+  /// Sender name of the replied-to message (denormalized for the reply
+  /// preview).
   final String? replyToName;
+  /// Content snippet of the replied-to message (denormalized for the reply
+  /// preview).
   final String? replyToContent;
+  /// When the message was last edited; null when never edited.
   final DateTime? editedAt;
+  /// When the message was deleted; null while it still exists.
   final DateTime? deletedAt;
+  /// When the message was created (server timestamp).
   final DateTime createdAt;
 
   /// For kind == 'check' messages: the id of the attached check. Fetch the
   /// full check (amount, claims, status) from /checks/:id before rendering.
   final int checkId;
+  /// Sender's display name, when the payload includes it.
   final String? senderName;
+  /// Sender's avatar URL, when the payload includes it.
   final String? senderAvatar;
+  /// Whether the sender carries a verification badge.
   final bool senderVerified;
+  /// Whether the sender is a bot account.
   final bool senderIsBot;
+  /// Sender's membership tier (0 = none).
   final int senderMemberLevel;
+  /// Whether the sender's membership is currently active.
   final bool senderMemberActive;
+  /// Sender's name colour as a hex string ('' = default rendering).
   final String senderNameColor;
+  /// Second name colour for gradients ('' = none).
   final String senderNameColorTo;
+  /// Whether the sender's name colour animates over time.
   final bool senderNameDynamic;
+  /// Palette for dynamic names; empty = use [senderNameColor]/
+  /// [senderNameColorTo].
   final List<String> senderNameColors;
+  /// Gradient direction hint for the name colours ('' = default).
   final String senderNameGradientDirection;
+  /// Sender's avatar frame asset key ('' = no frame).
   final String senderAvatarFrame;
+  /// Media attached to the message; empty for text-only messages.
   final List<Attachment> attachments;
 
   /// Server-confirmed user IDs explicitly @-mentioned in this message. The
@@ -71,6 +101,8 @@ class ChatMessage {
   /// by every client). Null while nobody has read it yet.
   final DateTime? burnAt;
 
+  /// Creates a message. [clientId] defaults to '' when not supplied; pass one
+  /// explicitly for optimistic local sends.
   const ChatMessage({
     required this.id,
     required this.conversationId,
@@ -137,14 +169,23 @@ class ChatMessage {
   /// not been decrypted yet.
   bool get needsDecryption => decryptedContent == null && !isSystem;
 
+  /// True when this message was soft-deleted ([deletedAt] set).
   bool get isDeleted => deletedAt != null;
+  /// True when this message was edited after it was sent.
   bool get isEdited => editedAt != null;
+  /// True for server-generated system events (kind starts with 'system.').
   bool get isSystem => kind.startsWith('system.');
+  /// True when this message carries a check (red packet) with a valid id.
   bool get isCheck => kind == 'check' && checkId > 0;
+  /// True for 'system.join' events.
   bool get isJoin => kind == 'system.join';
+  /// True for 'system.leave' events.
   bool get isLeave => kind == 'system.leave';
+  /// True while the message has no server-assigned id yet.
   bool get isLocal => id <= 0;
+  /// True while the optimistic send is still uploading/sending.
   bool get isPending => status == MessageStatus.sending;
+  /// True when the optimistic send failed.
   bool get isFailed => status == MessageStatus.failed;
 
   /// True when this message is armed for burn-after-read and not yet deleted.
@@ -162,6 +203,7 @@ class ChatMessage {
     return left < 0 ? 0 : left;
   }
 
+  /// Sender's display name for the message bubble, or 'Unknown' when absent.
   String get displayName => senderName ?? 'Unknown';
 
   /// Stable ordering key: newest timestamp wins; ties broken by id so locally
@@ -286,6 +328,9 @@ class ChatMessage {
     );
   }
 
+  /// Deserializes from the server's message payload. Does not populate
+  /// client-side fields ([clientId], [status], [decryptedContent],
+  /// [uploadProgress]); those are set locally after construction.
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final rawAttachments = json['attachments'];
     List<Attachment> attachments = const [];

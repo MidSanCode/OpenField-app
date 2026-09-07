@@ -21,6 +21,8 @@ class GroupAnnouncementsPage extends StatefulWidget {
   State<GroupAnnouncementsPage> createState() => _GroupAnnouncementsPageState();
 }
 
+/// State for [GroupAnnouncementsPage]: loads the announcement list and
+/// publishes or deletes items for managers.
 class _GroupAnnouncementsPageState extends State<GroupAnnouncementsPage> {
   final ApiService _api = ApiService();
   List<GroupAnnouncement> _items = [];
@@ -192,6 +194,8 @@ class GroupTodosPage extends StatefulWidget {
   State<GroupTodosPage> createState() => _GroupTodosPageState();
 }
 
+/// State for [GroupTodosPage]: loads the checklist and adds, toggles or
+/// deletes entries for permitted members.
 class _GroupTodosPageState extends State<GroupTodosPage> {
   final ApiService _api = ApiService();
   List<GroupTodo> _items = [];
@@ -340,6 +344,8 @@ class GroupFilesPage extends StatefulWidget {
   State<GroupFilesPage> createState() => _GroupFilesPageState();
 }
 
+/// State for [GroupFilesPage]: loads the conversation's shared attachments,
+/// newest first, with media preview on tap.
 class _GroupFilesPageState extends State<GroupFilesPage> {
   final ApiService _api = ApiService();
   List<GroupFile> _items = [];

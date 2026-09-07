@@ -26,6 +26,8 @@ class MediaCacheStoreImpl implements MediaCacheStore {
   }
 
   @override
+  /// Returns the cached bytes for [url] (looked up by its SHA-256 hash), or
+  /// null on a miss or an unreadable/corrupt file.
   Future<Uint8List?> load(String url) async {
     final file = File(p.join((await _cacheDir()).path, _hash(url)));
     if (!await file.exists()) return null;
@@ -38,6 +40,8 @@ class MediaCacheStoreImpl implements MediaCacheStore {
   }
 
   @override
+  /// Writes [bytes] to a hash-named file and triggers a prune. All errors are
+  /// swallowed: a failed cache write must not fail the load.
   Future<void> save(String url, Uint8List bytes) async {
     try {
       final file = File(p.join((await _cacheDir()).path, _hash(url)));

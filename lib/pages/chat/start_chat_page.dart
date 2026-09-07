@@ -11,6 +11,8 @@ import 'package:easy_localization/easy_localization.dart';
 /// Lets the user search for another user to start a private chat with, or
 /// (when [inviteToGroup] is set) invite them into a group conversation.
 class StartChatPage extends StatefulWidget {
+  /// Group conversation id to invite the picked user into. When null the
+  /// page starts a new private chat instead.
   final int? inviteToGroup;
 
   const StartChatPage({super.key, this.inviteToGroup});
@@ -19,6 +21,8 @@ class StartChatPage extends StatefulWidget {
   State<StartChatPage> createState() => _StartChatPageState();
 }
 
+/// State for [StartChatPage]: debounced user search (self excluded from
+/// results) and the private-chat request / group-invite confirmation flow.
 class _StartChatPageState extends State<StartChatPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _queryController = TextEditingController();

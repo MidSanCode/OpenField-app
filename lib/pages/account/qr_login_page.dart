@@ -23,6 +23,8 @@ class QrLoginPage extends StatefulWidget {
   State<QrLoginPage> createState() => _QrLoginPageState();
 }
 
+/// State for [QrLoginPage]: creates the handshake code, polls every two
+/// seconds for approval and stores the tokens once confirmed.
 class _QrLoginPageState extends State<QrLoginPage> {
   final ApiService _api = ApiService();
   String? _code;

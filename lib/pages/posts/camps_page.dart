@@ -15,6 +15,8 @@ class CampsPage extends StatefulWidget {
   State<CampsPage> createState() => _CampsPageState();
 }
 
+/// State for [CampsPage]: camp search and listing with an all/mine toggle,
+/// join (direct-join camps only), create dialog and camp entry.
 class _CampsPageState extends State<CampsPage> {
   final ApiService _api = ApiService();
   final TextEditingController _search = TextEditingController();

@@ -13,6 +13,8 @@ class SessionsPage extends StatefulWidget {
   State<SessionsPage> createState() => _SessionsPageState();
 }
 
+/// State for [SessionsPage]: loads the session list, flags the first entry as
+/// this device and revokes sessions; revoking the current one signs out.
 class _SessionsPageState extends State<SessionsPage> {
   final ApiService _api = ApiService();
   List<SessionDevice> _sessions = [];

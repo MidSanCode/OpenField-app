@@ -13,6 +13,7 @@ class PluginFsEntry {
   /// Absolute (or virtual, on web) directory path.
   final String path;
 
+  /// Const constructor; entries are immutable path holders.
   const PluginFsEntry(this.path);
 }
 

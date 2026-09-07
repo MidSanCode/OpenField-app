@@ -24,6 +24,8 @@ class MediaPreviewPage extends StatefulWidget {
   State<MediaPreviewPage> createState() => _MediaPreviewPageState();
 }
 
+/// State for [MediaPreviewPage]: owns the media_kit player, the streaming
+/// source resolution and the image zoom/rotation transform state.
 class _MediaPreviewPageState extends State<MediaPreviewPage> {
   Player? _player;
   VideoController? _videoController;

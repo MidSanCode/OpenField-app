@@ -15,6 +15,9 @@ class PluginStorePage extends StatefulWidget {
   State<PluginStorePage> createState() => _PluginStorePageState();
 }
 
+/// State for [PluginStorePage]: fetches the store catalog as a future,
+/// installs bundles (download → install → consent dialog → enable), and
+/// disables the install button for already-installed plugins.
 class _PluginStorePageState extends State<PluginStorePage> {
   late Future<List<StorePlugin>> _future;
 

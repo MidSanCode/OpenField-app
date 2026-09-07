@@ -11,7 +11,10 @@ import 'package:openfield/data/services/encrypted_attachment_service.dart';
 /// attachments are decrypted to a local temp file first (the group key is
 /// scoped per conversation).
 class VoiceMessageBubble extends StatefulWidget {
+  /// The audio attachment this bubble plays.
   final Attachment attachment;
+  /// Conversation the attachment belongs to; required to decrypt E2EE audio
+  /// (the group key is scoped per conversation). Plain attachments ignore it.
   final int? conversationId;
 
   const VoiceMessageBubble({
@@ -25,12 +28,19 @@ class VoiceMessageBubble extends StatefulWidget {
 }
 
 class _VoiceMessageBubbleState extends State<VoiceMessageBubble> {
+  /// The media_kit player, created only after the source resolved; null while
+  /// loading or when preparation failed.
   Player? _player;
+  /// Local file path (decrypted E2EE audio) or remote URL backing the player.
   String? _resolvedSource;
   bool _loading = true;
+  /// Set when resolving/decrypting or preparing the player failed; the bubble
+  /// then offers a retry.
   bool _failed = false;
 
+  /// Playback position, updated from the player stream.
   Duration _position = Duration.zero;
+  /// Total media duration, known once the player has prepared the source.
   Duration _duration = Duration.zero;
   bool _playing = false;
   StreamSubscription<Duration>? _posSub;
@@ -38,6 +48,8 @@ class _VoiceMessageBubbleState extends State<VoiceMessageBubble> {
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<bool>? _completedSub;
 
+  /// The audio attachment being played (shorthand for
+  /// [VoiceMessageBubble.attachment]).
   Attachment get attachment => widget.attachment;
 
   @override

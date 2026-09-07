@@ -38,7 +38,14 @@ import 'package:openfield/widgets/voice_message.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 import 'package:openfield/core/format/chat_time.dart';
 
+/// A single conversation view (private chat or group): message list with
+/// offline-first caching, realtime updates and optimistic sends; attachments,
+/// voice recording, quote replies, @mentions, multi-select forwarding,
+/// history search and burn-after-read messages. Encrypted conversations are
+/// decrypted client-side via [E2eeService] and cached in a dedicated store.
 class ConversationPage extends StatefulWidget {
+  /// Id of the conversation being displayed; every load / send call targets
+  /// it.
   final int conversationId;
 
   /// Known encryption state of the conversation, passed by the caller so the
@@ -61,6 +68,10 @@ class ConversationPage extends StatefulWidget {
   State<ConversationPage> createState() => _ConversationPageState();
 }
 
+/// State for [ConversationPage]: message loading / caching / merging,
+/// realtime event handling, E2EE key sync and decryption, typing and mention
+/// autocomplete state, burn-after-read timers, and the composer with its
+/// attachment and voice pipelines.
 class _ConversationPageState extends State<ConversationPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _inputController = TextEditingController();

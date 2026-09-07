@@ -26,6 +26,8 @@ class GroupSettingsPage extends StatefulWidget {
   State<GroupSettingsPage> createState() => _GroupSettingsPageState();
 }
 
+/// State for [GroupSettingsPage]: holds the editable settings, the member list
+/// and the saving flag, persisting changes through [ApiService].
 class _GroupSettingsPageState extends State<GroupSettingsPage> {
   final ApiService _apiService = ApiService();
   late bool _isPublic;

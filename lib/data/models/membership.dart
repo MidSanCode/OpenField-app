@@ -1,16 +1,27 @@
 /// A purchaseable membership tier returned by the server's membership catalog.
 class MembershipTier {
+  /// Tier level this purchase grants (0 = the implicit non-member tier).
   final int level;
+  /// Tier display name.
   final String name;
+  /// Human-readable summary of the tier's perks.
   final String description;
+  /// Purchase price in coins.
   final int price;
+  /// Experience multiplier while the tier is active (e.g. 2.0).
   final double expMultiplier;
+  /// Length of the granted membership, in days.
   final int durationDays;
+  /// Extra storage granted while active, in megabytes (0 when none).
   final int storageBonusMb;
+  /// Whether the tier unlocks gradient name colours.
   final bool allowGradient;
+  /// Whether the tier unlocks animated (dynamic) name colours.
   final bool allowDynamic;
+  /// Name-colour presets unlocked by the tier.
   final List<String> presetColors;
 
+  /// Creates a tier; see [fromJson] for payload defaults.
   const MembershipTier({
     required this.level,
     required this.name,
@@ -24,6 +35,8 @@ class MembershipTier {
     this.presetColors = const [],
   });
 
+  /// Deserializes from the server's tier payload, tolerating missing or
+  /// mistyped fields (defaults apply per field).
   factory MembershipTier.fromJson(Map<String, dynamic> json) {
     return MembershipTier(
       level: _asInt(json['level']),
@@ -45,14 +58,24 @@ class MembershipTier {
 /// The authenticated user's membership state plus the purchase catalog,
 /// returned by GET /membership.
 class MembershipStatus {
+  /// Current membership tier (0 = none).
   final int level;
+  /// Current tier's display name.
   final String name;
+  /// Whether the membership is currently active.
   final bool active;
+  /// When the active membership expires; null when inactive or unknown.
   final DateTime? expiresAt;
+  /// Experience multiplier granted by the active tier (1.0 when none).
   final double multiplier;
+  /// Remaining membership duration, in days (0 when inactive).
   final int memberDays;
+  /// Price already paid for the current membership, in coins (used to
+  /// compute upgrade price differences).
   final int memberPrice;
+  /// Whether the membership renews automatically at expiry.
   final bool autoRenew;
+  /// Purchaseable tiers from the server's catalog.
   final List<MembershipTier> tiers;
 
   const MembershipStatus({
@@ -67,6 +90,8 @@ class MembershipStatus {
     required this.tiers,
   });
 
+  /// Deserializes from GET /membership, tolerating missing or mistyped
+  /// fields (defaults apply per field).
   factory MembershipStatus.fromJson(Map<String, dynamic> json) {
     return MembershipStatus(
       level: _asInt(json['level']),
@@ -88,13 +113,20 @@ class MembershipStatus {
 /// One recorded membership purchase/renewal/upgrade row, returned by
 /// GET /membership/purchases.
 class MembershipPurchase {
+  /// Server-assigned purchase record id.
   final int id;
+  /// Tier level this purchase applied to.
   final int level;
+  /// Tier display name at purchase time.
   final String tierName;
+  /// Amount charged, in coins.
   final int priceCoins;
+  /// What kind of transaction it was: 'purchase', 'renew' or 'upgrade'.
   final String kind; // purchase | renew | upgrade
+  /// When the purchase happened (localized timestamp).
   final DateTime createdAt;
 
+  /// Creates a purchase record; see [fromJson] for payload defaults.
   const MembershipPurchase({
     required this.id,
     required this.level,
@@ -104,6 +136,8 @@ class MembershipPurchase {
     required this.createdAt,
   });
 
+  /// Deserializes from the server's purchase payload; unparseable dates fall
+  /// back to the Unix epoch.
   factory MembershipPurchase.fromJson(Map<String, dynamic> json) {
     return MembershipPurchase(
       id: _asInt(json['id']),

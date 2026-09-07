@@ -15,16 +15,34 @@ import 'package:openfield/widgets/post_reaction_bar.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 
+/// A feed post card: author header, markdown content, quoted-post preview,
+/// tag chips, attachments, attached check and an action row (replies,
+/// reactions, tip). Content longer than 200 chars is truncated inline with a
+/// show-more affordance; long-press / right-click opens the content menu.
 class PostCard extends StatefulWidget {
+  /// The post to render and act on.
   final Post post;
+  /// True when the current user authored this post; reveals edit/delete and
+  /// pin/unpin menu entries and hides the tip action.
   final bool isMine;
+  /// Invoked by the menu's edit action; no-op when null.
   final VoidCallback? onEdit;
+  /// Invoked by the menu's delete action; no-op when null.
   final VoidCallback? onDelete;
+  /// Invoked when the reply count/action is tapped.
   final VoidCallback? onTapReply;
+  /// Invoked when the avatar or author name is tapped; null disables the
+  /// author hit area.
   final VoidCallback? onTapAuthor;
+  /// Whether the reply/reaction/tip action row is shown at the bottom.
   final bool showReplies;
+  /// Invoked with the server-returned post after a successful favorite toggle
+  /// so the caller can refresh its copy.
   final ValueChanged<Post>? onPostChanged;
+  /// Access token for favorite/tip calls; when null or empty, those actions
+  /// invoke [onUnauthenticated] instead.
   final String? token;
+  /// Called when the user attempts an authenticated action while signed out.
   final VoidCallback? onUnauthenticated;
   /// When true, the content is always rendered in full (used by the post
   /// detail page) and the "view more" affordance is hidden.
@@ -73,6 +91,7 @@ class _PostCardState extends State<PostCard> {
   static const int _truncateLength = 200;
   late bool _expanded;
 
+  /// The post being rendered (shorthand for [PostCard.post]).
   Post get post => widget.post;
 
   @override

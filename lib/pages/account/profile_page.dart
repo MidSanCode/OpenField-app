@@ -18,6 +18,7 @@ import 'package:openfield/widgets/verified_badge.dart';
 /// Public profile of any user: banner, avatar, nickname, @username, bio,
 /// and verified badge.
 class ProfilePage extends StatefulWidget {
+  /// The user whose profile is shown.
   final int userId;
 
   const ProfilePage({super.key, required this.userId});
@@ -26,6 +27,9 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
+/// State for [ProfilePage]: loads the user (then their posts in the
+/// background), supports follow/unfollow with optimistic count updates and
+/// pin/unpin of the owner's own posts.
 class _ProfilePageState extends State<ProfilePage> {
   final ApiService _apiService = ApiService();
   User? _user;

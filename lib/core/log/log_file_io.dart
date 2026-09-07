@@ -8,10 +8,15 @@ const int _kMaxLogFiles = 3;
 
 /// Writes log lines to a rotating file in the application support directory.
 abstract class LogFileWriter {
+  /// Appends one already-formatted line (newline added by the writer).
+  /// Calls before initialization are buffered in memory.
   void write(String line);
+  /// Flushes and closes the underlying sink; safe when never written to.
   Future<void> close();
 }
 
+/// Creates the platform file writer (IO build; see [log_file_stub.dart] for
+/// the web/no-io variant).
 LogFileWriter createLogFileWriter() => _FileLogWriter._();
 
 class _FileLogWriter implements LogFileWriter {
@@ -87,10 +92,15 @@ class _FileLogWriter implements LogFileWriter {
   }
 }
 
+/// Metadata for one persisted log file, shown in the log viewer list.
 class LogFileInfo {
+  /// Absolute path of the .log file on disk.
   final String path;
+  /// Bare file name (timestamp-based, e.g. `1730000000000.log`).
   final String name;
+  /// File size in bytes.
   final int size;
+  /// Last-modified time reported by the filesystem.
   final DateTime modified;
 
   const LogFileInfo({
@@ -100,12 +110,14 @@ class LogFileInfo {
     required this.modified,
   });
 
+  /// Human-readable size, rounded to one decimal in KB/MB.
   String get formattedSize {
     if (size < 1024) return '$size B';
     if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
     return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
+  /// `yyyy-MM-dd HH:mm` rendering of [modified].
   String get formattedDate {
     final d = modified;
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} '
@@ -113,6 +125,8 @@ class LogFileInfo {
   }
 }
 
+/// Lists the persisted .log files, newest first. Returns an empty list when
+/// the log directory does not exist yet.
 Future<List<LogFileInfo>> getLogFiles() async {
   final dir = await getApplicationSupportDirectory();
   final logDir = Directory('${dir.path}/logs');
@@ -149,6 +163,10 @@ final Map<String, Level> _logLevelMap = {
   'off': Level.OFF,
 };
 
+/// Parses a log file written by [LogFileWriter] back into [LogEntry]s, in
+/// file order. Lines that fail to parse (or the ` | error:`/stack-trace
+/// suffixes when malformed) are skipped rather than throwing; a missing file
+/// yields an empty list.
 Future<List<LogEntry>> readLogFile(String path) async {
   final file = File(path);
   if (!await file.exists()) return [];

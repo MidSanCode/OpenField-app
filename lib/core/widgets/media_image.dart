@@ -12,6 +12,7 @@ final Logger _imageLog = Logger('image');
 /// platform exposes one, so missing/broken media is visibly explained instead
 /// of silently disappearing.
 class MediaImage extends StatelessWidget {
+  /// Creates the image widget; all fields but [url] are optional.
   const MediaImage({
     super.key,
     required this.url,
@@ -21,9 +22,14 @@ class MediaImage extends StatelessWidget {
     this.dark = false,
   });
 
+  /// Remote image URL (fetched through [CachedNetworkImageProvider]).
   final String url;
+  /// How the image inscribes its box.
   final BoxFit fit;
+  /// Decode width in pixels, to cap memory for large media; null decodes at
+  /// full size.
   final int? cacheWidth;
+  /// Alignment of the image within its box.
   final Alignment alignment;
 
   /// Renders the placeholder in light-on-dark colours (e.g. the full-screen

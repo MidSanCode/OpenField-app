@@ -24,16 +24,19 @@ enum PluginOrigin { store, imported }
 
 /// One plugin installed on this device.
 class InstalledPlugin {
+  /// Parsed, validated manifest of the installed bundle.
   final PluginManifest manifest;
 
   /// Absolute directory containing manifest.json / entry script / meta.
   final String dir;
 
+  /// Whether this copy came from the store or was sideloaded by the user.
   final PluginOrigin origin;
 
   /// True only for bundles published through the admin-reviewed store.
   final bool verifiedFromStore;
 
+  /// Creates an install record for [manifest] rooted at [dir].
   InstalledPlugin({
     required this.manifest,
     required this.dir,
@@ -48,6 +51,7 @@ class InstalledPlugin {
 class PluginManager extends ChangeNotifier {
   PluginManager._();
 
+  /// Process-wide singleton; UI screens and consent dialogs bind to this.
   static final PluginManager instance = PluginManager._();
 
   final Map<String, InstalledPlugin> _installed = {};
@@ -61,12 +65,19 @@ class PluginManager extends ChangeNotifier {
   VoidCallback? _gateListener;
   static AuthService? Function()? _authProvider;
 
+  /// All installed plugins as an unmodifiable snapshot (scan + install
+  /// order).
   List<InstalledPlugin> get plugins => List.unmodifiable(_installed.values);
 
+  /// Looks up an installed plugin by manifest id; null when not installed.
   InstalledPlugin? plugin(String id) => _installed[id];
 
+  /// True when the user enabled the plugin; the choice persists across
+  /// restarts and re-boots whenever the gate allows it.
   bool isEnabled(String id) => _enabled.contains(id);
 
+  /// True when [permId] was individually accepted for plugin [id] in the
+  /// consent dialog.
   bool isGranted(String id, String permId) =>
       (_grants[id] ?? const {}).contains(permId);
 
@@ -76,8 +87,10 @@ class PluginManager extends ChangeNotifier {
     return perms.every(granted.contains);
   }
 
+  /// All permission ids granted to plugin [id]; empty set when none.
   Set<String> grantsOf(String id) => _grants[id] ?? const {};
 
+  /// True while the plugin's JS engine is alive right now.
   bool isRunning(String id) => _engines[id]?.running ?? false;
 
   /// Number of currently running engines (for status chips).
@@ -87,6 +100,9 @@ class PluginManager extends ChangeNotifier {
   // Init
   // ------------------------------------------------------------------
 
+  /// Loads the plugins directory, scans installed bundles, restores
+  /// enabled/grant prefs and hooks the [PluginGate]. Idempotent; safe to
+  /// call once at app startup before any UI reads plugins.
   Future<void> ensureInitialized() async {
     if (_initialized) return;
     _initialized = true;
@@ -279,6 +295,8 @@ class PluginManager extends ChangeNotifier {
   // Enable / disable / grants
   // ------------------------------------------------------------------
 
+  /// Marks the plugin enabled (persisted) and boots its engine
+  /// asynchronously if the gate currently allows plugins.
   Future<void> enable(String id) async {
     _enabled.add(id);
     await _persistPrefs();
@@ -288,6 +306,8 @@ class PluginManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Marks the plugin disabled (persisted) and stops its engine
+  /// asynchronously; the install itself is kept on disk.
   Future<void> disable(String id) async {
     _enabled.remove(id);
     await _persistPrefs();
@@ -295,6 +315,8 @@ class PluginManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Replaces the plugin's granted-permission set (persisted). A running
+  /// engine is restarted so the new grants apply immediately.
   Future<void> setGrants(String id, Set<String> grants) async {
     _grants[id] = Set.unmodifiable(grants);
     await _persistPrefs();
@@ -365,6 +387,8 @@ class PluginManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Detaches the gate listener. Does not stop running engines (the
+  /// singleton is expected to outlive the app anyway).
   @override
   void dispose() {
     if (_gateListener != null) {

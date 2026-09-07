@@ -9,6 +9,9 @@ import 'package:openfield/plugins/plugin_permissions.dart';
 
 /// Full metadata + controls for one installed plugin.
 class PluginDetailPage extends StatelessWidget {
+  /// Id of the plugin to inspect; the manifest is looked up from
+  /// [PluginManager] and the page degrades to a "missing" notice when the
+  /// plugin has been uninstalled.
   final String pluginId;
 
   const PluginDetailPage({super.key, required this.pluginId});

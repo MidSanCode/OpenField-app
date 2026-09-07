@@ -12,9 +12,19 @@ import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/encrypted_attachment_service.dart';
 import 'package:openfield/pages/media/media_preview_page.dart';
 
+/// Renders the attachments of a post or chat message: images in a grid
+/// (single image capped at 360x270, otherwise a 3-column square grid) and
+/// other files as tappable tiles with inline media playback. Encrypted
+/// attachments are decrypted to local temp files before display; when any
+/// attachment is encrypted but [conversationId] is null nothing is rendered.
 class AttachmentView extends StatelessWidget {
+  /// The attachments to render; empty renders nothing.
   final List<Attachment> attachments;
+  /// Whether tiles are tappable (open/preview/download). False renders a
+  /// static, non-interactive view.
   final bool interactive;
+  /// Invoked right before an attachment is opened (e.g. to mark the chat
+  /// message as read).
   final VoidCallback? onOpen;
 
   /// The conversation the attachments belong to. Required to decrypt E2EE
@@ -795,6 +805,8 @@ Future<void> _openLocalFile(BuildContext context, String path) async {
   }
 }
 
+/// Opens [url] with an external app when launchable; otherwise shows an
+/// "Unable to open attachment" snackbar. Does nothing for unparseable URIs.
 Future<void> openAttachmentUrl(BuildContext context, String url) async {
   final uri = Uri.tryParse(url);
   if (uri == null) return;
@@ -809,6 +821,8 @@ Future<void> openAttachmentUrl(BuildContext context, String url) async {
   }
 }
 
+/// Formats a byte count as a human-readable size (B / KB / MB / GB with one
+/// decimal except for plain bytes).
 String formatBytes(int bytes) {
   if (bytes < 1024) return '$bytes B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';

@@ -19,6 +19,8 @@ class DiscoverGroupsPage extends StatefulWidget {
   State<DiscoverGroupsPage> createState() => _DiscoverGroupsPageState();
 }
 
+/// State for [DiscoverGroupsPage]: debounced search (400 ms) against the
+/// public-group API with loading / error / empty states.
 class _DiscoverGroupsPageState extends State<DiscoverGroupsPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _searchController = TextEditingController();

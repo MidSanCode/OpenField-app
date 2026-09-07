@@ -11,23 +11,31 @@ class Check {
   final int shares;
   final String mode; // random | average
   final String status; // active | settled | refunded
+  /// Post this check is attached to; null when it is not tied to a post.
   final int? postId;
+  /// When the check stops accepting claims (server timestamp).
   final DateTime expiresAt;
+  /// When the check was refunded; null until a refund happens.
   final DateTime? refundedAt;
+  /// When the check was created (server timestamp).
   final DateTime createdAt;
 
   // Denormalized for display.
   final String creatorName;
+  /// Creator's avatar URL ('' when the payload omits it).
   final String creatorAvatar;
+  /// Claims made so far, in claim order.
   final List<CheckClaim> claims;
 
   /// Sum of claimed amounts, in cents.
   final int claimedTotal;
+  /// Whether the current viewer has already claimed a share.
   final bool claimedByMe;
 
   /// The viewer's own payout in cents, when [claimedByMe].
   final int myAmount;
 
+  /// Creates a check; see [fromJson] for payload defaults.
   const Check({
     required this.id,
     required this.creatorId,
@@ -47,12 +55,20 @@ class Check {
     this.myAmount = 0,
   });
 
+  /// True when each claim gets a randomized slice rather than an equal share.
   bool get isRandom => mode == 'random';
+  /// True while the check still accepts claims (status is 'active' and
+  /// [expiresAt] is in the future).
   bool get isActive => status == 'active' && expiresAt.isAfter(DateTime.now());
+  /// True when the check's status is 'settled'.
   bool get isSettled => status == 'settled';
+  /// True when the check's status is 'refunded'.
   bool get isRefunded => status == 'refunded';
+  /// Shares left to claim ([shares] minus the claims recorded so far).
   int get remainingShares => shares - claims.length;
 
+  /// Deserializes from the server's check payload; money fields arrive as
+  /// decimal coins and are normalized to integer cents.
   factory Check.fromJson(Map<String, dynamic> json) {
     final rawClaims = json['claims'];
     List<CheckClaim> claims = const [];
@@ -86,16 +102,23 @@ class Check {
 
 /// One user's payout from a check.
 class CheckClaim {
+  /// Server-assigned claim id.
   final int id;
+  /// Check this claim came from.
   final int checkId;
+  /// User who claimed the payout.
   final int userId;
 
   /// Payout in cents.
   final int amount;
+  /// When the claim was made (server timestamp).
   final DateTime createdAt;
+  /// Claimer's display name ('' when the payload omits it).
   final String userName;
+  /// Claimer's avatar URL ('' when the payload omits it).
   final String userAvatar;
 
+  /// Creates a claim; see [fromJson] for payload defaults.
   const CheckClaim({
     required this.id,
     required this.checkId,
@@ -106,6 +129,8 @@ class CheckClaim {
     this.userAvatar = '',
   });
 
+  /// Deserializes from the server's claim payload; money fields arrive as
+  /// decimal coins and are normalized to integer cents.
   factory CheckClaim.fromJson(Map<String, dynamic> json) {
     return CheckClaim(
       id: _asInt(json['id']),

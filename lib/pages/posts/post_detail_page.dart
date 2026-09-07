@@ -13,7 +13,12 @@ import 'package:openfield/pages/posts/reply_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
 import 'package:openfield/widgets/reply_tile.dart';
 
+/// Full-screen view of one post: the post card with quote / repost actions
+/// followed by its reply tree, plus a composer to reply (optionally to a
+/// specific reply, with a file attachment).
 class PostDetailPage extends StatefulWidget {
+  /// The post to display; refreshed from the server on load when a token is
+  /// available.
   final Post post;
 
   const PostDetailPage({super.key, required this.post});
@@ -22,6 +27,9 @@ class PostDetailPage extends StatefulWidget {
   State<PostDetailPage> createState() => _PostDetailPageState();
 }
 
+/// State for [PostDetailPage]: loads the post + replies, handles
+/// reply / edit / delete / quote / repost actions and keeps the reply count
+/// on the local post copy in sync.
 class _PostDetailPageState extends State<PostDetailPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _replyController = TextEditingController();

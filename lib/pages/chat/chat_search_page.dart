@@ -37,6 +37,9 @@ class ChatSearchPage extends StatefulWidget {
   State<ChatSearchPage> createState() => _ChatSearchPageState();
 }
 
+/// State for [ChatSearchPage]: debounced live search, filter chips
+/// (sender / time / attachments / file name) and the result list with
+/// keyword highlighting.
 class _ChatSearchPageState extends State<ChatSearchPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _queryController = TextEditingController();

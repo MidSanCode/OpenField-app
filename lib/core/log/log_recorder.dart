@@ -4,6 +4,8 @@ import 'package:logging/logging.dart';
 import 'package:openfield/core/log/log_entry.dart';
 import 'package:openfield/core/log/log_file.dart';
 
+/// Maximum number of entries kept in the in-memory ring buffer; older entries
+/// are dropped as new ones arrive.
 const int kMaxLogs = 5000;
 
 /// Collects [Logger] records into an in-memory ring buffer and writes them to
@@ -11,6 +13,7 @@ const int kMaxLogs = 5000;
 class LogService extends ChangeNotifier {
   LogService._();
 
+  /// Process-wide singleton; logging is toggled on this instance.
   static final LogService instance = LogService._();
 
   StreamSubscription<LogRecord>? _subscription;
@@ -18,8 +21,12 @@ class LogService extends ChangeNotifier {
   final List<LogEntry> _entries = [];
   bool _enabled = false;
 
+  /// Whether the service is currently capturing log records.
   bool get enabled => _enabled;
+  /// Oldest-first, unmodifiable snapshot of the buffered entries (at most
+  /// [kMaxLogs]).
   List<LogEntry> get entries => List.unmodifiable(_entries);
+  /// Active file writer while logging is enabled; null when disabled.
   LogFileWriter? get fileWriter => _fileWriter;
 
   /// Enables or disables logging. When disabled, buffered logs are cleared.
@@ -62,6 +69,8 @@ class LogService extends ChangeNotifier {
     _fileWriter = null;
   }
 
+  /// Discards all buffered in-memory entries (log files are untouched) and
+  /// notifies listeners.
   void clear() {
     _entries.clear();
     notifyListeners();

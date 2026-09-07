@@ -9,6 +9,9 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+/// The user's coin wallet: balance card, transaction history and a transfer
+/// tab where coins are sent to (and pending incoming transfers accepted or
+/// declined from) other users, authorized by the payment PIN.
 class WalletPage extends StatefulWidget {
   const WalletPage({super.key});
 
@@ -16,6 +19,9 @@ class WalletPage extends StatefulWidget {
   State<WalletPage> createState() => _WalletPageState();
 }
 
+/// State for [WalletPage]: loads the wallet plus the latest incoming and
+/// outgoing transfers (a transfer load failure degrades to an empty list)
+/// and drives the PIN change and send-transfer flows.
 class _WalletPageState extends State<WalletPage> {
   final ApiService _apiService = ApiService();
   Wallet? _wallet;
@@ -669,7 +675,9 @@ class _RecipientPickerState extends State<_RecipientPicker> {
 /// Detail page for one transfer: order id, both parties (with usernames),
 /// amount, note and the created / decided / refunded timestamps.
 class TransferDetailPage extends StatelessWidget {
+  /// The transfer to render.
   final Transfer transfer;
+  /// True when the viewer is the recipient (colors the amount as income).
   final bool isIncoming;
 
   const TransferDetailPage({
@@ -784,6 +792,7 @@ class TransferDetailPage extends StatelessWidget {
 /// Detail page for one wallet transaction: amount, type, description, the
 /// balance after the change and the time it happened.
 class TransactionDetailPage extends StatelessWidget {
+  /// The transaction to render.
   final WalletTransaction transaction;
 
   const TransactionDetailPage({super.key, required this.transaction});

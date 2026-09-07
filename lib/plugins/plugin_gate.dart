@@ -23,9 +23,13 @@ enum PluginGateState {
   offline,
 }
 
+/// Singleton gate that flips between [PluginGateState] values and notifies
+/// listeners so the plugin manager can boot or stop all runtimes. Drive it
+/// with [start] once at app startup.
 class PluginGate extends ChangeNotifier {
   PluginGate._();
 
+  /// Process-wide singleton; observers should listen to this instance.
   static final PluginGate instance = PluginGate._();
 
   PluginGateState _state = PluginGateState.probing;
@@ -37,11 +41,14 @@ class PluginGate extends ChangeNotifier {
   /// connected → dropped transitions, which immediately disable plugins.
   bool? _wasRealtimeConnected;
 
+  /// Current gate state; changes are broadcast via [notifyListeners].
   PluginGateState get state => _state;
 
   /// True when plugin runtimes are allowed to run.
   bool get allowsPlugins => _state == PluginGateState.online;
 
+  /// When the last completed probe finished (wall clock); null until the
+  /// first probe resolves.
   DateTime? get lastProbeAt => _lastProbeAt;
 
   static const _probeTimeout = Duration(seconds: 5);
@@ -109,6 +116,8 @@ class PluginGate extends ChangeNotifier {
     }
   }
 
+  /// Cancels the retry timer and detaches the realtime listener. The gate
+  /// cannot recover afterwards; [instance] is meant to live for the app.
   @override
   void dispose() {
     _disposed = true;

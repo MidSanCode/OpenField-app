@@ -17,6 +17,8 @@ class FavoritesPage extends StatefulWidget {
   State<FavoritesPage> createState() => _FavoritesPageState();
 }
 
+/// State for [FavoritesPage]: loads the list for the active tab (favorite
+/// posts or replies) whenever the tab changes.
 class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProviderStateMixin {
   final ApiService _apiService = ApiService();
   late TabController _tabController;

@@ -1,33 +1,60 @@
+/// One user's membership in a conversation: role, moderation state and
+/// denormalized profile/styling of that user.
 class ChatMember {
+  /// Conversation this membership belongs to.
   final int conversationId;
+  /// The member's user id.
   final int userId;
+  /// Role within the conversation.
   final String role; // owner | admin | member
+  /// Operator-set note about this member (only visible to operators).
   final String note;
+  /// Member's nickname inside this conversation ('' = use their global name).
   final String groupNickname;
+  /// Member title granted in this conversation ('' = none).
   final String title;
+  /// Join request state for pending memberships.
   final String status; // pending | active | declined
+  /// User id of the member who added this user (0 when they joined directly).
   final int addedBy;
+  /// When the membership was created (server timestamp).
   final DateTime createdAt;
+  /// When this member's mute expires; null = not muted.
   final DateTime? mutedUntil;
+  /// Member's @username, when the payload includes it.
   final String? username;
+  /// Member's global nickname, when the payload includes it.
   final String? nickname;
+  /// Member's avatar URL, when the payload includes it.
   final String? avatarUrl;
+  /// Whether the member carries a verification badge.
   final bool isVerified;
+  /// Whether the member is a bot account.
   final bool isBot;
+  /// Member's membership tier (0 = none).
   final int memberLevel;
+  /// Whether the member's membership is currently active.
   final bool memberActive;
+  /// Member's name colour as a hex string ('' = default rendering).
   final String nameColor;
+  /// Second name colour for gradients ('' = none).
   final String nameColorTo;
+  /// Whether the name colour animates over time.
   final bool nameDynamic;
+  /// Palette for dynamic names; empty = use [nameColor]/[nameColorTo].
   final List<String> nameColors;
+  /// Gradient direction hint for the name colours ('' = default).
   final String nameGradientDirection;
+  /// Avatar frame asset key ('' = no frame).
   final String avatarFrame;
+  /// The member's E2EE identity public key, when published; null otherwise.
   final String? e2eePublicKey;
 
   /// Per-conversation chat notification preference: 'all' (every message),
   /// 'mentions' (only when @-mentioned) or 'none'. Server default is 'all'.
   final String notifyLevel;
 
+  /// Creates a member; see [fromJson] for payload defaults.
   const ChatMember({
     required this.conversationId,
     required this.userId,
@@ -56,14 +83,22 @@ class ChatMember {
     this.notifyLevel = 'all',
   });
 
+  /// The member's display name: nickname when non-empty, else username,
+  /// else 'Unknown'.
   String get displayName =>
       (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
 
+  /// True while the member's mute deadline is in the future (checked against
+  /// the current wall clock at call time).
   bool get isMuted {
     final until = mutedUntil;
     return until != null && until.isAfter(DateTime.now());
   }
 
+  /// Returns a copy with only the listed fields replaced (role, note, group
+  /// nickname, title, mute and notify level); every other field, including
+  /// identity and profile data, is preserved as-is, and a null argument
+  /// keeps the current value.
   ChatMember copyWith({
     String? role,
     String? note,
@@ -100,6 +135,8 @@ class ChatMember {
     );
   }
 
+  /// Deserializes from the server's member payload, tolerating missing or
+  /// mistyped fields (defaults apply per field).
   factory ChatMember.fromJson(Map<String, dynamic> json) {
     final muted = json['muted_until'];
     return ChatMember(

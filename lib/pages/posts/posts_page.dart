@@ -50,6 +50,10 @@ class ComposerMedia {
   }
 }
 
+/// The posts feed: global timeline or (when [campId] is set) a camp-scoped
+/// feed. Supports keyword search, tag and advanced author/date filters,
+/// realtime prepending of new posts, quote / repost / pin / edit / delete,
+/// and a composer dialog with attachments, checks, drafts and visibility.
 class PostsPage extends StatefulWidget {
   /// When set, the page opens with the composer pre-bound to a quote of this
   /// post (entry point from the post detail page's quote action).
@@ -66,6 +70,8 @@ class PostsPage extends StatefulWidget {
   State<PostsPage> createState() => _PostsPageState();
 }
 
+/// State for [PostsPage]: feed loading / searching, filter sheets, realtime
+/// updates and the post lifecycle actions invoked from each card.
 class _PostsPageState extends State<PostsPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _searchController = TextEditingController();

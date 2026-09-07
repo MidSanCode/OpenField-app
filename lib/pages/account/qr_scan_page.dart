@@ -18,6 +18,9 @@ class QrScanPage extends StatefulWidget {
   State<QrScanPage> createState() => _QrScanPageState();
 }
 
+/// State for [QrScanPage]: runs the mobile scanner and dispatches scanned
+/// payloads — profile / group deep links navigate in-app, anything else is
+/// approved as a login handshake code.
 class _QrScanPageState extends State<QrScanPage> {
   final ApiService _api = ApiService();
   final MobileScannerController _controller = MobileScannerController();

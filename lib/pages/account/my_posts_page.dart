@@ -8,7 +8,10 @@ import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
 
+/// A user's post list ("my posts"): renders every post by [MyPostsPage.userId]
+/// as full [PostCard]s with pull-to-refresh and confirmed deletion.
 class MyPostsPage extends StatefulWidget {
+  /// The user whose posts are listed.
   final int userId;
 
   const MyPostsPage({super.key, required this.userId});
@@ -17,6 +20,7 @@ class MyPostsPage extends StatefulWidget {
   State<MyPostsPage> createState() => _MyPostsPageState();
 }
 
+/// State for [MyPostsPage]: loads the user's posts and handles deletion.
 class _MyPostsPageState extends State<MyPostsPage> {
   final ApiService _apiService = ApiService();
   List<Post>? _posts;

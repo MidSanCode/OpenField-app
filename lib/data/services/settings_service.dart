@@ -9,11 +9,19 @@ import 'package:openfield/core/log/log_recorder.dart';
 /// name (via an i18n key) and the language used for server-pushed
 /// notifications. Choosing a region is a shortcut for setting all three.
 class RegionOption {
+  /// Stable region identifier (e.g. "zh-CN") stored in preferences.
   final String code;
+
+  /// i18n key of the display name shown in the region picker.
   final String labelKey;
+
+  /// Fixed UTC offset label ("UTC+8") applied to timestamp display.
   final String timezone;
+
+  /// Language code pushed to the server for notifications (e.g. "zh").
   final String lang;
 
+  /// Creates a region entry; all four attributes are required.
   const RegionOption({
     required this.code,
     required this.labelKey,
@@ -38,6 +46,8 @@ class SettingsService extends ChangeNotifier {
   static const _keyRegionLang = 'settings_region_lang';
   static const _keyEncryptAttachments = 'settings_encrypt_attachments';
   static const _keyDismissedAnnouncements = 'announcements_dismissed_ids';
+
+  /// Server host used until the user saves a custom one via [setServerHost].
   static const String defaultServerHost = 'https://api.openfield.eu.cc';
 
   /// Sentinels for the client-side timezone setting. Empty means "follow the
@@ -152,10 +162,20 @@ class SettingsService extends ChangeNotifier {
   String _regionLang = '';
   bool _encryptAttachments = false;
 
+  /// App language override (BCP-47 code), or null to follow the system locale.
   String? get locale => _locale;
+
+  /// Light/dark/system theme selection; defaults to [ThemeMode.system].
   ThemeMode get themeMode => _themeMode;
+
+  /// Whether developer-only extras (debug menu, verbose logging) are enabled.
   bool get developerMode => _developerMode;
+
+  /// The active server host, normalized to include a scheme and no trailing
+  /// slash.
   String get serverHost => _serverHost;
+
+  /// Path of the custom background image, or null when none is set.
   String? get backgroundImagePath => _backgroundImagePath;
 
   /// Whether the configured background image is currently rendered. Toggling
@@ -200,6 +220,8 @@ class SettingsService extends ChangeNotifier {
     return null;
   }
 
+  /// Creates the service and starts the asynchronous preference load;
+  /// callers should await [ready] before reading values.
   SettingsService() {
     ready = _load();
   }
@@ -244,6 +266,8 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists the client timezone ([localTimezone] or a fixed "UTC+8" label)
+  /// and notifies listeners.
   Future<void> setTimezone(String tz) async {
     _timezone = tz;
     final prefs = await SharedPreferences.getInstance();
@@ -297,6 +321,8 @@ class SettingsService extends ChangeNotifier {
     return Duration(hours: sign * hours, minutes: sign * minutes);
   }
 
+  /// Persists the app language; null removes the override so the system
+  /// locale is used again. Notifies listeners.
   Future<void> setLocale(String? locale) async {
     _locale = locale;
     final prefs = await SharedPreferences.getInstance();
@@ -308,6 +334,7 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists the theme mode and notifies listeners.
   Future<void> setThemeMode(ThemeMode mode) async {
     _themeMode = mode;
     final prefs = await SharedPreferences.getInstance();
@@ -315,6 +342,8 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists the developer-mode flag, switches verbose logging to match, and
+  /// notifies listeners.
   Future<void> setDeveloperMode(bool value) async {
     _developerMode = value;
     final prefs = await SharedPreferences.getInstance();
@@ -346,6 +375,9 @@ class SettingsService extends ChangeNotifier {
     return null;
   }
 
+  /// Persists [host] after validation. Returns false and changes nothing when
+  /// [validateServerHost] rejects it; bare hosts get an `http://` scheme and
+  /// trailing slashes are stripped before saving.
   Future<bool> setServerHost(String host) async {
     if (validateServerHost(host) != null) return false;
     var normalized = host.trim().replaceAll(RegExp(r'/+$'), '');
@@ -359,6 +391,8 @@ class SettingsService extends ChangeNotifier {
     return true;
   }
 
+  /// Persists the background image path; null clears the setting. The image
+  /// file itself is never touched.
   Future<void> setBackgroundImagePath(String? path) async {
     _backgroundImagePath = path;
     final prefs = await SharedPreferences.getInstance();
@@ -370,6 +404,7 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists whether the background image is rendered and notifies listeners.
   Future<void> setBackgroundVisible(bool value) async {
     _backgroundVisible = value;
     final prefs = await SharedPreferences.getInstance();
@@ -377,6 +412,8 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists the theme seed color as an ARGB int; null restores the default
+  /// palette. Notifies listeners.
   Future<void> setAccentColor(Color? color) async {
     _accentColor = color;
     final prefs = await SharedPreferences.getInstance();
@@ -388,6 +425,7 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists the card opacity, clamped to the 0.0-1.0 range.
   Future<void> setCardOpacity(double value) async {
     _cardOpacity = value.clamp(0.0, 1.0);
     final prefs = await SharedPreferences.getInstance();
@@ -395,6 +433,8 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists whether E2EE attachments are encrypted client-side before
+  /// upload, and notifies listeners.
   Future<void> setEncryptAttachments(bool value) async {
     _encryptAttachments = value;
     final prefs = await SharedPreferences.getInstance();

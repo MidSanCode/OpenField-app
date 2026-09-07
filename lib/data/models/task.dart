@@ -1,15 +1,27 @@
 /// A single built-in achievable reward definition returned by the server.
 class Task {
+  /// Server-assigned task id.
   final int id;
+  /// Stable machine identifier of the task (used by the server to track
+  /// progress across requests).
   final String code;
+  /// Task cadence: 'once' for one-off tasks, 'streak' for daily-streak tasks
+  /// (see [isStreak]).
   final String kind;
+  /// Display name of the task.
   final String name;
+  /// Human-readable description of what to do.
   final String description;
+  /// Experience awarded when the reward is claimed.
   final int rewardExp;
+  /// Coins awarded when the reward is claimed.
   final int rewardCurrency;
+  /// Progress value the user must reach to complete the task.
   final int target;
+  /// Display ordering hint from the server.
   final int sort;
 
+  /// Creates a task; see [fromJson] for payload defaults.
   const Task({
     required this.id,
     required this.code,
@@ -22,6 +34,8 @@ class Task {
     required this.sort,
   });
 
+  /// Deserializes from the server's task payload, tolerating missing or
+  /// mistyped fields (defaults apply per field).
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
       id: _asInt(json['id']),
@@ -36,6 +50,7 @@ class Task {
     );
   }
 
+  /// True for daily-streak tasks (kind == 'streak').
   bool get isStreak => kind == 'streak';
 
   static int _asInt(Object? v) {
@@ -48,11 +63,16 @@ class Task {
 
 /// A [Task] enriched with the requesting user's progress and claimability.
 class TaskState {
+  /// The task definition the state belongs to.
   final Task task;
+  /// The user's current progress toward [Task.target].
   final int progress;
+  /// Whether the task has been completed.
   final bool completed;
+  /// Whether the reward can be claimed right now (server-decided).
   final bool claimable;
 
+  /// Creates a task state; see [fromJson] for payload defaults.
   const TaskState({
     required this.task,
     required this.progress,
@@ -60,6 +80,8 @@ class TaskState {
     required this.claimable,
   });
 
+  /// Deserializes from the server's task-state payload; the embedded task
+  /// fields are parsed by [Task.fromJson] from the same object.
   factory TaskState.fromJson(Map<String, dynamic> json) {
     return TaskState(
       task: Task.fromJson(json),
@@ -72,12 +94,18 @@ class TaskState {
 
 /// One recorded experience award in the user's history.
 class ExpEntry {
+  /// Server-assigned history entry id.
   final int id;
+  /// Experience awarded by this entry.
   final int amount;
+  /// Machine-readable cause of the award (e.g. a task code).
   final String reason;
+  /// Human-readable description of the award.
   final String description;
+  /// When the award happened (localized timestamp).
   final DateTime createdAt;
 
+  /// Creates a history entry; see [fromJson] for payload defaults.
   const ExpEntry({
     required this.id,
     required this.amount,
@@ -86,6 +114,8 @@ class ExpEntry {
     required this.createdAt,
   });
 
+  /// Deserializes from the server's history payload; unparseable dates fall
+  /// back to the Unix epoch.
   factory ExpEntry.fromJson(Map<String, dynamic> json) {
     return ExpEntry(
       id: Task._asInt(json['id']),

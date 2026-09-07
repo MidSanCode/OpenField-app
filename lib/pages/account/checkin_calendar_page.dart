@@ -16,6 +16,8 @@ class CheckinCalendarPage extends StatefulWidget {
   State<CheckinCalendarPage> createState() => _CheckinCalendarPageState();
 }
 
+/// State for [CheckinCalendarPage]: holds the signed dates and streak from
+/// the server, claims today's sign-in and pays to make up missed days.
 class _CheckinCalendarPageState extends State<CheckinCalendarPage> {
   final ApiService _apiService = ApiService();
 

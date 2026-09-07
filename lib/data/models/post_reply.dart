@@ -1,33 +1,64 @@
 import 'attachment.dart';
 
+/// A reply to a feed post (or to another reply, via [parentId]), with
+/// denormalized author profile/styling and the parent-reply preview fields.
 class PostReply {
+  /// Server-assigned reply id.
   final int id;
+  /// Post being replied to.
   final int postId;
+  /// Author's user id.
   final int userId;
+  /// Reply body text.
   final String content;
+  /// Parent reply id for nested replies; null for top-level replies.
   final int? parentId;
+  /// When the reply was created (server timestamp).
   final DateTime createdAt;
+  /// When the reply was last edited (server timestamp).
   final DateTime updatedAt;
+  /// When the reply was soft-deleted; null while it still exists.
   final DateTime? deletedAt;
+  /// Author's @username, when the payload includes it.
   final String? username;
+  /// Author's display nickname, when the payload includes it.
   final String? nickname;
+  /// Author's avatar URL, when the payload includes it.
   final String? avatarUrl;
+  /// Whether the author carries a verification badge.
   final bool isVerified;
+  /// Whether the author is a bot account.
   final bool isBot;
+  /// Author's membership tier (0 = none).
   final int memberLevel;
+  /// Whether the author's membership is currently active.
   final bool memberActive;
+  /// Author's name colour as a hex string ('' = default rendering).
   final String nameColor;
+  /// Second name colour for gradients ('' = none).
   final String nameColorTo;
+  /// Whether the name colour animates over time.
   final bool nameDynamic;
+  /// Palette for dynamic names; empty = use [nameColor]/[nameColorTo].
   final List<String> nameColors;
+  /// Gradient direction hint for the name colours ('' = default).
   final String nameGradientDirection;
+  /// Avatar frame asset key ('' = no frame).
   final String avatarFrame;
+  /// Content snippet of the parent reply, for nested-reply previews; null
+  /// for top-level replies.
   final String? parentContent;
+  /// Author name of the parent reply, for nested-reply previews; null for
+  /// top-level replies.
   final String? parentName;
+  /// Media attached to the reply; empty for text-only replies.
   final List<Attachment> attachments;
+  /// Number of users who favorited this reply.
   final int favoriteCount;
+  /// Whether the current viewer favorited this reply.
   final bool isFavorite;
 
+  /// Creates a reply; see [fromJson] for payload defaults.
   const PostReply({
     required this.id,
     required this.postId,
@@ -57,10 +88,15 @@ class PostReply {
     this.isFavorite = false,
   });
 
+  /// True when this reply was soft-deleted ([deletedAt] set).
   bool get isDeleted => deletedAt != null;
 
+  /// The author's display name: nickname when non-empty, else username,
+  /// else 'Unknown'.
   String get authorName => (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
 
+  /// Deserializes from the server's reply payload, tolerating missing or
+  /// mistyped fields (defaults apply per field).
   factory PostReply.fromJson(Map<String, dynamic> json) {
     return PostReply(
       id: _asInt(json['id']),

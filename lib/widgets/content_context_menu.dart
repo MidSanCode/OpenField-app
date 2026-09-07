@@ -7,23 +7,36 @@ import 'package:openfield/data/services/api_service.dart';
 /// `{base}/posts/{postId}#reply-{replyId}`.
 String get postLinkBase => '${ApiService.serverHost}/posts';
 
+/// Builds the shareable URL for a post: `{postLinkBase}/{postId}`.
 String postLink(int postId) => '$postLinkBase/$postId';
 
+/// Builds the deep-link URL for a reply anchor on the post page.
 String replyLink(int postId, int replyId) => '$postLinkBase/$postId#reply-$replyId';
 
 /// Action identifiers used by the post/reply context menus (shown both on
 /// desktop right-click and mobile long-press).
 class ContentAction {
+  /// Copies the shareable post/reply link to the clipboard.
   static const String copyLink = 'copyLink';
+  /// Adds the content to the viewer's favorites.
   static const String favorite = 'favorite';
+  /// Removes the content from the viewer's favorites.
   static const String unfavorite = 'unfavorite';
+  /// Opens the editor for the author's own content.
   static const String edit = 'edit';
+  /// Deletes the author's own content (shown as destructive).
   static const String delete = 'delete';
+  /// Starts a reply to the content.
   static const String reply = 'reply';
+  /// Opens the visibility (who can see this) picker.
   static const String visibility = 'visibility';
+  /// Opens the composer prefilled with a quote of the content.
   static const String quote = 'quote';
+  /// Reposts the content as-is.
   static const String repost = 'repost';
+  /// Pins the author's own post.
   static const String pin = 'pin';
+  /// Unpins the author's own post.
   static const String unpin = 'unpin';
 }
 

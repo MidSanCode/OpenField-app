@@ -21,6 +21,8 @@ import 'package:openfield/data/services/idb_database.dart';
 class ChatLocalDb implements ChatCacheStore {
   ChatLocalDb._();
 
+  /// Process-wide singleton; the database opens lazily on first use and is
+  /// re-opened automatically when the server host changes.
   static final ChatLocalDb instance = ChatLocalDb._();
 
   IdbDatabase? _db;
@@ -54,6 +56,8 @@ class ChatLocalDb implements ChatCacheStore {
     return db;
   }
 
+  /// Returns the lowest cached message id for a conversation, or null when
+  /// nothing is cached (the first key in ascending order is the minimum).
   @override
   Future<int?> minMessageId(int conversationId) async {
     final db = await _open();
@@ -75,6 +79,9 @@ class ChatLocalDb implements ChatCacheStore {
     return minId;
   }
 
+  /// Loads cached messages for a conversation, oldest first, at most [limit].
+  /// With [beforeId] only messages strictly older than it are returned
+  /// (lazy loading); returns an empty list on cache miss.
   @override
   Future<List<ChatMessage>> loadMessages(
     int conversationId, {
@@ -105,6 +112,8 @@ class ChatLocalDb implements ChatCacheStore {
     return out.map((r) => _fromRow(r, atts)).toList();
   }
 
+  /// Loads cached messages strictly newer than [afterId] (used to seed the
+  /// newest window after a server sync), oldest first, at most [limit].
   @override
   Future<List<ChatMessage>> loadMessagesFrom(
     int conversationId,
@@ -133,6 +142,9 @@ class ChatLocalDb implements ChatCacheStore {
     return rows.map((r) => _fromRow(r, atts)).toList();
   }
 
+  /// Atomically replaces the cached window for a conversation with
+  /// [messages]: old rows and attachments are deleted and the new set written
+  /// inside a single readwrite transaction.
   @override
   Future<void> replaceConversation(
       int conversationId, List<ChatMessage> messages) async {
@@ -159,6 +171,9 @@ class ChatLocalDb implements ChatCacheStore {
     );
   }
 
+  /// Writes [messages] and their attachments in one readwrite transaction;
+  /// existing rows for the same message ids are overwritten, never
+  /// duplicated.
   @override
   Future<void> appendMessages(
       int conversationId, List<ChatMessage> messages) async {
@@ -187,6 +202,8 @@ class ChatLocalDb implements ChatCacheStore {
     );
   }
 
+  /// Writes one message and refreshes its attachments (replacing any stored
+  /// set) in a single readwrite transaction.
   @override
   Future<void> upsertMessage(ChatMessage message) async {
     final db = await _open();
@@ -211,6 +228,8 @@ class ChatLocalDb implements ChatCacheStore {
     );
   }
 
+  /// Removes one cached message and its attachments in a single readwrite
+  /// transaction; missing rows are simply absent afterwards.
   @override
   Future<void> deleteMessage(int conversationId, int messageId) async {
     final db = await _open();
@@ -226,6 +245,8 @@ class ChatLocalDb implements ChatCacheStore {
     );
   }
 
+  /// Removes every cached message and attachment of a conversation in a
+  /// single readwrite transaction.
   @override
   Future<void> deleteConversation(int conversationId) async {
     final db = await _open();

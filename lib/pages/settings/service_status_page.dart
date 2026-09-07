@@ -14,6 +14,9 @@ class ServiceStatusPage extends StatefulWidget {
   State<ServiceStatusPage> createState() => _ServiceStatusPageState();
 }
 
+/// State for [ServiceStatusPage]: polls the aggregate health endpoint on
+/// entry, refreshes every 30 s while open, and supports pull-to-refresh /
+/// manual refresh.
 class _ServiceStatusPageState extends State<ServiceStatusPage> {
   final ApiService _apiService = ApiService();
   Map<String, dynamic>? _data;

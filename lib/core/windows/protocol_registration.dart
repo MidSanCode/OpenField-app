@@ -1,5 +1,10 @@
 import 'dart:io';
 
+/// Registers the `openfield://` URL scheme under HKCU for this executable so
+/// Windows launches the app on protocol links (e.g. OAuth callbacks).
+/// Re-writes the registry keys only when the existing `shell\open\command`
+/// does not already point at the running executable. A no-op on non-Windows
+/// platforms; `reg` failures (missing tool, access denied) are swallowed.
 Future<void> ensureOpenFieldProtocol() async {
   if (!Platform.isWindows) return;
 

@@ -13,7 +13,9 @@ import 'package:openfield/widgets/reply_tile.dart';
 /// A full thread view for a single reply: the target reply plus every nested
 /// descendant, with a composer to reply into the thread.
 class ReplyDetailPage extends StatefulWidget {
+  /// The post both the target reply and new replies belong to.
   final Post post;
+  /// The reply whose thread is displayed.
   final PostReply reply;
 
   const ReplyDetailPage({super.key, required this.post, required this.reply});
@@ -22,6 +24,8 @@ class ReplyDetailPage extends StatefulWidget {
   State<ReplyDetailPage> createState() => _ReplyDetailPageState();
 }
 
+/// State for [ReplyDetailPage]: reloads the reply tree on entry, renders the
+/// target reply followed by its descendants, and hosts the thread composer.
 class _ReplyDetailPageState extends State<ReplyDetailPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _replyController = TextEditingController();

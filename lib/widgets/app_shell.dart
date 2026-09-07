@@ -7,9 +7,15 @@ import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/widgets/app_shell_announcement.dart';
 
+/// Adaptive navigation shell for the app's go_router stateful branches: a
+/// labeled NavigationRail sidebar on wide screens (>600 dp) and a bottom
+/// NavigationBar on narrow ones. Also fires the once-per-cold-start
+/// announcement check on mount.
 class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.navigationShell});
 
+  /// The stateful navigation shell whose branch index drives the selected
+  /// tab and hosts the active branch page.
   final StatefulNavigationShell navigationShell;
 
   @override

@@ -10,6 +10,9 @@ final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 OverlayEntry? _logOverlayEntry;
 
+/// Inserts the draggable log viewer panel into the navigator overlay.
+/// Repeated calls while the panel is visible are no-ops; also a no-op before
+/// the navigator (keyed by [appNavigatorKey]) is mounted.
 void showLogOverlay() {
   if (_logOverlayEntry != null) return;
   final overlay = appNavigatorKey.currentState?.overlay;
@@ -18,11 +21,13 @@ void showLogOverlay() {
   overlay.insert(_logOverlayEntry!);
 }
 
+/// Removes the log viewer panel from the overlay; a no-op when not shown.
 void hideLogOverlay() {
   _logOverlayEntry?.remove();
   _logOverlayEntry = null;
 }
 
+/// Shows the log viewer panel when hidden, hides it when visible.
 void toggleLogOverlay() {
   if (_logOverlayEntry != null) {
     hideLogOverlay();

@@ -7,6 +7,7 @@ import 'package:openfield/widgets/robot_badge.dart';
 
 /// A small blue verified badge shown next to verified usernames.
 class VerifiedBadge extends StatelessWidget {
+  /// Icon side length in logical pixels.
   final double size;
 
   const VerifiedBadge({super.key, this.size = 16});
@@ -66,8 +67,12 @@ Color memberTierColor(int memberLevel) {
 /// A pill showing the active membership tier name, rendered after the user's
 /// display name and before the verification badge.
 class MemberTierBadge extends StatelessWidget {
+  /// Membership level (1-4); selects the badge accent color.
   final int memberLevel;
+  /// Tier name displayed inside the pill (falls back to
+  /// [memberTierNameOf] when empty — see [VerifiedName]).
   final String tierName;
+  /// Font size of the tier label in logical pixels.
   final double textSize;
 
   const MemberTierBadge({
@@ -128,22 +133,38 @@ class MemberTierBadge extends StatelessWidget {
 /// the user's membership name styling) followed by the membership tier badge,
 /// the verified badge and — for bot accounts — the robot badge.
 class VerifiedName extends StatefulWidget {
+  /// The display name text rendered at the start of the row.
   final String name;
+  /// Whether to append the blue verification badge.
   final bool verified;
 
   /// True when the account is a bot: renders the robot badge after the name.
   /// Bots are ordinary accounts otherwise; this is their only visual marker.
   final bool bot;
+  /// Membership level (0 = non-member); selects the tier badge color.
   final int memberLevel;
+  /// True when the membership is active; gates the tier badge, gradient and
+  /// animated name styling.
   final bool memberActive;
+  /// Tier name shown in the badge; empty falls back to [memberTierNameOf].
   final String memberTierName;
+  /// Start color of the legacy two-color name gradient ("#RRGGBB", or '').
   final String nameColor;
+  /// End color of the legacy two-color name gradient ("#RRGGBB", or '').
   final String nameColorTo;
+  /// Multi-stop gradient colors ("#RRGGBB" each) preferred over
+  /// [nameColor]/[nameColorTo] when non-empty.
   final List<String> nameColors;
+  /// Gradient direction key (see [gradientDirectionOf]); '' defaults to
+  /// left→right.
   final String nameGradientDirection;
+  /// When true (with [memberActive]) the name gradient animates in a loop.
   final bool nameDynamic;
+  /// Style for the name text; defaults to the theme's bodyMedium.
   final TextStyle? style;
+  /// Maximum number of lines for the name; null means unbounded.
   final int? maxLines;
+  /// Overflow behavior; defaults to [TextOverflow.ellipsis].
   final TextOverflow? overflow;
 
   const VerifiedName({

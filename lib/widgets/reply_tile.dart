@@ -11,15 +11,29 @@ import 'package:easy_localization/easy_localization.dart';
 
 /// A single reply row used in post detail and reply detail pages.
 class ReplyTile extends StatefulWidget {
+  /// The reply to render.
   final PostReply reply;
+  /// Invoked when the tile body is tapped (opens the reply detail).
   final VoidCallback onTap;
+  /// Invoked when the avatar or author name is tapped; null disables the
+  /// author hit area.
   final VoidCallback? onTapAuthor;
+  /// Invoked by the context menu's reply action; no-op when null.
   final VoidCallback? onReply;
+  /// Access token for favorite calls; when null or empty, favorite actions
+  /// invoke [onUnauthenticated] instead.
   final String? token;
+  /// True when the current user authored this reply; reveals the edit/delete
+  /// context-menu entries.
   final bool isMine;
+  /// Invoked by the context menu's edit action.
   final VoidCallback? onEdit;
+  /// Invoked by the context menu's delete action.
   final VoidCallback? onDelete;
+  /// Invoked with the server-returned reply after a successful favorite
+  /// toggle so the caller can refresh its copy.
   final ValueChanged<PostReply>? onReplyChanged;
+  /// Called when the user attempts a favorite without being signed in.
   final VoidCallback? onUnauthenticated;
 
   const ReplyTile({
@@ -41,6 +55,7 @@ class ReplyTile extends StatefulWidget {
 }
 
 class _ReplyTileState extends State<ReplyTile> {
+  /// The reply being rendered (shorthand for [ReplyTile.reply]).
   PostReply get reply => widget.reply;
 
   Future<void> _showContextMenu([Offset? position]) async {

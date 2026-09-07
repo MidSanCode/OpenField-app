@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+/// Final step of first-time sign-up: collects username, nickname and optional
+/// bio to complete an account created through the OAuth flow, then pops the
+/// page on success. A taken username shows a localized error snackbar.
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 

@@ -7,6 +7,9 @@ import 'package:openfield/pages/chat/chat_page.dart';
 import 'package:openfield/pages/posts/posts_page.dart';
 import 'package:openfield/widgets/app_shell.dart';
 
+/// Builds the app's [GoRouter]: a bottom-shell [StatefulShellRoute] with the
+/// three tab branches (`/posts`, `/chat`, `/account`) plus the standalone
+/// `/announcements` page. Starts on `/posts`; no auth redirects here.
 GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigatorKey) {
   return GoRouter(
     navigatorKey: navigatorKey,

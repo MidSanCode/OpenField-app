@@ -19,9 +19,15 @@ const List<String> kMoreReactions = ['love', 'haha', 'wow', 'sad', 'angry'];
 /// A compact post action row: like / dislike / more reactions plus a view
 /// count. Reacting optimistically updates counts and syncs with the server.
 class PostReactionBar extends StatefulWidget {
+  /// The post whose reaction counts this bar displays and mutates.
   final Post post;
+  /// Access token for reaction API calls; when null, tapping a reaction
+  /// invokes [onUnauthenticated] and nothing is sent to the server.
   final String? token;
+  /// Invoked with the post returned by the server after a successful
+  /// reaction add/remove so the caller can refresh its copy.
   final ValueChanged<Post> onChanged;
+  /// Called when the user reacts without being signed in.
   final VoidCallback? onUnauthenticated;
 
   const PostReactionBar({
@@ -38,10 +44,15 @@ class PostReactionBar extends StatefulWidget {
 
 class _PostReactionBarState extends State<PostReactionBar> {
   final ApiService _api = ApiService();
+  /// Local, optimistic copy of the post's reaction counts; recalculated on
+  /// tap and rolled back on server failure.
   late Map<String, int> _reactions;
+  /// The reaction the current user has active ('' when none).
   late String _myReaction;
+  /// True while a reaction request is in flight; blocks further taps.
   bool _busy = false;
 
+  /// The post being reacted to (shorthand for [PostReactionBar.post]).
   Post get post => widget.post;
 
   @override

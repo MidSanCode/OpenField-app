@@ -19,6 +19,9 @@ class MembershipPage extends StatefulWidget {
   State<MembershipPage> createState() => _MembershipPageState();
 }
 
+/// State for [MembershipPage]: loads the membership status and tier catalog,
+/// buys / renews / upgrades with payment-PIN authorization and toggles
+/// auto-renew.
 class _MembershipPageState extends State<MembershipPage> {
   final ApiService _apiService = ApiService();
   MembershipStatus? _status;

@@ -20,6 +20,8 @@ class PluginsPage extends StatefulWidget {
   State<PluginsPage> createState() => _PluginsPageState();
 }
 
+/// State for [PluginsPage]: drives bundle import (file pick → install →
+/// consent → enable), the secure-boot gate probe, and the store entry point.
 class _PluginsPageState extends State<PluginsPage> {
   bool _importing = false;
 

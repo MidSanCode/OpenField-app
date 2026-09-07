@@ -1,36 +1,66 @@
 import 'attachment.dart';
 import 'check.dart';
 
+/// A feed post: body content plus denormalized author profile/styling,
+/// engagement counters, and an optional quote/repost of another post.
 class Post {
+  /// Server-assigned post id; 0 when the payload omits it.
   final int id;
+  /// Author's user id.
   final int userId;
+  /// Post body text; empty for pure reposts (see [isPureRepost]).
   final String content;
+  /// When the post was created (server timestamp).
   final DateTime createdAt;
+  /// When the post was last edited (server timestamp).
   final DateTime updatedAt;
+  /// Author's @username, when the payload includes it.
   final String? username;
+  /// Author's display nickname, when the payload includes it.
   final String? nickname;
+  /// Author's avatar URL, when the payload includes it.
   final String? avatarUrl;
+  /// Whether the author carries a verification badge; null when unknown
+  /// (see [authorVerified] for the effective value).
   final bool? isVerified;
+  /// Whether the author is a bot account.
   final bool isBot;
+  /// Author's membership tier (0 = none).
   final int memberLevel;
+  /// Whether the author's membership is currently active.
   final bool memberActive;
+  /// Author's name colour as a hex string ('' = default rendering).
   final String nameColor;
+  /// Second name colour for gradients ('' = none).
   final String nameColorTo;
+  /// Whether the name colour animates over time.
   final bool nameDynamic;
+  /// Palette for dynamic names; empty = use [nameColor]/[nameColorTo].
   final List<String> nameColors;
+  /// Gradient direction hint for the name colours ('' = default).
   final String nameGradientDirection;
+  /// Avatar frame asset key ('' = no frame).
   final String avatarFrame;
+  /// Media attached to the post; empty when text-only.
   final List<Attachment> attachments;
+  /// Denormalized reply count from the server.
   final int replyCount;
+  /// Denormalized total view count from the server.
   final int viewCount;
+  /// Denormalized distinct-viewer count from the server.
   final int uniqueViews;
+  /// Number of users who favorited this post.
   final int favoriteCount;
   /// [tipTotal] is the sum of non-refunded net tips on this post, in cents
   /// (95% of each tip). The server's tip_total column feeds this field.
   final int tipTotal;
+  /// Who can see the post; server-controlled value, 'public' by default.
   final String visibility;
+  /// Whether the current viewer favorited this post.
   final bool isFavorite;
+  /// Reaction emoji to count map, as reported by the server.
   final Map<String, int> reactions;
+  /// The current viewer's own reaction emoji ('' = none).
   final String myReaction;
   /// Free-form tags attached to the post by the author. Empty list means the
   /// post is untagged.
@@ -43,6 +73,7 @@ class Post {
   /// [quotedPostId] is set but this is null, the quoted post was deleted or
   /// is not visible to the viewer — clients render a placeholder.
   final int quotedPostId;
+  /// The resolved [quotedPostId] target (null when absent/deleted/invisible).
   final Post? quotedPost;
 
   /// True when the author pinned this post (floats to the top of their
@@ -56,6 +87,8 @@ class Post {
   /// the quoted post (a pure repost).
   bool get isPureRepost => quotedPostId > 0 && content.trim().isEmpty;
 
+  /// Creates a post; every styling/counter field has a neutral default so
+  /// local optimistic instances only need the core fields.
   Post({
     required this.id,
     required this.userId,
@@ -93,12 +126,18 @@ class Post {
     this.campId = 0,
   });
 
+  /// The author's display name: nickname when non-empty, else username,
+  /// else 'Unknown'.
   String get authorName => (nickname != null && nickname!.isNotEmpty) ? nickname! : (username ?? 'Unknown');
 
+  /// Whether the author carries a verification badge; false when unknown.
   bool get authorVerified => isVerified ?? false;
 
+  /// Total number of reactions across all emoji.
   int get reactionCount => reactions.values.fold(0, (sum, count) => sum + count);
 
+  /// Deserializes from the server's post payload, tolerating missing or
+  /// mistyped fields (defaults apply per field).
   factory Post.fromJson(Map<String, dynamic> json) {
     final rawAttachments = json['attachments'];
     List<Attachment> attachments = const [];
@@ -183,6 +222,8 @@ class Post {
     return const [];
   }
 
+  /// Returns a copy with the given fields replaced (null keeps the current
+  /// value).
   Post copyWith({
     int? id,
     int? userId,

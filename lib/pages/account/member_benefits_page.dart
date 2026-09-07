@@ -34,6 +34,9 @@ class MemberBenefitsPage extends StatefulWidget {
   State<MemberBenefitsPage> createState() => _MemberBenefitsPageState();
 }
 
+/// State for [MemberBenefitsPage]: edits the display-name style (colors,
+/// gradient direction, animation) within the tier's limits and saves it via
+/// the API.
 class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
   final ApiService _apiService = ApiService();
 

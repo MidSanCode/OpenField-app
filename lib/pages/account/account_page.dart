@@ -38,6 +38,11 @@ import 'package:openfield/widgets/experience_bar.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
+/// The bottom-bar "Account" tab. When signed out it offers OIDC, QR, password
+/// and token login; when signed in it shows the profile header, level card
+/// with daily bonus and the navigation sections (wallet, membership, tasks,
+/// content, security, debug, danger zone). It also listens for OAuth deep
+/// links carrying tokens or bind results.
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
 
@@ -45,6 +50,8 @@ class AccountPage extends StatefulWidget {
   State<AccountPage> createState() => _AccountPageState();
 }
 
+/// State for [AccountPage]: keeps the login form controllers, subscribes to
+/// the OAuth deep-link stream and forwards to the sub-pages.
 class _AccountPageState extends State<AccountPage> {
   final ApiService _apiService = ApiService();
   final TextEditingController _loginUsernameController = TextEditingController();
@@ -981,6 +988,8 @@ class _NavTile extends StatelessWidget {
   }
 }
 
+/// Profile settings sub-page: edits nickname / username / bio, uploads avatar
+/// and banner, binds an OAuth identity and toggles the follow-list privacy.
 class AccountSettingsPage extends StatefulWidget {
   const AccountSettingsPage({super.key});
 
@@ -988,6 +997,8 @@ class AccountSettingsPage extends StatefulWidget {
   State<AccountSettingsPage> createState() => _AccountSettingsPageState();
 }
 
+/// State for [AccountSettingsPage]: holds the profile field controllers and
+/// applies the save / upload / bind / privacy actions.
 class _AccountSettingsPageState extends State<AccountSettingsPage> {
   final ApiService _apiService = ApiService();
   late final TextEditingController _nicknameController;

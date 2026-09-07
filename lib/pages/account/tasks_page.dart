@@ -16,6 +16,9 @@ class TasksPage extends StatefulWidget {
   State<TasksPage> createState() => _TasksPageState();
 }
 
+/// State for [TasksPage]: loads the task list, streak and makeup cost from
+/// the API and claims rewards one at a time (a claim in progress disables
+/// the other buttons).
 class _TasksPageState extends State<TasksPage> {
   final ApiService _apiService = ApiService();
   List<TaskState> _tasks = const [];

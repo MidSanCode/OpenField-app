@@ -5,6 +5,8 @@ import 'package:openfield/plugins/plugin_permissions.dart';
 
 /// Colored chip showing a permission's security level.
 class PermissionLevelChip extends StatelessWidget {
+  /// Permission id resolved against the known permission definitions; an
+  /// unknown id renders as the raw id at critical level.
   final String permId;
   final bool dense;
 
@@ -73,9 +75,15 @@ class SecureBootBanner extends StatelessWidget {
 /// The per-permission consent dialog shown before a plugin may run.
 /// Permissions are grouped by level; critical ones cannot be skipped.
 class PermissionConsentDialog extends StatefulWidget {
+  /// Display name of the plugin asking for consent (shown in the title body).
   final String pluginName;
+  /// Permission ids the plugin's manifest requests, grouped in the dialog by
+  /// their security level.
   final List<String> permissions;
+  /// Permissions already granted in an earlier session (pre-checked).
   final Set<String> preGranted;
+  /// Whether the bundle came from the verified store; unverified (imported)
+  /// plugins get an extra warning banner.
   final bool isStoreVerified;
 
   const PermissionConsentDialog({

@@ -5,6 +5,7 @@ import 'package:openfield/plugins/plugin_fs.dart';
 
 /// dart:io-backed plugin filesystem for native platforms.
 class PluginFileSystemImpl implements PluginFileSystem {
+  /// Native implementation: `<app support>/plugins`, created on first call.
   @override
   Future<String> rootDir() async {
     final support = await getApplicationSupportDirectory();
@@ -14,6 +15,8 @@ class PluginFileSystemImpl implements PluginFileSystem {
     return dir.path;
   }
 
+  /// Native implementation: synchronous scan; a missing directory yields
+  /// an empty list.
   @override
   List<PluginFsEntry> listDirs(String dir) {
     final d = Directory(dir);
@@ -25,6 +28,7 @@ class PluginFileSystemImpl implements PluginFileSystem {
         .toList();
   }
 
+  /// Native implementation: synchronous read; null when missing/unreadable.
   @override
   String? readText(String path) {
     final f = File(path);
@@ -36,6 +40,7 @@ class PluginFileSystemImpl implements PluginFileSystem {
     }
   }
 
+  /// Native implementation: creates parent directories, then writes bytes.
   @override
   void writeBytes(String path, List<int> bytes) {
     final f = File(path);
@@ -43,6 +48,7 @@ class PluginFileSystemImpl implements PluginFileSystem {
     f.writeAsBytesSync(bytes);
   }
 
+  /// Native implementation: creates parent directories, then writes UTF-8.
   @override
   void writeText(String path, String text) {
     final f = File(path);
@@ -50,6 +56,7 @@ class PluginFileSystemImpl implements PluginFileSystem {
     f.writeAsStringSync(text);
   }
 
+  /// Native implementation: recursive delete; a missing path is a no-op.
   @override
   void deleteRecursive(String path) {
     final d = Directory(path);
@@ -57,4 +64,6 @@ class PluginFileSystemImpl implements PluginFileSystem {
   }
 }
 
+/// IO-branch factory selected by plugin_fs.dart's conditional export;
+/// returns the real dart:io-backed filesystem for native platforms.
 PluginFileSystem getPluginFileSystem() => PluginFileSystemImpl();

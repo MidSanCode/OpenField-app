@@ -22,6 +22,8 @@ import 'package:openfield/data/services/chat_db_scope.dart';
 class ChatLocalDb implements ChatCacheStore {
   ChatLocalDb._();
 
+  /// Process-wide singleton; the database is opened lazily on first use and
+  /// re-opened automatically when the server host changes.
   static final ChatLocalDb instance = ChatLocalDb._();
 
   Database? _db;
@@ -213,6 +215,8 @@ class ChatLocalDb implements ChatCacheStore {
     });
   }
 
+  /// Inserts or refreshes a single message (duplicate ids are ignored) along
+  /// with its attachments; no-op when the cache is unavailable.
   @override
   Future<void> upsertMessage(ChatMessage message) async {
     final db = await _open();
@@ -220,6 +224,8 @@ class ChatLocalDb implements ChatCacheStore {
     await _insert(db, message, message.conversationId, ignore: true);
   }
 
+  /// Removes one cached message and its attachments; no-op when the cache is
+  /// unavailable or the row does not exist.
   @override
   Future<void> deleteMessage(int conversationId, int messageId) async {
     final db = await _open();
@@ -367,6 +373,8 @@ class ChatLocalDb implements ChatCacheStore {
     return const [];
   }
 
+  /// Closes the SQLite database and resets the shard state; the next access
+  /// reopens it. Safe to call when nothing is open.
   Future<void> close() async {
     final db = _db;
     _db = null;

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+/// Static theme factory for the app (Material 3, seeded color schemes).
 class AppTheme {
+  /// Default seed color when the user has not picked a theme color.
   static const Color seed = Color(0xFF4CAF50);
 
   /// Font family used as the application-wide typeface. Chiron GoRound TC is
@@ -110,6 +112,7 @@ class AppTheme {
     );
   }
 
+  /// Dark theme variant of [light]; same shape, dark [ColorScheme].
   static ThemeData dark(Color? seedColor, {double cardOpacity = 1.0}) {
     final s = seedColor ?? seed;
     final scheme = ColorScheme.fromSeed(seedColor: s, brightness: Brightness.dark);

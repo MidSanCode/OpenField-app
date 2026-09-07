@@ -17,6 +17,8 @@ final Logger _imageLog = Logger('image');
 /// broken media is visibly explained instead of either disappearing or filling
 /// the console with a full stack trace.
 class Avatar extends StatelessWidget {
+  /// Creates an avatar; both colors default to the theme's primary container
+  /// pair.
   const Avatar({
     super.key,
     this.imageUrl = '',
@@ -40,7 +42,10 @@ class Avatar extends StatelessWidget {
   /// Icon shown when the URL is empty and [initials] is empty.
   final IconData fallbackIcon;
 
+  /// Circle fill color (placeholder background); null uses the theme's
+  /// `primaryContainer`.
   final Color? backgroundColor;
+  /// Icon/initials color; null uses the theme's `onPrimaryContainer`.
   final Color? foregroundColor;
 
   @override

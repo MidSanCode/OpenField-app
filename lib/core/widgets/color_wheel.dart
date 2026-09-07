@@ -7,16 +7,20 @@ import 'package:flutter/material.dart';
 /// brightness. Self-contained with no third-party dependencies, used by the
 /// app theme color picker and the member display-name color editor.
 class ColorWheel extends StatefulWidget {
-  final Color initialColor;
-  final double size;
-  final ValueChanged<Color>? onChanged;
-
+  /// Creates the picker; [initialColor] seeds hue/saturation/value.
   const ColorWheel({
     super.key,
     required this.initialColor,
     this.size = 220,
     this.onChanged,
   });
+
+  /// Color the wheel starts from; re-seeds the wheel when it changes.
+  final Color initialColor;
+  /// Diameter of the disc in logical pixels.
+  final double size;
+  /// Called with the current color on every drag/slider change.
+  final ValueChanged<Color>? onChanged;
 
   @override
   State<ColorWheel> createState() => _ColorWheelState();

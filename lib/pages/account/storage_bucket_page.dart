@@ -8,11 +8,18 @@ import 'package:openfield/widgets/attachment_view.dart' show formatBytes;
 
 /// One storage bucket returned by the account service.
 class StorageBucketInfo {
+  /// Server-side bucket identifier (used when switching).
   final String name;
+  /// Display name for the list tile.
   final String label;
+  /// Storage quota granted by default, in bytes, before member bonuses.
   final int defaultQuota;
+  /// Minimum member level required to select this bucket (0 = everyone).
   final int minMemberLevel;
+  /// True for the bucket new accounts start on.
   final bool isDefault;
+  /// True when the current user may not select this bucket (level too low);
+  /// tapping it opens an upgrade notice instead of switching.
   final bool locked;
 
   const StorageBucketInfo({
@@ -36,6 +43,9 @@ class StorageBucketInfo {
   }
 }
 
+/// Lets the user pick which storage bucket new uploads go to. Lists each
+/// bucket with its default quota and membership requirement; locked buckets
+/// (member level too low) open an upgrade notice instead of switching.
 class StorageBucketPage extends StatefulWidget {
   const StorageBucketPage({super.key});
 
@@ -43,6 +53,8 @@ class StorageBucketPage extends StatefulWidget {
   State<StorageBucketPage> createState() => _StorageBucketPageState();
 }
 
+/// State for [StorageBucketPage]: loads the bucket list and current
+/// selection, then switches on tap and refreshes the cached user.
 class _StorageBucketPageState extends State<StorageBucketPage> {
   final ApiService _apiService = ApiService();
   List<StorageBucketInfo> _buckets = [];

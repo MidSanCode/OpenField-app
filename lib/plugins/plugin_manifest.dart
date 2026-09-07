@@ -16,9 +16,14 @@ class PluginManifest {
   /// dots, dashes; 3-64 chars. Doubles as the on-disk directory name.
   final String id;
 
+  /// Human-readable display name; 1-100 chars, enforced by [fromJson].
   final String name;
+  /// `MAJOR.MINOR.PATCH` version with an optional suffix (`-beta.1` /
+  /// `+build`), enforced by [fromJson].
   final String version;
+  /// Free-form author credit; empty when the manifest omits it.
   final String author;
+  /// Free-form description shown in store/detail UI; may be empty.
   final String description;
 
   /// Entry script file name inside the bundle (plain `.js` file).
@@ -37,6 +42,8 @@ class PluginManifest {
   /// Oldest app version this plugin supports (informational for now).
   final String minAppVersion;
 
+  /// Creates a manifest as-is without validating; [PluginManifest.fromJson]
+  /// is the validating entry point used for real bundles.
   const PluginManifest({
     required this.id,
     required this.name,
@@ -123,6 +130,8 @@ class PluginManifest {
     );
   }
 
+  /// Serializes back to the on-disk manifest.json shape (snake_case
+  /// `allowed_hosts` / `min_app_version` keys).
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
@@ -135,6 +144,7 @@ class PluginManifest {
         'min_app_version': minAppVersion,
       };
 
+  /// Short debug form, e.g. `PluginManifest(com.example.demo@1.0.0)`.
   @override
   String toString() => 'PluginManifest($id@$version)';
 }

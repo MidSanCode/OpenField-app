@@ -26,8 +26,11 @@ final _log = Logger('PluginEngine');
 /// const res = await of.http.fetch('https://api.example.com/v1/thing');
 /// ```
 class PluginEngineImpl implements PluginEngine {
+  /// Creates an engine bound to one installed plugin; call [start] to
+  /// evaluate the entry script on a fresh QuickJS runtime.
   PluginEngineImpl({required this.manifest, required this.pluginDir});
 
+  /// The plugin's parsed manifest; `allowedHosts` gates `of.http.fetch`.
   @override
   final PluginManifest manifest;
 
@@ -51,6 +54,8 @@ class PluginEngineImpl implements PluginEngine {
   JavascriptRuntime? _runtime;
   bool _started = false;
 
+  /// True between a successful [start] and [stop]/[dispose]; the getter
+  /// never throws even after a failed start attempt.
   @override
   bool get running => _started && _runtime != null;
 
@@ -125,6 +130,9 @@ class PluginEngineImpl implements PluginEngine {
     _log.info('plugin stopped: ${manifest.id}');
   }
 
+  /// Hard-tears-down the QuickJS runtime without running `onUnload`
+  /// (internal fallback when start fails). Unlike [stop], this is not
+  /// meant to be awaited or repeated.
   @override
   void dispose() {
     _started = false;

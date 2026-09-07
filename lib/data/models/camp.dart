@@ -3,19 +3,32 @@ import 'attachment.dart';
 /// A 贴吧-style camp community: a named space whose posts live in the camp
 /// rather than the global feed.
 class Camp {
+  /// Server-assigned camp id.
   final int id;
+  /// Camp display name.
   final String name;
+  /// Short description ('' when the camp has none).
   final String description;
+  /// User id of the camp's creator.
   final int creatorId;
+  /// Creator's display name ('' when the payload omits it).
   final String creatorName;
+  /// Whether the camp shows up in public listings.
   final bool isVisible;
+  /// Whether users can join without an approval step.
   final bool directJoin;
+  /// Current member count.
   final int memberCount;
+  /// Total posts published in the camp.
   final int postCount;
+  /// Whether the current viewer is a member.
   final bool isMember;
+  /// When the camp was created (server timestamp).
   final DateTime createdAt;
+  /// When the camp was last updated (server timestamp).
   final DateTime updatedAt;
 
+  /// Creates a camp; see [fromJson] for payload defaults.
   Camp({
     required this.id,
     required this.name,
@@ -31,6 +44,8 @@ class Camp {
     required this.updatedAt,
   });
 
+  /// Deserializes from the server's camp payload, tolerating missing or
+  /// mistyped fields (defaults apply per field).
   factory Camp.fromJson(Map<String, dynamic> json) {
     return Camp(
       id: _asInt(json['id']),
@@ -68,15 +83,24 @@ class Camp {
 
 /// A manage-published notice shown to a conversation's members.
 class GroupAnnouncement {
+  /// Server-assigned announcement id.
   final int id;
+  /// Conversation the announcement belongs to.
   final int conversationId;
+  /// User id of the publisher.
   final int creatorId;
+  /// Publisher's display name ('' when the payload omits it).
   final String creatorName;
+  /// Announcement title ('' when none).
   final String title;
+  /// Announcement body text.
   final String content;
+  /// When the announcement was published (server timestamp).
   final DateTime createdAt;
+  /// When the announcement was last updated (server timestamp).
   final DateTime updatedAt;
 
+  /// Creates an announcement; see [fromJson] for payload defaults.
   GroupAnnouncement({
     required this.id,
     required this.conversationId,
@@ -88,6 +112,8 @@ class GroupAnnouncement {
     required this.updatedAt,
   });
 
+  /// Deserializes from the server's announcement payload, tolerating missing
+  /// or mistyped fields (defaults apply per field).
   factory GroupAnnouncement.fromJson(Map<String, dynamic> json) {
     return GroupAnnouncement(
       id: _asInt(json['id']),
@@ -104,16 +130,26 @@ class GroupAnnouncement {
 
 /// One entry of a conversation's shared checklist.
 class GroupTodo {
+  /// Server-assigned todo id.
   final int id;
+  /// Conversation the todo belongs to.
   final int conversationId;
+  /// User id of the todo's creator.
   final int creatorId;
+  /// Creator's display name ('' when the payload omits it).
   final String creatorName;
+  /// What needs to be done.
   final String title;
+  /// Whether the todo has been checked off.
   final bool done;
+  /// User id that checked it off (0 while still open).
   final int doneBy;
+  /// When the todo was created (server timestamp).
   final DateTime createdAt;
+  /// When the todo was checked off; null while [done] is false.
   final DateTime? completedAt;
 
+  /// Creates a todo; see [fromJson] for payload defaults.
   GroupTodo({
     required this.id,
     required this.conversationId,
@@ -126,6 +162,8 @@ class GroupTodo {
     this.completedAt,
   });
 
+  /// Deserializes from the server's todo payload, tolerating missing or
+  /// mistyped fields (defaults apply per field).
   factory GroupTodo.fromJson(Map<String, dynamic> json) {
     return GroupTodo(
       id: _asInt(json['id']),
@@ -144,12 +182,18 @@ class GroupTodo {
 /// One attachment shared into a conversation, surfaced in the group's
 /// shared file list.
 class GroupFile {
+  /// Id of the chat message the file was attached to.
   final int messageId;
+  /// User id of the member who shared the file.
   final int senderId;
+  /// Sender's display name ('' when the payload omits it).
   final String senderName;
+  /// When the file was shared (message timestamp, server time).
   final DateTime createdAt;
+  /// The attachment itself (URL, type, size, E2EE metadata, ...).
   final Attachment attachment;
 
+  /// Creates a shared-file entry; see [fromJson] for payload defaults.
   GroupFile({
     required this.messageId,
     required this.senderId,
@@ -158,6 +202,8 @@ class GroupFile {
     required this.attachment,
   });
 
+  /// Deserializes from the server's shared-file payload; throws when the
+  /// `attachment` object is missing or malformed.
   factory GroupFile.fromJson(Map<String, dynamic> json) {
     return GroupFile(
       messageId: _asInt(json['message_id']),
@@ -171,12 +217,18 @@ class GroupFile {
 
 /// A server-wide announcement surfaced by clients on startup.
 class AppAnnouncement {
+  /// Server-assigned announcement id.
   final int id;
+  /// Announcement title.
   final String title;
+  /// Announcement body text.
   final String content;
+  /// Whether the announcement is currently shown to users.
   final bool active;
+  /// When the announcement was published (server timestamp).
   final DateTime createdAt;
 
+  /// Creates an app announcement; see [fromJson] for payload defaults.
   AppAnnouncement({
     required this.id,
     required this.title,
@@ -185,6 +237,8 @@ class AppAnnouncement {
     required this.createdAt,
   });
 
+  /// Deserializes from the server's announcement payload, tolerating missing
+  /// or mistyped fields (defaults apply per field).
   factory AppAnnouncement.fromJson(Map<String, dynamic> json) {
     return AppAnnouncement(
       id: _asInt(json['id']),

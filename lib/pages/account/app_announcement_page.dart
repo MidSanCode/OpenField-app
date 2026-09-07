@@ -16,6 +16,9 @@ class AppAnnouncementPage extends StatefulWidget {
   State<AppAnnouncementPage> createState() => _AppAnnouncementPageState();
 }
 
+/// State for [AppAnnouncementPage]: probes the manage permission to decide
+/// whether the composer shows, loads the announcement list and publishes /
+/// retires notices for admins.
 class _AppAnnouncementPageState extends State<AppAnnouncementPage> {
   final ApiService _api = ApiService();
   List<AppAnnouncement> _items = [];

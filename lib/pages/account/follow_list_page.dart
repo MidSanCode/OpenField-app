@@ -8,10 +8,16 @@ import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 
+/// Which follow list a [FollowListPage] tab shows: the user's followers, the
+/// users they follow, or mutual friends.
 enum FollowListType { followers, following, friends }
 
+/// A user's followers / following / friends list, one tab per [FollowListType]
+/// with lazy loading per tab.
 class FollowListPage extends StatefulWidget {
+  /// The user whose follow lists are shown.
   final int userId;
+  /// Tab selected when the page opens.
   final FollowListType initialTab;
 
   const FollowListPage({
@@ -24,6 +30,8 @@ class FollowListPage extends StatefulWidget {
   State<FollowListPage> createState() => _FollowListPageState();
 }
 
+/// State for [FollowListPage]: caches one list per tab and fetches the
+/// current tab's users on switch.
 class _FollowListPageState extends State<FollowListPage> with SingleTickerProviderStateMixin {
   final ApiService _apiService = ApiService();
   late TabController _tabController;

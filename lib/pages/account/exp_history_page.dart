@@ -14,6 +14,8 @@ class ExpHistoryPage extends StatefulWidget {
   State<ExpHistoryPage> createState() => _ExpHistoryPageState();
 }
 
+/// State for [ExpHistoryPage]: loads the latest 100 experience entries and
+/// renders them newest first.
 class _ExpHistoryPageState extends State<ExpHistoryPage> {
   final ApiService _apiService = ApiService();
   List<ExpEntry> _entries = const [];

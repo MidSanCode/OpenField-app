@@ -9,6 +9,7 @@ import 'package:easy_localization/easy_localization.dart';
 class QrShareDialog extends StatelessWidget {
   /// The deep-link payload encoded into the QR image.
   final String data;
+  /// Dialog heading shown above the QR image.
   final String title;
 
   const QrShareDialog({super.key, required this.data, required this.title});

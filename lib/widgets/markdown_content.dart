@@ -4,9 +4,13 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 /// Renders markdown content with a consistent style. Falls back gracefully to
 /// plain text rendering for malformed input.
 class MarkdownContent extends StatelessWidget {
+  /// The markdown source text to render.
   final String data;
+  /// Base text style for paragraphs; defaults to the theme's bodyMedium.
   final TextStyle? style;
+  /// Padding around the markdown body; defaults to none.
   final EdgeInsetsGeometry padding;
+  /// Whether the rendered text can be selected and copied.
   final bool selectable;
 
   const MarkdownContent({

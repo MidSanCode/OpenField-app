@@ -17,7 +17,10 @@ String formatCoins(int cents) {
 /// from the server; tapping claims a share when possible. Used both inside
 /// chat bubbles and attached to posts.
 class CheckCard extends StatefulWidget {
+  /// The check (red packet) to load and display.
   final int checkId;
+  /// Access token for the check API calls; when null, falls back to the
+  /// ambient [AuthService] access token.
   final String? token;
 
   const CheckCard({super.key, required this.checkId, this.token});
@@ -28,9 +31,13 @@ class CheckCard extends StatefulWidget {
 
 class _CheckCardState extends State<CheckCard> {
   final ApiService _apiService = ApiService();
+  /// The check loaded from the server; null until the first load succeeds.
   Check? _check;
+  /// True until the initial load settles (success or failure).
   bool _loading = true;
+  /// True while a claim request is in flight; shows a spinner over the icon.
   bool _claiming = false;
+  /// Set when loading fails; the card then renders an "unavailable" row.
   String? _error;
 
   @override

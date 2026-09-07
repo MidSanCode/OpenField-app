@@ -8,14 +8,24 @@ import 'package:openfield/data/services/api_service.dart';
 
 /// A single push event delivered over the realtime WebSocket connection.
 class PushEvent {
+  /// Event type string from the server frame (e.g. a new-message or reply
+  /// notification); empty string when the frame has no recognizable type.
   final String type;
+  /// Conversation the event belongs to, when applicable; null otherwise.
   final int? conversationId;
+  /// Message referenced by the event; null when absent or non-numeric.
   final int? messageId;
+  /// Post referenced by the event; null when absent or non-numeric.
   final int? postId;
+  /// Reply referenced by the event; null when absent or non-numeric.
   final int? replyId;
+  /// User the event is about (typically the sender); null when absent.
   final int? userId;
+  /// Raw payload map from the server frame; never null (defaults to {}).
   final Map<String, dynamic> data;
 
+  /// Creates an event; [type] and [data] are required, the ids are optional
+  /// context that may stay null.
   PushEvent({
     required this.type,
     this.conversationId,
@@ -26,6 +36,9 @@ class PushEvent {
     required this.data,
   });
 
+  /// Parses a server frame, tolerating missing or string-typed numbers (they
+  /// become null). [data] defaults to an empty map, and the id fields fall
+  /// back to the generic `id` key when their specific key is absent.
   factory PushEvent.fromJson(Map<String, dynamic> json) {
     final data = (json['data'] as Map<String, dynamic>?) ?? {};
     return PushEvent(
@@ -62,6 +75,7 @@ class PushEvent {
 /// leak into proxy/access logs): it first POSTs `/ws` with the Bearer token to
 /// mint a single-use ticket, then connects with `?ticket=` within the TTL.
 class RealtimeService extends ChangeNotifier {
+  /// Process-wide singleton; UI code listens to [events] on this instance.
   static final RealtimeService instance = RealtimeService();
 
   /// Consecutive failures tolerated before the connection is declared dead.

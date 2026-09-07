@@ -58,13 +58,17 @@ class SecureKV {
     }
   }
 
+  /// Reads the value stored under [key] from the platform credential store;
+  /// returns null when the key does not exist.
   static Future<String?> read(String key) => _storage.read(key: key);
 
   /// Returns every key-value pair currently in secure storage.
   static Future<Map<String, String>> readAll() => _storage.readAll();
 
+  /// Encrypts and stores [value] under [key], overwriting any existing entry.
   static Future<void> write(String key, String value) =>
       _storage.write(key: key, value: value);
 
+  /// Removes the entry under [key]; a no-op when it does not exist.
   static Future<void> delete(String key) => _storage.delete(key: key);
 }

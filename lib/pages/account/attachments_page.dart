@@ -8,6 +8,9 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/media/media_preview_page.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 
+/// The signed-in user's uploaded attachments: a storage usage card on top
+/// and a grid of files below; tapping previews media or opens the URL, and
+/// files can be deleted after confirmation.
 class AttachmentsPage extends StatefulWidget {
   const AttachmentsPage({super.key});
 
@@ -15,6 +18,8 @@ class AttachmentsPage extends StatefulWidget {
   State<AttachmentsPage> createState() => _AttachmentsPageState();
 }
 
+/// State for [AttachmentsPage]: loads the attachment list and storage usage
+/// in parallel and handles confirmed deletion.
 class _AttachmentsPageState extends State<AttachmentsPage> {
   final ApiService _apiService = ApiService();
   List<Attachment> _attachments = [];

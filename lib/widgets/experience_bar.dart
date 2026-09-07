@@ -6,6 +6,7 @@ import 'package:openfield/data/models/user.dart';
 class ExperienceBar extends StatelessWidget {
   const ExperienceBar({super.key, required this.user, this.onTap});
 
+  /// The user whose level, tier name and experience progress are rendered.
   final User user;
 
   /// Optional tap handler (e.g. opens the exp history page). When null the bar

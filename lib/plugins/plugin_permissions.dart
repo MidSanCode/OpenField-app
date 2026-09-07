@@ -25,6 +25,8 @@ enum PermissionLevel {
 
 /// One grantable permission in the plugin system.
 class PluginPermissionDef {
+  /// Permission key exactly as a manifest requests it, e.g. `http.fetch`;
+  /// must match a key of [pluginPermissionCatalog].
   final String id;
 
   /// Localization key for the display name.
@@ -33,8 +35,10 @@ class PluginPermissionDef {
   /// Localization key for the one-line explanation.
   final String hintKey;
 
+  /// Sensitivity tier driving the consent UI and default-deny posture.
   final PermissionLevel level;
 
+  /// Const constructor; the catalog entries are compile-time constants.
   const PluginPermissionDef({
     required this.id,
     required this.labelKey,
@@ -43,6 +47,9 @@ class PluginPermissionDef {
   });
 }
 
+/// Every grantable permission, keyed by permission id. Manifest validation
+/// rejects any requested key missing from this table, so the runtime never
+/// sees an unknown capability.
 const pluginPermissionCatalog = <String, PluginPermissionDef>{
   // ---- Level 0: safe ----
   'storage': PluginPermissionDef(

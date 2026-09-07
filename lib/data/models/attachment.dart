@@ -1,13 +1,22 @@
+/// A file (image/audio/video/text/other) attached to a post or message,
+/// with E2EE metadata, preview renditions and burn-after-view state.
 class Attachment {
+  /// Server-assigned attachment id; 0 when the payload omits it.
   final int id;
+  /// Original file name at upload time (masked name for E2EE attachments).
   final String originalName;
+  /// Stored MIME type; may be a generic placeholder for legacy uploads.
   final String mimeType;
+  /// File size in bytes.
   final int sizeBytes;
+  /// URL of the original object (ciphertext for E2EE attachments).
   final String url;
+  /// Small thumbnail rendition ('' when the server generated none).
   final String thumbUrl;
   /// Mid-size compressed rendition (longest edge 1440px) generated on
   /// upload; empty for uploads made before the server generated previews.
   final String previewSrcUrl;
+  /// Who may access the file; server-controlled value ('public' by default).
   final String visibility;
 
   /// E2EE attachment metadata, populated only for attachments shared in an
@@ -32,6 +41,8 @@ class Attachment {
   /// Null = not armed (attachment is not on a burn message / never viewed).
   final DateTime? burnAt;
 
+  /// Creates an attachment; non-core fields default to neutral values so
+  /// local optimistic instances only need the core fields.
   Attachment({
     required this.id,
     required this.originalName,
@@ -50,6 +61,8 @@ class Attachment {
     this.burnAt,
   });
 
+  /// Deserializes from the server's attachment payload, tolerating missing or
+  /// mistyped fields (defaults apply per field).
   factory Attachment.fromJson(Map<String, dynamic> json) {
     final id = json['id'];
     return Attachment(
@@ -77,6 +90,8 @@ class Attachment {
     );
   }
 
+  /// Serializes the attachment for upload payloads. Crypto fields are only
+  /// emitted when set/non-empty, so plain attachments stay clean.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -134,13 +149,22 @@ class Attachment {
   bool get hasOriginalUpgrade =>
       previewSrcUrl.isNotEmpty || thumbUrl.isNotEmpty;
 
+  /// True when the file is an image (by mime type, or by extension for
+  /// legacy uploads stored with a generic mime).
   bool get isImage => _matches('image/', {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic'});
+  /// True when the file is audio (mime type or URL/name extension).
   bool get isAudio => _matches('audio/', {'mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'opus'});
+  /// True when the file is a video (mime type or URL/name extension).
   bool get isVideo => _matches('video/', {'mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v'});
+  /// True when the file is plain text (mime type or URL/name extension).
   bool get isText => _matches('text/', {'txt', 'md', 'csv'});
+  /// True when none of the typed getters above match (unknown file type).
   bool get isBinary => !isImage && !isAudio && !isVideo && !isText;
+  /// True when the attachment's visibility is 'public'.
   bool get isPublic => visibility == 'public';
+  /// True when the attachment's visibility is 'private'.
   bool get isPrivate => visibility == 'private';
+  /// True when the attachment's visibility is 'restricted'.
   bool get isRestricted => visibility == 'restricted';
 
   /// True when the attachment's file bytes were AES-encrypted before upload

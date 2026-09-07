@@ -18,6 +18,10 @@ import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/pages/settings/permissions_page.dart';
 import 'package:openfield/pages/settings/service_status_page.dart';
 
+/// The settings tab: app preferences (theme, language, server host, accent
+/// color, background image, card opacity, attachment encryption, developer
+/// mode), realtime connection controls, account entries (permissions,
+/// region), and about items (version, service status, capability matrix).
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 

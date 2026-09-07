@@ -1,21 +1,37 @@
 /// A pending or settled user-to-user currency transfer.
 class Transfer {
+  /// Server-assigned transfer id.
   final int id;
+  /// User id of the sender.
   final int senderId;
+  /// User id of the recipient.
   final int recipientId;
+  /// Amount transferred, in coins.
   final double amount;
+  /// Lifecycle state: 'pending', 'accepted', 'declined' or 'refunded'.
   final String status;
+  /// Free-form note the sender attached ('' when none).
   final String note;
+  /// When the transfer was created (localized timestamp).
   final DateTime createdAt;
+  /// When the recipient accepted or declined; null while pending.
   final DateTime? decidedAt;
+  /// When the transfer was refunded; null until a refund happens.
   final DateTime? refundedAt;
+  /// Sender's display name ('' when the payload omits it).
   final String senderName;
+  /// Sender's @username ('' when the payload omits it).
   final String senderUsername;
+  /// Sender's avatar URL ('' when the payload omits it).
   final String senderAvatar;
+  /// Recipient's display name ('' when the payload omits it).
   final String recipientName;
+  /// Recipient's @username ('' when the payload omits it).
   final String recipientUsername;
+  /// Recipient's avatar URL ('' when the payload omits it).
   final String recipientAvatar;
 
+  /// Creates a transfer; see [fromJson] for payload defaults.
   const Transfer({
     required this.id,
     required this.senderId,

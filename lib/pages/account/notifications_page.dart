@@ -14,6 +14,8 @@ class NotificationsPage extends StatefulWidget {
   State<NotificationsPage> createState() => _NotificationsPageState();
 }
 
+/// State for [NotificationsPage]: loads the notification page once and
+/// supports marking everything read.
 class _NotificationsPageState extends State<NotificationsPage> {
   final ApiService _api = ApiService();
   NotificationPage? _page;

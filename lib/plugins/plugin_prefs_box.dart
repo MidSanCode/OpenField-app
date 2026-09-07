@@ -12,6 +12,7 @@ final _log = Logger('PluginPrefsBox');
 /// small by design and this keeps it atomic and simple.
 class PluginPrefsBox {
   PluginPrefsBox._();
+  /// Process-wide singleton; every engine shares one storage blob.
   static final PluginPrefsBox instance = PluginPrefsBox._();
 
   static const _blobKey = 'of_plugin_storage';
@@ -38,13 +39,19 @@ class PluginPrefsBox {
     }
   }
 
+  /// Reads a value from memory; null when the key is absent. Do not call
+  /// before [ensureLoaded] has completed, or stale/empty data is returned.
   Object? get(String key) => _mem[key];
 
+  /// Stores a value in memory and kicks off an async persist. The in-memory
+  /// update is synchronous, so a read right after this call sees the value.
   void set(String key, Object? value) {
     _mem[key] = value;
     _persist();
   }
 
+  /// Deletes one key from memory and persists asynchronously; removing a
+  /// missing key is a no-op.
   void remove(String key) {
     _mem.remove(key);
     _persist();

@@ -6,6 +6,9 @@ import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+/// Lists pending chat consent requests (private-chat invitations and group
+/// invites) with accept / decline actions. Acting on a request removes it
+/// from the list in place; failures surface as snackbars.
 class ConsentRequestsPage extends StatefulWidget {
   const ConsentRequestsPage({super.key});
 
@@ -13,6 +16,8 @@ class ConsentRequestsPage extends StatefulWidget {
   State<ConsentRequestsPage> createState() => _ConsentRequestsPageState();
 }
 
+/// State for [ConsentRequestsPage]: loads the request list on entry and
+/// supports pull-to-refresh.
 class _ConsentRequestsPageState extends State<ConsentRequestsPage> {
   final ApiService _apiService = ApiService();
   List<ConsentRequest> _requests = [];

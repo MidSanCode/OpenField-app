@@ -24,9 +24,14 @@ import '../models/membership.dart';
 /// Error raised when an API request fails, carrying the HTTP status code when
 /// the server responded, or null for network/parse failures.
 class ApiException implements Exception {
+  /// HTTP status code returned by the server, or null when the request
+  /// failed before a response arrived (offline, timeout, parse error).
   final int? statusCode;
+  /// Human-readable failure description.
   final String message;
 
+  /// Creates an exception with the server status (null when no response
+  /// arrived) and a display message.
   ApiException(this.statusCode, this.message);
 
   /// Renders as `[<status>] <message>` when the server responded with a
@@ -41,10 +46,15 @@ class ApiException implements Exception {
 /// HTTP client that logs every request/response to the console and stamps every
 /// request with a descriptive User-Agent.
 class LoggingClient extends http.BaseClient {
+  /// The wrapped client all requests are delegated to.
   final http.Client _inner;
 
+  /// Wraps [inner]; every request sent through it is logged and stamped.
   LoggingClient(this._inner);
 
+  /// Stamps the request with the app User-Agent, then forwards it to the
+  /// inner client, logging the method, URL, status and elapsed time (or the
+  /// error type). Errors are rethrown unchanged after logging.
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     request.headers['User-Agent'] = userAgent();
@@ -67,6 +77,7 @@ class LoggingClient extends http.BaseClient {
     }
   }
 
+  /// Closes the wrapped client.
   @override
   void close() => _inner.close();
 }
@@ -148,11 +159,21 @@ MediaType _mediaTypeFor(String filePath) {
 /// of an attachment before it is encrypted).
 String mimeTypeForPath(String filePath) => _mediaTypeFor(filePath).toString();
 
+/// Typed REST client for the OpenField backend.
+///
+/// Every method performs one HTTP call against [baseUrl] and returns a decoded
+/// model, throwing [ApiException] with the server's status code when the call
+/// is rejected. Requests are logged through [LoggingClient] and network-level
+/// failures are converted into [ApiException]s, so callers only ever catch
+/// that one type.
 class ApiService {
+  /// Base URL used until [setServerHost] overrides it.
   static const String defaultBaseUrl = 'https://api.openfield.eu.cc/api/v1';
+  /// Server host used until [setServerHost] overrides it.
   static const String defaultServerHost = 'https://api.openfield.eu.cc';
   static String _baseUrl = defaultBaseUrl;
   static String _serverHost = defaultServerHost;
+  /// HTTP client used for all requests; injectable for tests.
   final http.Client _client;
 
   /// The active API base URL. Updated when the user changes the server host in
@@ -163,6 +184,7 @@ class ApiService {
   /// bound to this value (see [AuthService.switchServer]).
   static String get serverHost => _serverHost;
 
+  /// Creates the service; [client] overrides the default logging HTTP client.
   ApiService({http.Client? client})
       : _client = client ?? LoggingClient(http.Client());
 
@@ -322,6 +344,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to get OIDC login URL'));
   }
 
+  /// Completes the OIDC login by exchanging the authorization [code] for the
+  /// token map. Throws [ApiException] when the callback is rejected.
   Future<Map<String, dynamic>> oidcCallback(String code) async {
     final response = await _get(
       Uri.parse('$baseUrl/auth/oidc/callback?code=$code'),
@@ -367,6 +391,9 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to start OIDC binding'));
   }
 
+  /// Authenticates a local username + password account. Returns the raw
+  /// token payload (`access_token`, `refresh_token`, `user`, ...); throws
+  /// [ApiException] on bad credentials or any other failure.
   Future<Map<String, dynamic>> login(String username, String password) async {
     final response = await _post(
       Uri.parse('$baseUrl/auth/login'),
@@ -397,6 +424,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Token refresh failed'));
   }
 
+  /// Completes registration for an OAuth-authenticated new user. Throws
+  /// [ApiException] with status 409 when the username is already taken.
   Future<User> register(String username, String nickname, String accessToken, {String bio = ''}) async {
     final response = await _post(
       Uri.parse('$baseUrl/auth/register'),
@@ -416,6 +445,7 @@ class ApiService {
 
   // ---- Account ----
 
+  /// Loads the profile belonging to [accessToken].
   Future<User> getCurrentUser(String accessToken) async {
     final response = await _get(
       Uri.parse('$baseUrl/users/me'),
@@ -429,6 +459,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to get user'));
   }
 
+  /// Loads another user's public profile by id.
   Future<User> getUser(int userId, {String? token}) async {
     final response = await _get(
       Uri.parse('$baseUrl/users/$userId'),
@@ -442,6 +473,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to get user'));
   }
 
+  /// Searches users matching [query], at most [limit] results. Returns an
+  /// empty list when there are no matches.
   Future<List<User>> searchUsers(String accessToken, String query, {int limit = 20}) async {
     final response = await _get(
       Uri.parse('$baseUrl/users/search?q=${Uri.encodeQueryComponent(query)}&limit=$limit'),
@@ -476,6 +509,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to get permissions'));
   }
 
+  /// Updates the caller's profile. Only non-null fields are sent, so null
+  /// leaves that value unchanged. Returns the updated user.
   Future<User> updateProfile(String accessToken, {String? username, String? nickname, String? bio}) async {
     final body = <String, dynamic>{};
     if (username != null) body['username'] = username;
@@ -531,11 +566,15 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to update name style'));
   }
 
+  /// Uploads a local image file as the user's avatar; returns the updated
+  /// user.
   Future<User> uploadAvatar(String filePath, String accessToken) async {
     final data = await _uploadMultipart('$baseUrl/users/me/avatar', filePath, accessToken);
     return User.fromJson(data);
   }
 
+  /// Uploads a local image file as the profile banner; returns the updated
+  /// user.
   Future<User> uploadBanner(String filePath, String accessToken) async {
     final data = await _uploadMultipart('$baseUrl/users/me/banner', filePath, accessToken);
     return User.fromJson(data);
@@ -543,6 +582,9 @@ class ApiService {
 
   // ---- Storage ----
 
+  /// Uploads a local file as a public or private attachment in a single
+  /// multipart request. [onProgress] receives 0 at start and 1 on completion
+  /// when provided. Throws [ApiException] on failure.
   Future<Attachment> uploadAttachment(
     String filePath,
     String accessToken, {
@@ -1131,6 +1173,7 @@ class ApiService {
             fileSize);
   }
 
+  /// Lists the caller's own attachments, newest first, at most [limit] rows.
   Future<List<Attachment>> listMyAttachments(String accessToken, {int limit = 100}) async {
     final response = await _get(
       Uri.parse('$baseUrl/attachments?limit=$limit'),
@@ -1148,6 +1191,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load attachments'));
   }
 
+  /// Permanently deletes an attachment. Throws [ApiException] unless the
+  /// server answers 204.
   Future<void> deleteAttachment(int attachmentId, String accessToken) async {
     final response = await _delete(
       Uri.parse('$baseUrl/attachments/$attachmentId'),
@@ -1220,6 +1265,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to create check'));
   }
 
+  /// Loads a check (red packet) by id; [token] is optional.
   Future<Check> getCheck(int checkId, {String? token}) async {
     final response = await _get(
       Uri.parse('$baseUrl/checks/$checkId'),
@@ -1233,6 +1279,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load check'));
   }
 
+  /// Claims one share of a check (red packet) for the current user and
+  /// returns the claim (amount credited, share count, ...).
   Future<CheckClaim> claimCheck(String accessToken, int checkId) async {
     final response = await _post(
       Uri.parse('$baseUrl/checks/$checkId/claim'),
@@ -1293,6 +1341,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load posts'));
   }
 
+  /// Loads a single post by id; [token] is optional.
   Future<Post> getPost(int postId, [String? token]) async {
     final response = await _get(
       Uri.parse('$baseUrl/posts/$postId'),
@@ -1306,6 +1355,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load post'));
   }
 
+  /// Lists a user's posts, [limit] per page starting at [page].
   Future<List<Post>> getPostsByUser(int userId, {String? token, int page = 1, int limit = 20}) async {
     final response = await _get(
       Uri.parse('$baseUrl/users/$userId/posts?page=$page&limit=$limit'),
@@ -1323,6 +1373,9 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load user posts'));
   }
 
+  /// Creates a post with the given content and attachments. [quotedPostId]
+  /// and [campId] (0 = none/global) are omitted from the request when unset.
+  /// Returns the created post.
   Future<Post> createPost(String content, String accessToken,
       {List<int> attachmentIds = const [],
       String visibility = 'public',
@@ -1366,6 +1419,8 @@ class ApiService {
 
   // ---- camps (贴吧-style communities) ----
 
+  /// Lists camps; [query] filters by name and [mine] requests only the
+  /// caller's memberships. Token optional.
   Future<List<Camp>> listCamps(String? token, {String query = '', bool mine = false}) async {
     final params = <String, String>{
       if (query.isNotEmpty) 'q': query,
@@ -1384,6 +1439,7 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to load camps'));
   }
 
+  /// Loads a camp by id; [token] is optional.
   Future<Camp> getCamp(int campId, {String? token}) async {
     final response = await _get(
       Uri.parse('$baseUrl/camps/$campId'),
@@ -1396,6 +1452,7 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to load camp'));
   }
 
+  /// Creates a camp with the given visibility and join settings.
   Future<Camp> createCamp(String name, String accessToken,
       {String description = '', bool isVisible = true, bool directJoin = true}) async {
     final response = await _post(
@@ -1415,6 +1472,8 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to create camp'));
   }
 
+  /// Updates camp settings; only non-null fields are sent, so null leaves
+  /// the setting unchanged.
   Future<void> updateCamp(int campId, String accessToken,
       {String? name, String? description, bool? isVisible, bool? directJoin}) async {
     final response = await _put(
@@ -1432,6 +1491,7 @@ class ApiService {
     }
   }
 
+  /// Deletes a camp. Throws [ApiException] unless the server answers 204.
   Future<void> deleteCamp(int campId, String accessToken) async {
     final response = await _delete(
       Uri.parse('$baseUrl/camps/$campId'),
@@ -1442,6 +1502,7 @@ class ApiService {
     }
   }
 
+  /// Joins the caller as a camp member.
   Future<void> joinCamp(int campId, String accessToken) async {
     final response = await _post(
       Uri.parse('$baseUrl/camps/$campId/join'),
@@ -1452,6 +1513,7 @@ class ApiService {
     }
   }
 
+  /// Removes the caller from a camp's member list.
   Future<void> leaveCamp(int campId, String accessToken) async {
     final response = await _delete(
       Uri.parse('$baseUrl/camps/$campId/members/me'),
@@ -1462,6 +1524,7 @@ class ApiService {
     }
   }
 
+  /// Lists a camp's posts, at most [limit] of them.
   Future<List<Post>> listCampPosts(int campId, {String? token, int limit = 20}) async {
     final response = await _get(
       Uri.parse('$baseUrl/camps/$campId/posts?limit=$limit'),
@@ -1480,6 +1543,7 @@ class ApiService {
 
   // ---- group announcements / todos / files ----
 
+  /// Lists a group conversation's announcements.
   Future<List<GroupAnnouncement>> listAnnouncements(int convId, String accessToken) async {
     final response = await _get(
       Uri.parse('$baseUrl/conversations/$convId/announcements'),
@@ -1496,6 +1560,7 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to load announcements'));
   }
 
+  /// Publishes an announcement in a group conversation.
   Future<GroupAnnouncement> createAnnouncement(
       int convId, String title, String content, String accessToken) async {
     final response = await _post(
@@ -1510,6 +1575,8 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to publish announcement'));
   }
 
+  /// Deletes a group announcement. Throws [ApiException] unless the server
+  /// answers 204.
   Future<void> deleteAnnouncement(int convId, int announcementId, String accessToken) async {
     final response = await _delete(
       Uri.parse('$baseUrl/conversations/$convId/announcements/$announcementId'),
@@ -1520,6 +1587,7 @@ class ApiService {
     }
   }
 
+  /// Lists a group conversation's shared todos.
   Future<List<GroupTodo>> listTodos(int convId, String accessToken) async {
     final response = await _get(
       Uri.parse('$baseUrl/conversations/$convId/todos'),
@@ -1536,6 +1604,7 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to load todos'));
   }
 
+  /// Creates a todo in a group conversation.
   Future<GroupTodo> createTodo(int convId, String title, String accessToken) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations/$convId/todos'),
@@ -1549,6 +1618,7 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to create todo'));
   }
 
+  /// Marks a group todo done or not done.
   Future<void> setTodoDone(int convId, int todoId, bool done, String accessToken) async {
     final response = await _put(
       Uri.parse('$baseUrl/conversations/$convId/todos/$todoId'),
@@ -1560,6 +1630,8 @@ class ApiService {
     }
   }
 
+  /// Deletes a group todo. Throws [ApiException] unless the server answers
+  /// 204.
   Future<void> deleteTodo(int convId, int todoId, String accessToken) async {
     final response = await _delete(
       Uri.parse('$baseUrl/conversations/$convId/todos/$todoId'),
@@ -1570,6 +1642,7 @@ class ApiService {
     }
   }
 
+  /// Lists the files shared inside a group conversation.
   Future<List<GroupFile>> listGroupFiles(int convId, String accessToken) async {
     final response = await _get(
       Uri.parse('$baseUrl/conversations/$convId/files'),
@@ -1588,6 +1661,8 @@ class ApiService {
 
   // ---- app announcements ----
 
+  /// Lists app-wide announcements; [all] requests the full set instead of
+  /// the default (active) selection. Token optional.
   Future<List<AppAnnouncement>> listAppAnnouncements({String? token, bool all = false}) async {
     final uri = Uri.parse('$baseUrl/announcements').replace(
       queryParameters: all ? {'all': '1'} : const {},
@@ -1604,6 +1679,7 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to load announcements'));
   }
 
+  /// Publishes an app-wide announcement (admin only).
   Future<AppAnnouncement> createAppAnnouncement(String title, String content, String accessToken) async {
     final response = await _post(
       Uri.parse('$baseUrl/announcements'),
@@ -1617,6 +1693,7 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to create announcement'));
   }
 
+  /// Activates or deactivates an app announcement.
   Future<void> setAnnouncementActive(int id, bool active, String accessToken) async {
     final response = await _put(
       Uri.parse('$baseUrl/announcements/$id'),
@@ -1628,6 +1705,9 @@ class ApiService {
     }
   }
 
+  /// Replaces a post's content and attachment list. [visibility] is sent
+  /// only when provided, leaving it unchanged otherwise. Returns the updated
+  /// post.
   Future<Post> updatePost(int postId, String content, String accessToken,
       {List<int> attachmentIds = const [], String? visibility}) async {
     final body = <String, dynamic>{
@@ -1648,6 +1728,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to update post'));
   }
 
+  /// Permanently deletes a post. Throws [ApiException] unless the server
+  /// answers 204.
   Future<void> deletePost(int postId, String accessToken) async {
     final response = await _delete(
       Uri.parse('$baseUrl/posts/$postId'),
@@ -1678,6 +1760,7 @@ class ApiService {
 
   // ---- Post replies ----
 
+  /// Lists a post's replies, [limit] per page starting at [page].
   Future<List<PostReply>> listReplies(int postId, {String? token, int page = 1, int limit = 50}) async {
     final response = await _get(
       Uri.parse('$baseUrl/posts/$postId/replies?page=$page&limit=$limit'),
@@ -1695,6 +1778,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load replies'));
   }
 
+  /// Creates a reply to a post; [parentId] nests it under another reply.
+  /// Returns the created reply.
   Future<PostReply> createReply(int postId, String content, String accessToken,
       {int? parentId, List<int> attachmentIds = const []}) async {
     final response = await _post(
@@ -1710,6 +1795,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to create reply'));
   }
 
+  /// Replaces a reply's content and attachments; returns the updated reply.
   Future<PostReply> updateReply(int postId, int replyId, String content, String accessToken,
       {List<int> attachmentIds = const []}) async {
     final response = await _put(
@@ -1725,6 +1811,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to update reply'));
   }
 
+  /// Deletes a reply. Throws [ApiException] unless the server answers 204.
   Future<void> deleteReply(int postId, int replyId, String accessToken) async {
     final response = await _delete(
       Uri.parse('$baseUrl/posts/$postId/replies/$replyId'),
@@ -1738,6 +1825,8 @@ class ApiService {
 
   // ---- Post reactions ----
 
+  /// Sets the caller's reaction on a post, replacing any previous one.
+  /// Returns the post with updated reaction counters.
   Future<Post> reactToPost(int postId, String reaction, String accessToken) async {
     final response = await _put(
       Uri.parse('$baseUrl/posts/$postId/reactions'),
@@ -1752,6 +1841,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to set reaction'));
   }
 
+  /// Withdraws the caller's reaction from a post. Returns the post with
+  /// updated reaction counters.
   Future<Post> removePostReaction(int postId, String accessToken) async {
     final response = await _delete(
       Uri.parse('$baseUrl/posts/$postId/reactions'),
@@ -1865,6 +1956,7 @@ class ApiService {
 
   // ---- Follows ----
 
+  /// Follows a user.
   Future<void> followUser(int userId, String accessToken) async {
     final response = await _post(
       Uri.parse('$baseUrl/users/$userId/follow'),
@@ -1876,6 +1968,7 @@ class ApiService {
     }
   }
 
+  /// Unfollows a previously followed user.
   Future<void> unfollowUser(int userId, String accessToken) async {
     final response = await _delete(
       Uri.parse('$baseUrl/users/$userId/follow'),
@@ -1887,6 +1980,7 @@ class ApiService {
     }
   }
 
+  /// Lists a user's followers, paginated.
   Future<List<User>> listFollowers(int userId, {String? token, int page = 1, int limit = 50}) async {
     final response = await _get(
       Uri.parse('$baseUrl/users/$userId/followers?page=$page&limit=$limit'),
@@ -1904,6 +1998,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load followers'));
   }
 
+  /// Lists the users a user follows, paginated.
   Future<List<User>> listFollowing(int userId, {String? token, int page = 1, int limit = 50}) async {
     final response = await _get(
       Uri.parse('$baseUrl/users/$userId/following?page=$page&limit=$limit'),
@@ -2027,6 +2122,7 @@ class ApiService {
 
   // ---- Chat: conversations ----
 
+  /// Loads the conversations the caller participates in.
   Future<List<Conversation>> listConversations(String accessToken) async {
     final response = await _get(
       Uri.parse('$baseUrl/conversations'),
@@ -2044,6 +2140,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load conversations'));
   }
 
+  /// Loads one conversation with its full member list and settings.
   Future<ConversationDetail> getConversation(String accessToken, int conversationId) async {
     final response = await _get(
       Uri.parse('$baseUrl/conversations/$conversationId'),
@@ -2057,6 +2154,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load conversation'));
   }
 
+  /// Creates a group conversation titled [title].
   Future<Conversation> createGroup(String accessToken, String title) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations'),
@@ -2071,6 +2169,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to create group'));
   }
 
+  /// Creates a private conversation with [userId] (a consent request the
+  /// recipient must accept before messages flow).
   Future<void> startPrivateChat(
     String accessToken,
     int userId, {
@@ -2092,6 +2192,8 @@ class ApiService {
     }
   }
 
+  /// Invites a user to a group conversation with an optional [message]; the
+  /// invite can be accepted or declined by the recipient.
   Future<void> inviteToGroup(String accessToken, int conversationId, int userId, {String message = ''}) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/invite'),
@@ -2104,6 +2206,7 @@ class ApiService {
     }
   }
 
+  /// Sets the caller's local note (memo) for a conversation.
   Future<void> updateNote(String accessToken, int conversationId, String note) async {
     final response = await _put(
       Uri.parse('$baseUrl/conversations/$conversationId/note'),
@@ -2116,6 +2219,7 @@ class ApiService {
     }
   }
 
+  /// Sets the caller's nickname as shown to other members of the group.
   Future<void> updateGroupNickname(String accessToken, int conversationId, String nickname) async {
     final response = await _put(
       Uri.parse('$baseUrl/conversations/$conversationId/group-nickname'),
@@ -2128,6 +2232,8 @@ class ApiService {
     }
   }
 
+  /// Marks a conversation read up to [lastMessageId] (drives the unread
+  /// badge).
   Future<void> markConversationRead(String accessToken, int conversationId, int lastMessageId) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/read'),
@@ -2140,6 +2246,7 @@ class ApiService {
     }
   }
 
+  /// Leaves a group conversation.
   Future<void> leaveGroup(String accessToken, int conversationId) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/leave'),
@@ -2151,6 +2258,7 @@ class ApiService {
     }
   }
 
+  /// Removes a member from a group (owner/admin only).
   Future<void> removeGroupMember(String accessToken, int conversationId, int userId) async {
     final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId/members/$userId'),
@@ -2162,6 +2270,8 @@ class ApiService {
     }
   }
 
+  /// Deletes a conversation. Throws [ApiException] unless the server
+  /// answers 204.
   Future<void> deleteConversation(String accessToken, int conversationId) async {
     final response = await _delete(
       Uri.parse('$baseUrl/conversations/$conversationId'),
@@ -2173,6 +2283,7 @@ class ApiService {
     }
   }
 
+  /// Lists publicly discoverable groups, optionally filtered by [query].
   Future<List<Conversation>> fetchPublicGroups(String accessToken, {String query = ''}) async {
     final response = await _get(
       Uri.parse('$baseUrl/conversations/public${query.isNotEmpty ? '?q=${Uri.encodeQueryComponent(query)}' : ''}'),
@@ -2190,6 +2301,7 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to load public groups'));
   }
 
+  /// Joins a public group; returns the joined conversation.
   Future<Conversation> joinGroup(String accessToken, int conversationId) async {
     final response = await _post(
       Uri.parse('$baseUrl/conversations/$conversationId/join'),
@@ -2203,6 +2315,8 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to join group'));
   }
 
+  /// Updates whether a group is publicly discoverable and whether users may
+  /// join directly. [encrypted] toggles E2EE when provided.
   Future<void> updateGroupSettings(String accessToken, int conversationId,
       {required bool isPublic, required bool allowJoin, bool? encrypted}) async {
     final body = <String, dynamic>{'is_public': isPublic, 'allow_join': allowJoin};

@@ -2,10 +2,15 @@ import 'package:logging/logging.dart';
 
 /// A single recorded log entry.
 class LogEntry {
+  /// When the record was emitted (local wall-clock time).
   final DateTime timestamp;
+  /// Severity of the record, from the `logging` package levels.
   final Level level;
+  /// The log message text.
   final String message;
+  /// The error object attached to the record, when any.
   final Object? error;
+  /// Stack trace captured with the record, when any.
   final StackTrace? stackTrace;
 
   const LogEntry({

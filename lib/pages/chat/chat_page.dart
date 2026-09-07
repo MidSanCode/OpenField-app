@@ -17,6 +17,11 @@ import 'package:openfield/pages/chat/start_chat_page.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 import 'package:openfield/core/format/chat_time.dart';
 
+/// Conversation list tab: shows all chats with unread badges and last-message
+/// previews, refreshes silently on realtime push events, offers one-tap
+/// "mark all read", entry points for consent requests / group discovery /
+/// new chats, and a two-pane split layout on wide (landscape / tablet)
+/// screens.
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
 
@@ -24,6 +29,9 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
+/// State for [ChatPage]: loads conversations and consent requests, listens
+/// to realtime push events for flicker-free refreshes, and publishes the
+/// total unread count to [ChatUnreadService] for the navigation badge.
 class _ChatPageState extends State<ChatPage> {
   final ApiService _apiService = ApiService();
   List<Conversation> _conversations = [];

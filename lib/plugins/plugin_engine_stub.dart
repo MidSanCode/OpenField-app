@@ -11,8 +11,12 @@ final _log = Logger('PluginEngine');
 /// stays platform-agnostic; starting a plugin surfaces a clear error instead
 /// of a compile failure.
 class PluginEngineImpl implements PluginEngine {
+  /// Creates the inert web engine; every lifecycle call degrades
+  /// gracefully instead of throwing.
   PluginEngineImpl({required this.manifest, required this.pluginDir});
 
+  /// The plugin's parsed manifest (kept for surface parity; never used
+  /// because the engine cannot start on web).
   @override
   final PluginManifest manifest;
 
@@ -33,6 +37,7 @@ class PluginEngineImpl implements PluginEngine {
   @override
   void Function(String message)? toastSink;
 
+  /// Always false: no runtime ever exists on web.
   @override
   bool get running => false;
 
@@ -48,12 +53,15 @@ class PluginEngineImpl implements PluginEngine {
         'plugin runtime is not supported on web (no JS engine)');
   }
 
+  /// No-op: there is nothing to stop on web.
   @override
   Future<void> stop() async {}
 
+  /// No-op: the stub holds no native resources.
   @override
   void dispose() {}
 
+  /// Always completes with null: there is no JS engine to evaluate with.
   @override
   Future<dynamic> evalExpression(String expression) async => null;
 }

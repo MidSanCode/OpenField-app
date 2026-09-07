@@ -20,6 +20,8 @@ class BotsPage extends StatefulWidget {
   State<BotsPage> createState() => _BotsPageState();
 }
 
+/// State for [BotsPage]: loads the bot list and hosts the create-bot and
+/// token-reveal dialogs.
 class _BotsPageState extends State<BotsPage> {
   List<BotAccount>? _bots;
   final int _limit = 10;

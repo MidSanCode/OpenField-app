@@ -20,6 +20,7 @@ class IdbDatabase {
 
   IdbDatabase._(this._raw);
 
+  /// Names of the object stores that currently exist in this database.
   List<String> get storeNames => _raw.objectStoreNames ?? const [];
 
   /// Opens (creating or upgrading as needed) the named database.
@@ -63,6 +64,8 @@ class IdbDatabase {
 /// A schema-upgrade transaction; object stores may only be created here.
 class IdbVersionChangeTxn {
   final idb.Transaction _raw;
+
+  /// The database being upgraded; new object stores are created on it.
   final idb.Database db;
 
   IdbVersionChangeTxn._(this._raw, this.db);
@@ -77,6 +80,7 @@ class IdbVersionChangeTxn {
   }
 }
 
+/// Handle to one object store inside a schema-upgrade transaction.
 class IdbUpgradeStore {
   final idb.ObjectStore _raw;
 
@@ -94,6 +98,7 @@ class IdbTxn {
 
   IdbTxn._(this._raw);
 
+  /// Returns a handle to the named store; throws when it does not exist.
   IdbStore objectStore(String name) => IdbStore._(_raw.objectStore(name));
 }
 
@@ -103,16 +108,23 @@ class IdbStore {
 
   IdbStore._(this._raw);
 
+  /// Reads the value stored under [key], or null when the key is absent.
   Future<Object?> get(Object key) => _raw.getObject(key);
 
+  /// Writes [value] under [key] (or an auto-generated key when omitted),
+  /// overwriting any existing record with that key.
   Future<Object?> put(Object value, [Object? key]) =>
       key == null ? _raw.put(value) : _raw.put(value, key);
 
+  /// Inserts [value] without overwriting; the future completes with an error
+  /// when a record with the same key already exists.
   Future<Object?> add(Object value, [Object? key]) =>
       key == null ? _raw.add(value) : _raw.add(value, key);
 
+  /// Removes the record whose primary key is [key], if one exists.
   Future<Object?> delete(Object key) => _raw.delete(key);
 
+  /// Removes every record from the store.
   Future<void> clear() async {
     await _raw.clear();
   }
@@ -141,7 +153,10 @@ class IdbStore {
 
 /// One cursor position: the primary key and the stored value.
 class IdbCursorRow {
+  /// The record's primary key at this cursor position.
   final Object key;
+
+  /// The stored value at this cursor position.
   final Object value;
 
   IdbCursorRow._(this.key, this.value);

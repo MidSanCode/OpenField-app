@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart';
 class ChatUnreadService extends ChangeNotifier {
   int _totalUnread = 0;
 
+  /// Total unread messages across all conversations; clamped to >= 0 by
+  /// [setTotal] and 0 until first updated.
   int get totalUnread => _totalUnread;
 
   /// True when there's at least one unread message waiting for the user.
