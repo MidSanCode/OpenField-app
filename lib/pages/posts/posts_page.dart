@@ -13,7 +13,9 @@ import 'package:openfield/data/services/draft_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
+import 'package:openfield/pages/posts/camp_members_page.dart';
 import 'package:openfield/pages/posts/camps_page.dart';
+import 'package:openfield/data/models/camp.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
 import 'package:openfield/widgets/post_card.dart';
 import 'package:openfield/widgets/check_card.dart';
@@ -84,6 +86,9 @@ class _PostsPageState extends State<PostsPage> {
   String _query = '';
   /// Active tag filter; null when the feed shows everything.
   String? _tag;
+  /// The camp being browsed (camp mode only); carries my_role/canManage for
+  /// the app-bar manage entry and pin permissions.
+  Camp? _camp;
 
   // Advanced search filters (combined with the keyword server-side).
   String _authorFilter = '';
@@ -296,6 +301,12 @@ class _PostsPageState extends State<PostsPage> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       if (widget.campId != null) {
+        // Load the camp too (best effort) so the UI knows the viewer's role
+        // and the camp's permission switches.
+        try {
+          final camp = await _apiService.getCamp(widget.campId!, token: authService.accessToken);
+          if (mounted) setState(() => _camp = camp);
+        } catch (_) {}
         final posts = await _apiService.listCampPosts(
           widget.campId!,
           token: authService.accessToken,
@@ -322,8 +333,18 @@ class _PostsPageState extends State<PostsPage> {
       });
     } catch (e) {
       if (!mounted) return;
+      // Camp feeds are members-only: turn the raw 403/404 into a friendly
+      // join hint instead of a bare exception string.
+      var message = e.toString();
+      if (widget.campId != null && e is ApiException) {
+        if (e.statusCode == 403) {
+          message = 'campMembersOnly'.tr();
+        } else if (e.statusCode == 404) {
+          message = 'campEmpty'.tr();
+        }
+      }
       setState(() {
-        _error = e.toString();
+        _error = message;
         _isLoading = false;
       });
     }
@@ -398,8 +419,10 @@ class _PostsPageState extends State<PostsPage> {
     }
   }
 
-  /// Pins/unpins one of the caller's own posts. The list refreshes so the
-  /// pinned post floats to its new position.
+  /// Pins/unpins a post. Global posts pin to the author's profile; camp posts
+  /// toggle the camp-scoped pin (camp admins may pin any post, members only
+  /// their own when the camp allows). The list refreshes so the pinned post
+  /// floats to its new position.
   Future<void> _pinPost(Post post, bool pinned) async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
@@ -413,7 +436,11 @@ class _PostsPageState extends State<PostsPage> {
       await _apiService.setPostPinned(post.id, pinned, token);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(pinned ? 'postPinned'.tr() : 'postUnpinned'.tr())),
+        SnackBar(content: Text(
+          widget.campId != null
+              ? (pinned ? 'campPostPinned'.tr() : 'campPostUnpinned'.tr())
+              : (pinned ? 'postPinned'.tr() : 'postUnpinned'.tr()),
+        )),
       );
       await _loadPosts();
     } catch (e) {
@@ -422,6 +449,47 @@ class _PostsPageState extends State<PostsPage> {
           SnackBar(content: Text(e.toString())),
         );
       }
+    }
+  }
+
+  /// Opens the camp member management page (owner/admin entry from the
+  /// camp-mode app bar).
+  Future<void> _openCampMembers() async {
+    final campId = widget.campId;
+    if (campId == null) return;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('loginWithOIDC'.tr())),
+      );
+      return;
+    }
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => CampMembersPage(campId: campId)),
+    );
+    if (changed == true) {
+      await _loadPosts();
+    }
+  }
+
+  /// Opens the camp settings sheet (basics for admins; permission switches
+  /// for the owner).
+  Future<void> _openCampSettings() async {
+    final camp = _camp;
+    final campId = widget.campId;
+    if (camp == null || campId == null) return;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || token.isEmpty) return;
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => _CampSettingsSheet(camp: camp, token: token),
+    );
+    if (updated == true) {
+      final fresh = await _apiService.getCamp(campId, token: token);
+      if (mounted) setState(() => _camp = fresh);
     }
   }
 
@@ -601,6 +669,19 @@ class _PostsPageState extends State<PostsPage> {
                   )
                 : Text('appTitle'.tr()),
         actions: [
+          if (widget.campId != null) ...[
+            IconButton(
+              icon: const Icon(Icons.group_outlined),
+              tooltip: 'campMembersTitle'.tr(),
+              onPressed: _openCampMembers,
+            ),
+            if (_camp != null && _camp!.canManage)
+              IconButton(
+                icon: const Icon(Icons.settings_outlined),
+                tooltip: 'campSettings'.tr(),
+                onPressed: _openCampSettings,
+              ),
+          ],
           if (widget.campId == null && _showRefreshButton)
             IconButton(
               icon: _isLoading
@@ -708,6 +789,8 @@ class _PostsPageState extends State<PostsPage> {
                 return PostCard(
                   post: post,
                   isMine: post.userId == currentUserId,
+                  campPinScope: widget.campId != null,
+                  canPinOthers: _camp != null && _camp!.canManage,
                   onEdit: () => _openEdit(post),
                   onDelete: () => _deletePost(post),
                   onTapAuthor: () => _openAuthorProfile(post.userId),
@@ -1649,6 +1732,136 @@ class _QuotedComposerBar extends StatelessWidget {
             onPressed: onRemove,
           ),
         ],
+      ),
+    );
+  }
+}
+
+
+/// Camp settings sheet: basics (name/description/visibility/direct-join) for
+/// admins; the member_post/member_pin permission switches appear for the
+/// owner only (server-enforced).
+class _CampSettingsSheet extends StatefulWidget {
+  final Camp camp;
+  final String token;
+
+  const _CampSettingsSheet({required this.camp, required this.token});
+
+  @override
+  State<_CampSettingsSheet> createState() => _CampSettingsSheetState();
+}
+
+class _CampSettingsSheetState extends State<_CampSettingsSheet> {
+  late final TextEditingController _name;
+  late final TextEditingController _description;
+  late bool _isVisible;
+  late bool _directJoin;
+  late bool _memberPost;
+  late bool _memberPin;
+  bool _saving = false;
+
+  bool get _isOwner => widget.camp.myRole == 'owner';
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.camp.name);
+    _description = TextEditingController(text: widget.camp.description);
+    _isVisible = widget.camp.isVisible;
+    _directJoin = widget.camp.directJoin;
+    _memberPost = widget.camp.memberPost;
+    _memberPin = widget.camp.memberPin;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _name.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      final api = ApiService();
+      await api.updateCamp(
+        widget.camp.id,
+        widget.token,
+        name: name != widget.camp.name ? name : null,
+        description: _description.text.trim() != widget.camp.description ? _description.text.trim() : null,
+        isVisible: _isVisible != widget.camp.isVisible ? _isVisible : null,
+        directJoin: _directJoin != widget.camp.directJoin ? _directJoin : null,
+        memberPost: _isOwner && _memberPost != widget.camp.memberPost ? _memberPost : null,
+        memberPin: _isOwner && _memberPin != widget.camp.memberPin ? _memberPin : null,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('campSettings'.tr(), style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _name,
+              decoration: InputDecoration(labelText: 'campNameLabel'.tr(), border: const OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _description,
+              maxLines: 3,
+              maxLength: 500,
+              decoration: InputDecoration(labelText: 'campDescLabel'.tr(), border: const OutlineInputBorder()),
+            ),
+            SwitchListTile(
+              title: Text('campVisible'.tr()),
+              value: _isVisible,
+              onChanged: (v) => setState(() => _isVisible = v),
+            ),
+            SwitchListTile(
+              title: Text('campDirectJoin'.tr()),
+              value: _directJoin,
+              onChanged: (v) => setState(() => _directJoin = v),
+            ),
+            if (_isOwner) ...[
+              SwitchListTile(
+                title: Text('campMemberPost'.tr()),
+                subtitle: Text('campMemberPostHint'.tr()),
+                value: _memberPost,
+                onChanged: (v) => setState(() => _memberPost = v),
+              ),
+              SwitchListTile(
+                title: Text('campMemberPin'.tr()),
+                subtitle: Text('campMemberPinHint'.tr()),
+                value: _memberPin,
+                onChanged: (v) => setState(() => _memberPin = v),
+              ),
+            ],
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2))
+                  : Text('save'.tr()),
+            ),
+          ],
+        ),
       ),
     );
   }

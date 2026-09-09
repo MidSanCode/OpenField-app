@@ -17,12 +17,21 @@ class Camp {
   final bool isVisible;
   /// Whether users can join without an approval step.
   final bool directJoin;
+  /// Whether plain members may publish posts into the camp (admins/owner
+  /// always may). Defaults to true.
+  final bool memberPost;
+  /// Whether plain members may pin their own posts within the camp
+  /// (admins/owner always may). Defaults to false.
+  final bool memberPin;
   /// Current member count.
   final int memberCount;
   /// Total posts published in the camp.
   final int postCount;
   /// Whether the current viewer is a member.
   final bool isMember;
+  /// The viewer's role in this camp: "owner", "admin", "member" or '' for
+  /// non-members.
+  final String myRole;
   /// When the camp was created (server timestamp).
   final DateTime createdAt;
   /// When the camp was last updated (server timestamp).
@@ -37,9 +46,12 @@ class Camp {
     this.creatorName = '',
     this.isVisible = true,
     this.directJoin = true,
+    this.memberPost = true,
+    this.memberPin = false,
     this.memberCount = 0,
     this.postCount = 0,
     this.isMember = false,
+    this.myRole = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -55,13 +67,21 @@ class Camp {
       creatorName: json['creator_name'] as String? ?? '',
       isVisible: json['is_visible'] as bool? ?? true,
       directJoin: json['direct_join'] as bool? ?? true,
+      memberPost: json['member_post'] as bool? ?? true,
+      memberPin: json['member_pin'] as bool? ?? false,
       memberCount: _asInt(json['member_count']),
       postCount: _asInt(json['post_count']),
       isMember: json['is_member'] as bool? ?? false,
+      myRole: json['my_role'] as String? ?? '',
       createdAt: _asDate(json['created_at']) ?? DateTime.now(),
       updatedAt: _asDate(json['updated_at']) ?? DateTime.now(),
     );
   }
+
+  /// The viewer may manage members/camp basics (owner or admin).
+  bool get canManage => myRole == 'owner' || myRole == 'admin';
+  /// The viewer may change the camp's permission switches (owner only).
+  bool get canEditPermissions => myRole == 'owner';
 
   static int _asInt(Object? value) {
     if (value is int) return value;
@@ -78,6 +98,57 @@ class Camp {
     } catch (_) {
       return null;
     }
+  }
+}
+
+/// One row of a camp's roster: the member's identity plus their camp role
+/// ("owner", "admin" or "member") and join time.
+class CampMember {
+  /// Camp the member belongs to.
+  final int campId;
+  /// User id of the member.
+  final int userId;
+  /// Camp role: "owner", "admin" or "member".
+  final String role;
+  /// Login name ('' when the payload omits it).
+  final String username;
+  /// Display name ('' when the payload omits it).
+  final String nickname;
+  /// Avatar URL ('' when unset).
+  final String avatarUrl;
+  /// Whether the member is verified.
+  final bool isVerified;
+  /// When the member joined (server timestamp).
+  final DateTime joinedAt;
+
+  /// Creates a camp member; see [fromJson] for payload defaults.
+  CampMember({
+    required this.campId,
+    required this.userId,
+    this.role = 'member',
+    this.username = '',
+    this.nickname = '',
+    this.avatarUrl = '',
+    this.isVerified = false,
+    required this.joinedAt,
+  });
+
+  /// Display name preference: nickname falls back to username.
+  String get displayName => nickname.isNotEmpty ? nickname : (username.isNotEmpty ? username : '#$userId');
+
+  /// Deserializes from the server's camp-member payload, tolerating missing
+  /// or mistyped fields (defaults apply per field).
+  factory CampMember.fromJson(Map<String, dynamic> json) {
+    return CampMember(
+      campId: _asInt(json['camp_id']),
+      userId: _asInt(json['user_id']),
+      role: json['role'] as String? ?? 'member',
+      username: json['username'] as String? ?? '',
+      nickname: json['nickname'] as String? ?? '',
+      avatarUrl: json['avatar_url'] as String? ?? '',
+      isVerified: json['is_verified'] as bool? ?? false,
+      joinedAt: _asDate(json['joined_at']) ?? DateTime.now(),
+    );
   }
 }
 

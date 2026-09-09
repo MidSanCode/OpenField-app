@@ -44,14 +44,18 @@ class ContentAction {
 /// authoring user gets [ContentAction.edit]/[ContentAction.delete]; favorite /
 /// unfavorite toggle on the current state. [showQuote]/[showRepost] reveal the
 /// quote/repost entries; callers hide them when the matching callback is
-/// unavailable (e.g. unauthenticated context). [pinned] reveals the
-/// pin/unpin toggle for the author's own posts.
+/// unavailable (e.g. unauthenticated context). [showPin] reveals the
+/// pin/unpin toggle — the author's own posts, or any camp post when the
+/// caller manages the camp. [campScope] relabels the pin entry for the
+/// camp-scoped pin and [pinned] carries that scope's current state.
 List<PopupMenuEntry<String>> buildContentMenuItems({
   required bool isMine,
   required bool isFavorite,
   bool includeReply = false,
   bool showQuote = false,
   bool showRepost = false,
+  bool showPin = false,
+  bool campScope = false,
   bool pinned = false,
 }) {
   final items = <PopupMenuEntry<String>>[
@@ -86,12 +90,14 @@ List<PopupMenuEntry<String>> buildContentMenuItems({
           text: 'postRepost'.tr(),
         ),
       ),
-    if (isMine)
+    if (showPin)
       PopupMenuItem(
         value: pinned ? ContentAction.unpin : ContentAction.pin,
         child: _MenuLabel(
           icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
-          text: pinned ? 'unpinPost'.tr() : 'pinPost'.tr(),
+          text: campScope
+              ? (pinned ? 'campUnpinPost'.tr() : 'campPinPost'.tr())
+              : (pinned ? 'unpinPost'.tr() : 'pinPost'.tr()),
         ),
       ),
     PopupMenuItem(
@@ -230,6 +236,10 @@ String _labelFor(String value) {
       return value;
   }
 }
+
+/// PostCard call-site shim so camp-scope menus can relabel the pin entries
+/// without duplicating the item list. Returns the camp pin/unpin label.
+String campPinLabel(bool pinned) => pinned ? 'campUnpinPost'.tr() : 'campPinPost'.tr();
 
 /// Small row used inside popup menu items so desktop right-click menus look
 /// consistent with the app theme.

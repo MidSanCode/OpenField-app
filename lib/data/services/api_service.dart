@@ -1452,9 +1452,13 @@ class ApiService {
     throw ApiException(response.statusCode, _decodeError(response, 'Failed to load camp'));
   }
 
-  /// Creates a camp with the given visibility and join settings.
+  /// Creates a camp with the given visibility, join and permission settings.
   Future<Camp> createCamp(String name, String accessToken,
-      {String description = '', bool isVisible = true, bool directJoin = true}) async {
+      {String description = '',
+      bool isVisible = true,
+      bool directJoin = true,
+      bool memberPost = true,
+      bool memberPin = false}) async {
     final response = await _post(
       Uri.parse('$baseUrl/camps'),
       headers: _headers(token: accessToken),
@@ -1463,6 +1467,8 @@ class ApiService {
         'description': description,
         'is_visible': isVisible,
         'direct_join': directJoin,
+        'member_post': memberPost,
+        'member_pin': memberPin,
       }),
     );
     final data = _decodeMap(response);
@@ -1473,9 +1479,14 @@ class ApiService {
   }
 
   /// Updates camp settings; only non-null fields are sent, so null leaves
-  /// the setting unchanged.
+  /// the setting unchanged. Permission switches are owner-only server-side.
   Future<void> updateCamp(int campId, String accessToken,
-      {String? name, String? description, bool? isVisible, bool? directJoin}) async {
+      {String? name,
+      String? description,
+      bool? isVisible,
+      bool? directJoin,
+      bool? memberPost,
+      bool? memberPin}) async {
     final response = await _put(
       Uri.parse('$baseUrl/camps/$campId'),
       headers: _headers(token: accessToken),
@@ -1484,10 +1495,66 @@ class ApiService {
         ?description,
         ?isVisible,
         ?directJoin,
+        ?memberPost,
+        ?memberPin,
       }),
     );
     if (response.statusCode != 200) {
       throw ApiException(response.statusCode, _decodeError(response, 'Failed to update camp'));
+    }
+  }
+
+  /// Loads a camp's roster. Members only; the response also carries the
+  /// caller's own role.
+  Future<(List<CampMember>, String)> listCampMembers(int campId, String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/camps/$campId/members'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final raw = data['members'];
+      final members = (raw is List)
+          ? raw.whereType<Map<String, dynamic>>().map(CampMember.fromJson).toList()
+          : <CampMember>[];
+      return (members, data['my_role'] as String? ?? '');
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load camp members'));
+  }
+
+  /// Directly enrolls a user into the camp (admin invite, bypasses
+  /// direct_join). 204 on success, 409 when already a member.
+  Future<void> addCampMember(int campId, int userId, String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/camps/$campId/members/$userId'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 204 && response.statusCode != 200) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to add camp member'));
+    }
+  }
+
+  /// Promotes/demotes a member between admin and member (owner only).
+  Future<void> setCampMemberRole(int campId, int userId, String role, String accessToken) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/camps/$campId/members/$userId/role'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'role': role}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to change camp role'));
+    }
+  }
+
+  /// Kicks a member from the camp (admins remove members, only the owner
+  /// removes admins).
+  Future<void> removeCampMember(int campId, int userId, String accessToken) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/camps/$campId/members/$userId'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 204 && response.statusCode != 200) {
+      throw ApiException(response.statusCode, _decodeError(response, 'Failed to remove camp member'));
     }
   }
 

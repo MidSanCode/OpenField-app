@@ -83,6 +83,10 @@ class Post {
   /// The camp (贴吧-style community) this post belongs to; 0 = global feed.
   final int campId;
 
+  /// True when camp admins pinned this post to the top of its camp feed
+  /// (only meaningful when [campId] > 0).
+  final bool campPinned;
+
   /// True when this post carries no commentary of its own and only embeds
   /// the quoted post (a pure repost).
   bool get isPureRepost => quotedPostId > 0 && content.trim().isEmpty;
@@ -124,6 +128,7 @@ class Post {
     this.quotedPost,
     this.pinned = false,
     this.campId = 0,
+    this.campPinned = false,
   });
 
   /// The author's display name: nickname when non-empty, else username,
@@ -193,6 +198,7 @@ class Post {
           : null,
       pinned: json['pinned'] as bool? ?? false,
       campId: _asInt(json['camp_id']),
+      campPinned: json['camp_pinned'] as bool? ?? false,
     );
   }
 
@@ -259,6 +265,7 @@ class Post {
     Post? quotedPost,
     bool? pinned,
     int? campId,
+    bool? campPinned,
   }) {
     return Post(
       id: id ?? this.id,
@@ -295,6 +302,7 @@ class Post {
       quotedPost: quotedPost ?? this.quotedPost,
       pinned: pinned ?? this.pinned,
       campId: campId ?? this.campId,
+      campPinned: campPinned ?? this.campPinned,
     );
   }
 

@@ -241,6 +241,8 @@ class _CreateCampDialogState extends State<_CreateCampDialog> {
   final TextEditingController _description = TextEditingController();
   bool _isVisible = true;
   bool _directJoin = true;
+  bool _memberPost = true;
+  bool _memberPin = false;
   bool _submitting = false;
   String? _error;
 
@@ -266,6 +268,8 @@ class _CreateCampDialogState extends State<_CreateCampDialog> {
         description: _description.text.trim(),
         isVisible: _isVisible,
         directJoin: _directJoin,
+        memberPost: _memberPost,
+        memberPin: _memberPin,
       );
       if (mounted) {
         Navigator.of(context).pop(camp);
@@ -313,6 +317,20 @@ class _CreateCampDialogState extends State<_CreateCampDialog> {
               subtitle: Text('campDirectJoinHint'.tr(), style: Theme.of(context).textTheme.bodySmall),
               value: _directJoin,
               onChanged: (v) => setState(() => _directJoin = v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('campMemberPost'.tr()),
+              subtitle: Text('campMemberPostHint'.tr(), style: Theme.of(context).textTheme.bodySmall),
+              value: _memberPost,
+              onChanged: (v) => setState(() => _memberPost = v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('campMemberPin'.tr()),
+              subtitle: Text('campMemberPinHint'.tr(), style: Theme.of(context).textTheme.bodySmall),
+              value: _memberPin,
+              onChanged: (v) => setState(() => _memberPin = v),
             ),
             if (_error != null)
               Padding(

@@ -60,8 +60,15 @@ class PostCard extends StatefulWidget {
   final VoidCallback? onQuote;
   /// Reposts this post as-is (no commentary). Null hides the menu entry.
   final Future<void> Function()? onRepost;
-  /// Pins/unpins this post (author only). Null hides the menu entry.
+  /// Pins/unpins this post (author only for global posts; camp managers or
+  /// permitted members for camp posts). Null hides the menu entry.
   final Future<void> Function(bool pinned)? onPin;
+  /// Renders the pin entry in camp scope ("营内置顶" instead of profile pin).
+  /// Set by camp feeds so the menu relabels and the badge reads camp pin.
+  final bool campPinScope;
+  /// Whether the viewer may pin this post beyond authorship (camp admin).
+  /// Combined with [isMine] to decide pin visibility.
+  final bool canPinOthers;
 
   const PostCard({
     super.key,
@@ -81,6 +88,8 @@ class PostCard extends StatefulWidget {
     this.onQuote,
     this.onRepost,
     this.onPin,
+    this.campPinScope = false,
+    this.canPinOthers = false,
   });
 
   @override
@@ -113,7 +122,9 @@ class _PostCardState extends State<PostCard> {
       isFavorite: post.isFavorite,
       showQuote: widget.onQuote != null,
       showRepost: widget.onRepost != null,
-      pinned: post.pinned,
+      showPin: widget.onPin != null && (widget.isMine || widget.canPinOthers),
+      campScope: widget.campPinScope,
+      pinned: widget.campPinScope ? post.campPinned : post.pinned,
     );
     final action = position != null
         ? await showContentMenuAt(context, position, items: items)
@@ -267,7 +278,25 @@ class _PostCardState extends State<PostCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (post.pinned)
+              if (widget.campPinScope && post.campPinned)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.push_pin, size: 14, color: theme.colorScheme.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'campPinnedPost'.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else if (post.pinned)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
@@ -359,10 +388,12 @@ class _PostCardState extends State<PostCard> {
                           value: 'repost',
                           child: Text('postRepost'.tr()),
                         ),
-                      if (widget.isMine && widget.onPin != null)
+                      if (widget.onPin != null && (widget.isMine || widget.canPinOthers))
                         PopupMenuItem(
-                          value: post.pinned ? 'unpin' : 'pin',
-                          child: Text(post.pinned ? 'unpinPost'.tr() : 'pinPost'.tr()),
+                          value: (widget.campPinScope ? post.campPinned : post.pinned) ? 'unpin' : 'pin',
+                          child: Text(widget.campPinScope
+                              ? (post.campPinned ? 'campUnpinPost'.tr() : 'campPinPost'.tr())
+                              : (post.pinned ? 'unpinPost'.tr() : 'pinPost'.tr())),
                         ),
                       PopupMenuItem(
                         value: 'favorite',

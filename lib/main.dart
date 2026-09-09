@@ -13,6 +13,7 @@ import 'package:openfield/core/config/app_config.dart';
 import 'package:openfield/core/log/log_overlay.dart';
 import 'package:openfield/core/log/log_recorder.dart';
 import 'package:openfield/core/router/app_router.dart';
+import 'package:openfield/core/terms/terms_gate.dart';
 import 'package:openfield/core/web/history_stub.dart'
     if (dart.library.html) 'package:openfield/core/web/history_web.dart';
 import 'package:openfield/core/windows/protocol_registration.dart';
@@ -317,9 +318,10 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
                         ),
                         child: themed,
                       );
-                      return Stack(
-                        children: [
-                          Positioned.fill(
+                      return _TermsGateShell(
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
                             // ValueKey forces Flutter to rebuild the underlying
                             // image element when the path changes; without it the
                             // cached decoded image is reused and the new
@@ -365,10 +367,11 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
                             ),
                           ),
                           themed,
-                        ],
+                          ],
+                        ),
                       );
                     }
-                    return themed;
+                    return _TermsGateShell(child: themed);
                   },
                 );
               },
@@ -378,4 +381,36 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
       },
     );
   }
+}
+
+
+/// First-launch gate shell: after the first frame it asks the user to accept
+/// the terms of use (see [TermsGate]). Everything else renders underneath so
+/// the app keeps booting while the dialog is up.
+class _TermsGateShell extends StatefulWidget {
+  final Widget child;
+
+  const _TermsGateShell({required this.child});
+
+  @override
+  State<_TermsGateShell> createState() => _TermsGateShellState();
+}
+
+class _TermsGateShellState extends State<_TermsGateShell> {
+  bool _asked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ask());
+  }
+
+  Future<void> _ask() async {
+    if (_asked || !mounted) return;
+    _asked = true;
+    await TermsGate.ensureAccepted(context);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
