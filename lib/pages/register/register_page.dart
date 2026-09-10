@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+/// Usernames are lowercase letters, digits and underscores (3-32 chars);
+/// the same rule the server enforces at registration.
+final RegExp _usernameRule = RegExp(r'^[a-z0-9_]{3,32}$');
+
 /// Final step of first-time sign-up: collects username, nickname and optional
 /// bio to complete an account created through the OAuth flow, then pops the
 /// page on success. A taken username shows a localized error snackbar.
+/// Usernames cannot be changed later (only admins rename), so the field
+/// carries an explicit rule hint.
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -32,6 +39,12 @@ class _RegisterPageState extends State<RegisterPage> {
     final nickname = _nicknameController.text.trim();
     final bio = _bioController.text.trim();
     if (username.isEmpty || nickname.isEmpty) return;
+    if (!_usernameRule.hasMatch(username)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('usernameInvalid'.tr())),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
     try {
@@ -40,8 +53,14 @@ class _RegisterPageState extends State<RegisterPage> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
+        final message = e.toString();
+        final localized = message.contains('taken')
+            ? 'usernameTaken'.tr()
+            : (message.contains('lowercase') || message.contains('3-32'))
+                ? 'usernameInvalid'.tr()
+                : 'registrationFailed'.tr();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().contains('taken') ? 'usernameTaken'.tr() : 'registrationFailed'.tr())),
+          SnackBar(content: Text(localized)),
         );
       }
     } finally {
@@ -65,8 +84,13 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(height: 24),
             TextField(
               controller: _usernameController,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9_]')),
+                LengthLimitingTextInputFormatter(32),
+              ],
               decoration: InputDecoration(
                 labelText: 'username'.tr(),
+                helperText: 'usernameRule'.tr(),
                 border: const OutlineInputBorder(),
               ),
             ),

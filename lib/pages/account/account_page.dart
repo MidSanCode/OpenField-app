@@ -1150,8 +1150,11 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                 children: [
                   TextField(
                     controller: _usernameController,
+                    readOnly: true,
+                    enabled: false,
                     decoration: InputDecoration(
                       labelText: 'username'.tr(),
+                      helperText: 'usernameFrozenHint'.tr(),
                       border: const OutlineInputBorder(),
                     ),
                   ),
