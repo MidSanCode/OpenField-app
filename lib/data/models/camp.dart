@@ -23,6 +23,9 @@ class Camp {
   /// Whether plain members may pin their own posts within the camp
   /// (admins/owner always may). Defaults to false.
   final bool memberPin;
+  /// Short notice shown inside the camp; only owner/admins may change it.
+  /// Empty string = no announcement.
+  final String announcement;
   /// Current member count.
   final int memberCount;
   /// Total posts published in the camp.
@@ -48,6 +51,7 @@ class Camp {
     this.directJoin = true,
     this.memberPost = true,
     this.memberPin = false,
+    this.announcement = '',
     this.memberCount = 0,
     this.postCount = 0,
     this.isMember = false,
@@ -69,6 +73,7 @@ class Camp {
       directJoin: json['direct_join'] as bool? ?? true,
       memberPost: json['member_post'] as bool? ?? true,
       memberPin: json['member_pin'] as bool? ?? false,
+      announcement: json['announcement'] as String? ?? '',
       memberCount: _asInt(json['member_count']),
       postCount: _asInt(json['post_count']),
       isMember: json['is_member'] as bool? ?? false,

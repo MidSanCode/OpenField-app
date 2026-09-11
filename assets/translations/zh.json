@@ -773,6 +773,8 @@
   "campMemberAdded": "已添加成员",
   "campMembersOnly": "该营地的帖子仅成员可见",
   "campSettings": "营地设置",
+  "campAnnouncement": "营地公告",
+  "campAnnouncementHint": "输入公告内容（留空则清除公告）",
   "campNameLabel": "营地名称",
   "campDescLabel": "营地简介",
   "pinPost": "置顶帖子",

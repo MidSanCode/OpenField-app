@@ -452,6 +452,60 @@ class _PostsPageState extends State<PostsPage> {
     }
   }
 
+  /// Opens the camp announcement editor (owner/camp-admins only) and
+  /// refreshes the cached camp on success.
+  Future<void> _editAnnouncement() async {
+    final camp = _camp;
+    final campId = widget.campId;
+    if (camp == null || campId == null || !camp.canManage) return;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || token.isEmpty) return;
+    final controller = TextEditingController(text: camp.announcement);
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('campAnnouncement'.tr()),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          maxLength: 500,
+          decoration: InputDecoration(
+            hintText: 'campAnnouncementHint'.tr(),
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: Text('save'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (updated == null || updated == camp.announcement) return;
+    try {
+      final fresh = await _apiService.setCampAnnouncement(campId, token, updated);
+      if (mounted) setState(() => _camp = fresh);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('saved'.tr())),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
   /// Opens the camp member management page (owner/admin entry from the
   /// camp-mode app bar).
   Future<void> _openCampMembers() async {
@@ -677,6 +731,12 @@ class _PostsPageState extends State<PostsPage> {
             ),
             if (_camp != null && _camp!.canManage)
               IconButton(
+                icon: const Icon(Icons.campaign_outlined),
+                tooltip: 'campAnnouncement'.tr(),
+                onPressed: _editAnnouncement,
+              ),
+            if (_camp != null && _camp!.canManage)
+              IconButton(
                 icon: const Icon(Icons.settings_outlined),
                 tooltip: 'campSettings'.tr(),
                 onPressed: _openCampSettings,
@@ -754,6 +814,33 @@ class _PostsPageState extends State<PostsPage> {
       onRefresh: _loadPosts,
       child: Column(
         children: [
+          if (widget.campId != null && (_camp?.announcement.isNotEmpty ?? false))
+            Material(
+              color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.45),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.campaign_outlined,
+                        size: 18, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _camp!.announcement,
+                        style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
+                      ),
+                    ),
+                    if (_camp!.canManage)
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        tooltip: 'campAnnouncement'.tr(),
+                        onPressed: _editAnnouncement,
+                      ),
+                  ],
+                ),
+              ),
+            ),
           if (_tag != null)
             Material(
               color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),

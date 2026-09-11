@@ -1504,6 +1504,22 @@ class ApiService {
     }
   }
 
+  /// Sets a camp's announcement (owner/camp-admins only). An empty string
+  /// clears it. Returns the refreshed camp.
+  Future<Camp> setCampAnnouncement(int campId, String accessToken, String announcement) async {
+    final response = await _put(
+      Uri.parse('$baseUrl/camps/$campId/announcement'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'announcement': announcement}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return Camp.fromJson(data);
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to set camp announcement'));
+  }
+
   /// Loads a camp's roster. Members only; the response also carries the
   /// caller's own role.
   Future<(List<CampMember>, String)> listCampMembers(int campId, String accessToken) async {

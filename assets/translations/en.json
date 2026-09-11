@@ -773,6 +773,8 @@
   "campMemberAdded": "Member added",
   "campMembersOnly": "Camp posts are visible to members only",
   "campSettings": "Camp settings",
+  "campAnnouncement": "Camp announcement",
+  "campAnnouncementHint": "Write an announcement (leave empty to clear it)",
   "campNameLabel": "Camp name",
   "campDescLabel": "Camp description",
   "pinPost": "Pin post",
