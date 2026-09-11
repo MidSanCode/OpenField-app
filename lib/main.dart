@@ -407,8 +407,18 @@ class _TermsGateShellState extends State<_TermsGateShell> {
 
   Future<void> _ask() async {
     if (_asked || !mounted) return;
+    // The MaterialApp.builder context sits ABOVE the Navigator (the builder
+    // wraps it), so showDialog from it throws "context does not include a
+    // Navigator". Use the router's navigator key context instead — that one
+    // is a proper Navigator descendant.
+    final navContext = appNavigatorKey.currentContext;
+    if (navContext == null) {
+      // The router navigator has not mounted yet — try again next frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _ask());
+      return;
+    }
     _asked = true;
-    await TermsGate.ensureAccepted(context);
+    await TermsGate.ensureAccepted(navContext);
   }
 
   @override
