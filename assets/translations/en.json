@@ -741,6 +741,7 @@
   "campInviteOnly": "Invite only",
   "campJoined": "Joined the camp",
   "campName": "Camp name",
+  "campNameTaken": "That camp name is already taken — try another",
   "campDescription": "Description (optional)",
   "campVisible": "Visible to everyone",
   "campVisibleHint": "Hidden camps are only listed to their members",

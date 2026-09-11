@@ -276,8 +276,10 @@ class _CreateCampDialogState extends State<_CreateCampDialog> {
       }
     } catch (e) {
       if (mounted) {
+        // Camp names are unique server-side; map the 409 to a friendly hint.
+        final message = e.toString();
         setState(() {
-          _error = e.toString();
+          _error = message.contains('taken') ? 'campNameTaken'.tr() : message;
           _submitting = false;
         });
       }

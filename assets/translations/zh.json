@@ -741,6 +741,7 @@
   "campInviteOnly": "不可直接加入",
   "campJoined": "已加入营地",
   "campName": "营地名称",
+  "campNameTaken": "该营地名称已被使用，换一个试试",
   "campDescription": "简介（可选）",
   "campVisible": "对所有人可见",
   "campVisibleHint": "隐藏的营地仅成员可见",
