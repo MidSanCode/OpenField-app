@@ -87,6 +87,13 @@ class Camp {
   bool get canManage => myRole == 'owner' || myRole == 'admin';
   /// The viewer may change the camp's permission switches (owner only).
   bool get canEditPermissions => myRole == 'owner';
+  /// The viewer has joined the camp. The camp creator always counts as a
+  /// member even when an older server payload omitted `is_member` (or its
+  /// roster row), so the owner never sees a stale "加入" action.
+  bool get isJoined => isMember || myRole.isNotEmpty;
+  /// The viewer can read the camp's posts. Camp content is members-only, so
+  /// this mirrors [isJoined].
+  bool get canViewPosts => isJoined;
 
   static int _asInt(Object? value) {
     if (value is int) return value;

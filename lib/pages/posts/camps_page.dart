@@ -187,6 +187,10 @@ class _CampsPageState extends State<CampsPage> {
                                         children: [
                                           Flexible(child: Text(camp.name, overflow: TextOverflow.ellipsis)),
                                           const SizedBox(width: 6),
+                                          if (camp.myRole == 'owner' || camp.myRole == 'admin') ...[
+                                            _RoleChip(role: camp.myRole),
+                                            const SizedBox(width: 6),
+                                          ],
                                           Icon(
                                             camp.isVisible ? Icons.visibility : Icons.visibility_off,
                                             size: 14,
@@ -201,7 +205,7 @@ class _CampsPageState extends State<CampsPage> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       isThreeLine: camp.description.isNotEmpty,
-                                      trailing: camp.isMember
+                                      trailing: camp.isJoined
                                           ? TextButton(
                                               onPressed: () => _openCamp(camp),
                                               child: Text('campEnter'.tr()),
@@ -215,7 +219,10 @@ class _CampsPageState extends State<CampsPage> {
                                                   'campInviteOnly'.tr(),
                                                   style: theme.textTheme.bodySmall,
                                                 )),
-                                      onTap: camp.isMember ? () => _openCamp(camp) : null,
+                                      // Every camp row opens the camp feed so
+                                      // the posts can be browsed; non-members
+                                      // land on the join prompt inside.
+                                      onTap: () => _openCamp(camp),
                                     ),
                                   );
                                 },
@@ -352,6 +359,41 @@ class _CreateCampDialogState extends State<_CreateCampDialog> {
           child: Text('create'.tr()),
         ),
       ],
+    );
+  }
+}
+
+/// Small badge marking the viewer's elevated role inside a camp row ("营主" /
+/// "管理员"), so an owner immediately sees ownership instead of a join action.
+class _RoleChip extends StatelessWidget {
+  const _RoleChip({required this.role});
+
+  /// Camp role of the viewer: "owner" or "admin".
+  final String role;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isOwner = role == 'owner';
+    final bg = isOwner
+        ? theme.colorScheme.primaryContainer
+        : theme.colorScheme.secondaryContainer;
+    final fg = isOwner
+        ? theme.colorScheme.onPrimaryContainer
+        : theme.colorScheme.onSecondaryContainer;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        isOwner ? 'campRoleOwner'.tr() : 'campRoleAdmin'.tr(),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: fg,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

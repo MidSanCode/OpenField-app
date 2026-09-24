@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:openfield/core/widgets/error_dialog.dart';
 import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/data/models/post.dart';
 import 'package:openfield/data/services/api_service.dart';
@@ -89,6 +90,9 @@ class _PostsPageState extends State<PostsPage> {
   /// The camp being browsed (camp mode only); carries my_role/canManage for
   /// the app-bar manage entry and pin permissions.
   Camp? _camp;
+  /// Camp mode only: the server answered 403 because the viewer has not joined
+  /// the camp yet. Drives the join prompt instead of a bare error.
+  bool _campMembersOnly = false;
 
   // Advanced search filters (combined with the keyword server-side).
   String _authorFilter = '';
@@ -295,6 +299,7 @@ class _PostsPageState extends State<PostsPage> {
       setState(() {
         _isLoading = true;
         _error = null;
+        _campMembersOnly = false;
       });
     }
 
@@ -336,17 +341,46 @@ class _PostsPageState extends State<PostsPage> {
       // Camp feeds are members-only: turn the raw 403/404 into a friendly
       // join hint instead of a bare exception string.
       var message = e.toString();
+      var membersOnly = false;
       if (widget.campId != null && e is ApiException) {
         if (e.statusCode == 403) {
           message = 'campMembersOnly'.tr();
+          membersOnly = true;
         } else if (e.statusCode == 404) {
           message = 'campEmpty'.tr();
         }
       }
       setState(() {
         _error = message;
+        _campMembersOnly = membersOnly;
         _isLoading = false;
       });
+    }
+  }
+
+  /// Joins the camp currently being browsed, then reloads its feed so the
+  /// posts appear in place (entry point for non-members who tapped into a
+  /// visible camp).
+  Future<void> _joinCurrentCamp() async {
+    final campId = widget.campId;
+    if (campId == null) return;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.accessToken;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('loginWithOIDC'.tr())),
+      );
+      return;
+    }
+    try {
+      await _apiService.joinCamp(campId, token);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('campJoined'.tr())),
+      );
+      await _loadPosts();
+    } catch (e) {
+      if (mounted) await showApiErrorDialog(context, e);
     }
   }
 
@@ -375,6 +409,23 @@ class _PostsPageState extends State<PostsPage> {
         SnackBar(content: Text('loginWithOIDC'.tr())),
       );
       return;
+    }
+    // Camp posting rules: non-members cannot post at all, and camps with
+    // member_post off reserve posting for the owner/admins.
+    final camp = _camp;
+    if (widget.campId != null && camp != null) {
+      if (!camp.isJoined) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('campMembersOnly'.tr())),
+        );
+        return;
+      }
+      if (!camp.memberPost && !camp.canManage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('campMemberPostHint'.tr())),
+        );
+        return;
+      }
     }
     showDialog(
       context: context,
@@ -724,11 +775,13 @@ class _PostsPageState extends State<PostsPage> {
                 : Text('appTitle'.tr()),
         actions: [
           if (widget.campId != null) ...[
-            IconButton(
-              icon: const Icon(Icons.group_outlined),
-              tooltip: 'campMembersTitle'.tr(),
-              onPressed: _openCampMembers,
-            ),
+            // The roster is members-only; hide the entry for camp visitors.
+            if (_camp == null || _camp!.isJoined)
+              IconButton(
+                icon: const Icon(Icons.group_outlined),
+                tooltip: 'campMembersTitle'.tr(),
+                onPressed: _openCampMembers,
+              ),
             if (_camp != null && _camp!.canManage)
               IconButton(
                 icon: const Icon(Icons.campaign_outlined),
@@ -776,12 +829,25 @@ class _PostsPageState extends State<PostsPage> {
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openComposer,
-        tooltip: 'createPost'.tr(),
-        child: const Icon(Icons.edit),
-      ),      body: _buildFeed(currentUserId),
+      floatingActionButton: _campComposerVisible
+          ? FloatingActionButton(
+              onPressed: _openComposer,
+              tooltip: 'createPost'.tr(),
+              child: const Icon(Icons.edit),
+            )
+          : null,
+      body: _buildFeed(currentUserId),
     );
+  }
+
+  /// Whether the compose button applies in the current context: always outside
+  /// camp mode, and inside a camp only for members allowed to post.
+  bool get _campComposerVisible {
+    if (widget.campId == null) return true;
+    final camp = _camp;
+    if (camp == null) return false;
+    if (!camp.isJoined) return false;
+    return camp.memberPost || camp.canManage;
   }
 
   Widget _buildFeed(int? currentUserId) {
@@ -791,6 +857,61 @@ class _PostsPageState extends State<PostsPage> {
     }
 
     if (_error != null) {
+      // A visible camp the viewer has not joined: offer to join right here so
+      // tapping a camp from the directory leads to its posts.
+      if (_campMembersOnly) {
+        final camp = _camp;
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.lock_outline,
+                    size: 48, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(height: 12),
+                Text(
+                  camp?.name ?? widget.campName ?? 'campTitle'.tr(),
+                  style: theme.textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                if (camp != null && camp.description.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    camp.description,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                if (camp == null || camp.directJoin)
+                  FilledButton.icon(
+                    onPressed: _joinCurrentCamp,
+                    icon: const Icon(Icons.login),
+                    label: Text('groupJoin'.tr()),
+                  )
+                else
+                  Text('campInviteOnly'.tr(),
+                      style: theme.textTheme.bodySmall),
+                const SizedBox(height: 8),
+                TextButton(onPressed: _loadPosts, child: Text('retry'.tr())),
+              ],
+            ),
+          ),
+        );
+      }
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
