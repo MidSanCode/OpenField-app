@@ -3007,6 +3007,20 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to claim task'));
   }
 
+  /// Claims a daily activity milestone (e.g. `daily_posts_5`) for today. Each
+  /// tier can be claimed once per day; the server answers 409 when today's
+  /// count is below the tier or it was already claimed.
+  Future<Map<String, dynamic>> claimDailyTask(String accessToken, String code) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/tasks/daily/$code/claim'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) return data;
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to claim task'));
+  }
+
   /// Fetches the user's experience history, newest first.
   Future<List<ExpEntry>> listExpHistory(String accessToken, {int limit = 50}) async {
     final response = await _get(

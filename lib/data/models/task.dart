@@ -53,6 +53,17 @@ class Task {
   /// True for daily-streak tasks (kind == 'streak').
   bool get isStreak => kind == 'streak';
 
+  /// True for per-day activity milestones (kind == 'daily'), e.g. "publish 5
+  /// posts today" or "send 50 chat messages today". Each tier can be claimed
+  /// once per day.
+  bool get isDaily => kind == 'daily';
+
+  /// True for daily milestones counting published posts.
+  bool get isDailyPosts => isDaily && code.startsWith('daily_posts_');
+
+  /// True for daily milestones counting sent chat messages.
+  bool get isDailyChat => isDaily && code.startsWith('daily_chat_');
+
   static int _asInt(Object? v) {
     if (v is int) return v;
     if (v is num) return v.toInt();

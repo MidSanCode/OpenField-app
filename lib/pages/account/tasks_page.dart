@@ -82,6 +82,10 @@ class _TasksPageState extends State<TasksPage> {
     try {
       if (state.task.code == 'daily_login') {
         await _apiService.claimDailyLogin(token);
+      } else if (state.task.isDaily) {
+        // Daily activity milestones claim through their own endpoint so the
+        // server can key the completion by today's date.
+        await _apiService.claimDailyTask(token, state.task.code);
       } else {
         await _apiService.claimTask(token, state.task.code);
       }
@@ -140,6 +144,12 @@ class _TasksPageState extends State<TasksPage> {
     final milestones = _tasks
         .where((t) => t.task.kind == 'streak' && t.task.code != 'daily_login')
         .toList();
+    // Daily activity milestones, split by activity so each group reads as a
+    // tier ladder (1/5/10/20 posts, 25/50/100 messages).
+    final dailyPosts = _tasks.where((t) => t.task.isDailyPosts).toList()
+      ..sort((a, b) => a.task.target.compareTo(b.task.target));
+    final dailyChat = _tasks.where((t) => t.task.isDailyChat).toList()
+      ..sort((a, b) => a.task.target.compareTo(b.task.target));
     final onceTasks =
         _tasks.where((t) => t.task.kind == 'once').toList();
 
@@ -151,6 +161,16 @@ class _TasksPageState extends State<TasksPage> {
           if (daily != null) ...[
             _buildDailyCard(context, daily),
             const SizedBox(height: 16),
+          ],
+          if (dailyPosts.isNotEmpty) ...[
+            _sectionTitle('taskDailyPosts'.tr()),
+            ...dailyPosts.map((t) => _buildTaskTile(context, t)),
+            const SizedBox(height: 8),
+          ],
+          if (dailyChat.isNotEmpty) ...[
+            _sectionTitle('taskDailyChat'.tr()),
+            ...dailyChat.map((t) => _buildTaskTile(context, t)),
+            const SizedBox(height: 8),
           ],
           if (milestones.isNotEmpty) ...[
             _sectionTitle('taskMilestones'.tr()),
@@ -277,9 +297,11 @@ class _TasksPageState extends State<TasksPage> {
             Row(
               children: [
                 Icon(
-                  task.kind == 'streak'
-                      ? Icons.local_fire_department
-                      : Icons.emoji_events_outlined,
+                  task.isDaily
+                      ? Icons.today_outlined
+                      : task.kind == 'streak'
+                          ? Icons.local_fire_department
+                          : Icons.emoji_events_outlined,
                   size: 22,
                   color: theme.colorScheme.primary,
                 ),
