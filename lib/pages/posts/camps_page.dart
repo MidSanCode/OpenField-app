@@ -110,6 +110,64 @@ class _CampsPageState extends State<CampsPage> {
     }
   }
 
+  /// Renames/redescribes a camp straight from the directory (owner/admin).
+  Future<void> _editCamp(Camp camp) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final token = auth.accessToken;
+    if (token == null || token.isEmpty) return;
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditCampDialog(camp: camp, token: token),
+    );
+    if (updated == true) {
+      await _load();
+    }
+  }
+
+  /// Deletes a camp after an explicit confirmation. The server only allows the
+  /// creator through, so the menu entry is restricted the same way.
+  Future<void> _deleteCamp(Camp camp) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final token = auth.accessToken;
+    if (token == null || token.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('campDeleteTitle'.tr()),
+        content: Text('campDeleteBody'.tr(namedArgs: {'name': camp.name})),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('delete'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _api.deleteCamp(camp.id, token);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('campDeleted'.tr())),
+        );
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -205,20 +263,68 @@ class _CampsPageState extends State<CampsPage> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       isThreeLine: camp.description.isNotEmpty,
-                                      trailing: camp.isJoined
-                                          ? TextButton(
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (camp.isJoined)
+                                            TextButton(
                                               onPressed: () => _openCamp(camp),
                                               child: Text('campEnter'.tr()),
                                             )
-                                          : (camp.directJoin
-                                              ? TextButton(
-                                                  onPressed: () => _joinCamp(camp),
-                                                  child: Text('groupJoin'.tr()),
-                                                )
-                                              : Text(
-                                                  'campInviteOnly'.tr(),
-                                                  style: theme.textTheme.bodySmall,
-                                                )),
+                                          else if (camp.directJoin)
+                                            TextButton(
+                                              onPressed: () => _joinCamp(camp),
+                                              child: Text('groupJoin'.tr()),
+                                            )
+                                          else
+                                            Text(
+                                              'campInviteOnly'.tr(),
+                                              style: theme.textTheme.bodySmall,
+                                            ),
+                                          // Owners/admins manage camps from
+                                          // here; only the creator may delete.
+                                          if (camp.canManage)
+                                            PopupMenuButton<String>(
+                                              tooltip: 'campSettings'.tr(),
+                                              onSelected: (action) {
+                                                if (action == 'edit') {
+                                                  _editCamp(camp);
+                                                } else if (action == 'delete') {
+                                                  _deleteCamp(camp);
+                                                }
+                                              },
+                                              itemBuilder: (menuContext) => [
+                                                PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: ListTile(
+                                                    dense: true,
+                                                    contentPadding: EdgeInsets.zero,
+                                                    leading: const Icon(Icons.edit_outlined),
+                                                    title: Text('campEdit'.tr()),
+                                                  ),
+                                                ),
+                                                if (camp.myRole == 'owner')
+                                                  PopupMenuItem(
+                                                    value: 'delete',
+                                                    child: ListTile(
+                                                      dense: true,
+                                                      contentPadding: EdgeInsets.zero,
+                                                      leading: Icon(
+                                                        Icons.delete_outline,
+                                                        color: Theme.of(menuContext).colorScheme.error,
+                                                      ),
+                                                      title: Text(
+                                                        'campDelete'.tr(),
+                                                        style: TextStyle(
+                                                          color: Theme.of(menuContext).colorScheme.error,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
                                       // Every camp row opens the camp feed so
                                       // the posts can be browsed; non-members
                                       // land on the join prompt inside.
@@ -357,6 +463,126 @@ class _CreateCampDialogState extends State<_CreateCampDialog> {
         FilledButton(
           onPressed: _submitting ? null : _submit,
           child: Text('create'.tr()),
+        ),
+      ],
+    );
+  }
+}
+
+/// Dialog for editing a camp's basics (name + description) from the directory.
+/// Deeper settings (visibility, join mode, permission switches) live in the
+/// camp feed's settings sheet.
+class _EditCampDialog extends StatefulWidget {
+  const _EditCampDialog({required this.camp, required this.token});
+
+  /// The camp being edited.
+  final Camp camp;
+  /// Caller access token used for the update call.
+  final String token;
+
+  @override
+  State<_EditCampDialog> createState() => _EditCampDialogState();
+}
+
+class _EditCampDialogState extends State<_EditCampDialog> {
+  late final TextEditingController _name;
+  late final TextEditingController _description;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.camp.name);
+    _description = TextEditingController(text: widget.camp.description);
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'campName'.tr());
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await ApiService().updateCamp(
+        widget.camp.id,
+        widget.token,
+        name: name != widget.camp.name ? name : null,
+        description: _description.text.trim() != widget.camp.description
+            ? _description.text.trim()
+            : null,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = e is ApiException && e.statusCode == 409
+              ? 'campNameTaken'.tr()
+              : e.toString();
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('campEdit'.tr()),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _name,
+              autofocus: true,
+              maxLength: 60,
+              decoration: InputDecoration(
+                labelText: 'campNameLabel'.tr(),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _description,
+              maxLines: 3,
+              maxLength: 500,
+              decoration: InputDecoration(
+                labelText: 'campDescLabel'.tr(),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_error!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          child: Text('cancel'.tr()),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2))
+              : Text('save'.tr()),
         ),
       ],
     );

@@ -431,12 +431,16 @@ class _PostsPageState extends State<PostsPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => _ComposerDialog(
-        onSubmit: (content, media, visibility, checkId, tags) =>
+        // A composer opened from inside a camp is pre-bound to that camp; the
+        // selector lets the author move it (or post to the global feed).
+        initialCampId: quoted == null ? (widget.campId ?? 0) : 0,
+        onSubmit: (content, media, visibility, checkId, tags, campId) =>
             _submitPost(content, media,
                 visibility: visibility,
                 checkId: checkId,
                 tags: tags,
-                quotedPostId: quoted?.id ?? 0),
+                quotedPostId: quoted?.id ?? 0,
+                campId: campId),
         isPosting: _isPosting,
         initialQuoted: quoted,
       ),
@@ -587,14 +591,28 @@ class _PostsPageState extends State<PostsPage> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
     if (token == null || token.isEmpty) return;
-    final updated = await showModalBottomSheet<bool>(
+    final updated = await showModalBottomSheet<Object>(
       context: context,
       showDragHandle: true,
       builder: (_) => _CampSettingsSheet(camp: camp, token: token),
     );
+    if (!mounted) return;
+    // The camp no longer exists: leave the feed instead of refreshing into a
+    // 404.
+    if (updated == 'deleted') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('campDeleted'.tr())),
+      );
+      Navigator.of(context).pop();
+      return;
+    }
     if (updated == true) {
-      final fresh = await _apiService.getCamp(campId, token: token);
-      if (mounted) setState(() => _camp = fresh);
+      try {
+        final fresh = await _apiService.getCamp(campId, token: token);
+        if (mounted) setState(() => _camp = fresh);
+      } catch (_) {
+        // The refresh is best effort; the local copy stays usable.
+      }
     }
   }
 
@@ -609,13 +627,15 @@ class _PostsPageState extends State<PostsPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => _ComposerDialog(
-        onSubmit: (content, items, visibility, _, tags) =>
+        onSubmit: (content, items, visibility, checkId, tags, campId) =>
             _submitPost(content, items, postId: post.id, visibility: visibility, tags: tags),
         isPosting: _isPosting,
         initialContent: post.content,
         initialMedia: media,
         initialVisibility: post.visibility,
         isEditing: true,
+        // Editing never moves a post between camps.
+        allowCampSelection: false,
       ),
     );
   }
@@ -678,6 +698,8 @@ class _PostsPageState extends State<PostsPage> {
       }
       await closeProgress();
       if (postId == null) {
+        // The composer passes the chosen scope explicitly (0 = global feed);
+        // callers without a selector fall back to the page's camp.
         await _apiService.createPost(content, token,
             attachmentIds: attachmentIds,
             visibility: visibility,
@@ -1030,7 +1052,7 @@ class _PostsPageState extends State<PostsPage> {
 }
 
 class _ComposerDialog extends StatefulWidget {
-  final Future<bool> Function(String content, List<ComposerMedia> media, String visibility, int checkId, List<String> tags) onSubmit;
+  final Future<bool> Function(String content, List<ComposerMedia> media, String visibility, int checkId, List<String> tags, int campId) onSubmit;
   final bool isPosting;
   final String initialContent;
   final List<ComposerMedia> initialMedia;
@@ -1039,6 +1061,12 @@ class _ComposerDialog extends StatefulWidget {
   /// When set, the dialog shows a quoted-post preview bar and the submission
   /// creates a quote post referencing it.
   final Post? initialQuoted;
+  /// Camp the composition is pre-bound to (camp feed entry point). 0 = the
+  /// global feed; the user may still switch camps from the toolbar.
+  final int initialCampId;
+  /// When false the camp selector is hidden (editing an existing post never
+  /// moves it between camps).
+  final bool allowCampSelection;
 
   const _ComposerDialog({
     required this.onSubmit,
@@ -1048,6 +1076,8 @@ class _ComposerDialog extends StatefulWidget {
     this.initialVisibility = 'public',
     this.isEditing = false,
     this.initialQuoted,
+    this.initialCampId = 0,
+    this.allowCampSelection = true,
   });
 
   @override
@@ -1075,6 +1105,13 @@ class _ComposerDialogState extends State<_ComposerDialog> {
   final List<String> _pendingTags = [];
   final TextEditingController _tagController = TextEditingController();
 
+  /// Camp the post will be published into (0 = global feed). The list holds
+  /// the caller's joined camps, loaded lazily when the selector is first used.
+  int _campId = 0;
+  List<Camp> _myCamps = const [];
+  bool _campsLoaded = false;
+  bool _loadingCamps = false;
+
   @override
   void initState() {
     super.initState();
@@ -1082,6 +1119,7 @@ class _ComposerDialogState extends State<_ComposerDialog> {
     _media = List.of(widget.initialMedia);
     _visibility = widget.initialVisibility;
     _quoted = widget.initialQuoted;
+    _campId = widget.initialCampId;
   }
 
   @override
@@ -1222,7 +1260,7 @@ class _ComposerDialogState extends State<_ComposerDialog> {
     // The quoted post (if any) is bound in the onSubmit closure created by
     // _openComposer, so plain and quote compositions share this path.
     final success = await widget.onSubmit(
-        _controller.text.trim(), _media, _visibility, _pendingCheckId ?? 0, _pendingTags);
+        _controller.text.trim(), _media, _visibility, _pendingCheckId ?? 0, _pendingTags, _campId);
     if (mounted && success) {
       final draftId = _currentDraftId;
       if (draftId != null) {
@@ -1237,6 +1275,83 @@ class _ComposerDialogState extends State<_ComposerDialog> {
     final id = await showCheckComposeDialog(context);
     if (!mounted || id == null) return;
     setState(() => _pendingCheckId = id);
+  }
+
+  /// Loads the caller's joined camps once, for the camp selector.
+  Future<void> _loadMyCamps() async {
+    if (_campsLoaded || _loadingCamps) return;
+    setState(() => _loadingCamps = true);
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final camps = await ApiService()
+          .listCamps(authService.accessToken, mine: true);
+      if (mounted) setState(() => _myCamps = camps);
+    } catch (_) {
+      // A failed load simply leaves the selector with the global feed only.
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingCamps = false;
+          _campsLoaded = true;
+        });
+      }
+    }
+  }
+
+  /// Camp selector sheet: the global feed plus every camp the caller joined.
+  Future<void> _pickCamp() async {
+    await _loadMyCamps();
+    if (!mounted) return;
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.public),
+              title: Text('postScopeGlobal'.tr()),
+              selected: _campId == 0,
+              onTap: () => Navigator.of(sheetContext).pop(0),
+            ),
+            const Divider(height: 1),
+            if (_loadingCamps)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_myCamps.isEmpty)
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text('campNoneJoined'.tr()),
+                enabled: false,
+              )
+            else
+              for (final camp in _myCamps)
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: Text(camp.name),
+                  subtitle: Text(
+                    '${camp.memberCount} ${'campMembers'.tr()} · ${camp.postCount} ${'campPosts'.tr()}',
+                  ),
+                  selected: _campId == camp.id,
+                  onTap: () => Navigator.of(sheetContext).pop(camp.id),
+                ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() => _campId = selected);
+  }
+
+  /// Display name of the currently selected publishing scope.
+  String get _campScopeLabel {
+    if (_campId == 0) return 'postScopeGlobal'.tr();
+    for (final camp in _myCamps) {
+      if (camp.id == _campId) return camp.name;
+    }
+    return 'campSuffix'.tr();
   }
 
   void _showPreview() {
@@ -1299,6 +1414,34 @@ class _ComposerDialogState extends State<_ComposerDialog> {
                           onRemove: isBusy
                               ? null
                               : () => setState(() => _quoted = null),
+                        ),
+                      if (widget.allowCampSelection && _campId != 0)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Icon(Icons.flag_outlined,
+                                  size: 18, color: theme.colorScheme.primary),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  _campScopeLabel,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                tooltip: 'postScopeGlobal'.tr(),
+                                onPressed: isBusy
+                                    ? null
+                                    : () => setState(() => _campId = 0),
+                              ),
+                            ],
+                          ),
                         ),
                       Expanded(
                         child: TextField(
@@ -1438,6 +1581,15 @@ class _ComposerDialogState extends State<_ComposerDialog> {
                     icon: const Icon(Icons.save_outlined),
                     tooltip: 'save'.tr(),
                   ),
+                  if (widget.allowCampSelection)
+                    IconButton(
+                      onPressed: isBusy ? null : _pickCamp,
+                      icon: Icon(
+                        Icons.flag_outlined,
+                        color: _campId != 0 ? theme.colorScheme.primary : null,
+                      ),
+                      tooltip: 'postScope'.tr(),
+                    ),
                   const Spacer(),
                   PopupMenuButton<String>(
                     tooltip: 'visibility'.tr(),
@@ -2068,9 +2220,61 @@ class _CampSettingsSheetState extends State<_CampSettingsSheet> {
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2))
                   : Text('save'.tr()),
             ),
+            // Deleting a camp is destructive and creator-only; keep it visually
+            // separated from the save action.
+            if (_isOwner) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              OutlinedButton.icon(
+                onPressed: _saving ? null : _confirmDelete,
+                icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
+                label: Text(
+                  'campDelete'.tr(),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  /// Confirms, then deletes the camp and pops the sheet with a delete marker
+  /// (the caller closes the camp feed).
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('campDeleteTitle'.tr()),
+        content: Text('campDeleteBody'.tr(namedArgs: {'name': widget.camp.name})),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('delete'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      await ApiService().deleteCamp(widget.camp.id, widget.token);
+      if (mounted) Navigator.pop(context, 'deleted');
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
   }
 }
