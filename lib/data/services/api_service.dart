@@ -357,6 +357,56 @@ class ApiService {
     throw ApiException(response.statusCode, 'OIDC callback failed');
   }
 
+  /// Fetches the identity + bound accounts behind a multi-account pick
+  /// [ticket] (issued by the OIDC callback when one identity maps to several
+  /// OpenField accounts). Does not consume the ticket; see
+  /// [selectOIDCPick] / [createOIDCPick].
+  Future<Map<String, dynamic>> getOIDCPick(String ticket) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/auth/oidc/pick?ticket=${Uri.encodeQueryComponent(ticket)}'),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load accounts'));
+  }
+
+  /// Signs into the account chosen from a multi-account picker. Consumes the
+  /// pick [ticket] and returns the login token payload like [login].
+  Future<Map<String, dynamic>> selectOIDCPick(String ticket, int userId) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/auth/oidc/pick/select'),
+      headers: _headers(),
+      body: jsonEncode({'ticket': ticket, 'user_id': userId}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to sign in'));
+  }
+
+  /// Adds a brand-new account bound to the pick [ticket]'s identity and signs
+  /// into it ("添加新账号"). Consumes the ticket; fails with a quota error when
+  /// the identity already holds the maximum number of accounts. Returns the
+  /// login token payload like [login].
+  Future<Map<String, dynamic>> createOIDCPick(String ticket) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/auth/oidc/pick/create'),
+      headers: _headers(),
+      body: jsonEncode({'ticket': ticket}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return data;
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to create account'));
+  }
+
   /// Mints a short-lived single-use WebSocket connection ticket. Browsers
   /// cannot set custom headers during the upgrade handshake, and putting the
   /// long-lived JWT in the URL would leak it into proxy/access logs, so the

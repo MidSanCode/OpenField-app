@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -124,13 +125,26 @@ class _AccountPageState extends State<AccountPage> {
   Future<void> _handleDeepLink(Uri uri) async {
     final isOAuthUri = uri.host == 'oauth' || uri.path.startsWith('/oauth');
     final hasOAuthParams = uri.queryParameters.containsKey('access_token') ||
-        uri.queryParameters.containsKey('bind');
+        uri.queryParameters.containsKey('bind') ||
+        uri.queryParameters.containsKey('pick');
     if (!isOAuthUri && !hasOAuthParams) return;
 
     // Skip if main.dart already processed this deep link (e.g., Windows argv).
     final incomingToken = uri.queryParameters['access_token'];
     final authService = Provider.of<AuthService>(context, listen: false);
     if (incomingToken != null && authService.accessToken == incomingToken) {
+      return;
+    }
+
+    // Multi-account selection: the OAuth callback issued a short-lived pick
+    // ticket because the identity maps to several accounts. Route to the
+    // picker; it lists the accounts and signs in on choice.
+    final pick = uri.queryParameters['pick'];
+    if (pick != null && pick.isNotEmpty) {
+      final ticket = Uri.encodeQueryComponent(pick);
+      if (mounted) {
+        context.go('/oauth-pick?ticket=$ticket');
+      }
       return;
     }
 
@@ -141,11 +155,14 @@ class _AccountPageState extends State<AccountPage> {
       if (mounted) {
         final success = bindResult == 'success';
         final name = uri.queryParameters['name'];
+        final reason = uri.queryParameters['reason'];
         final msg = success
             ? (name != null && name.isNotEmpty
                 ? '${'oauthBindSuccess'.tr()}} ($name)'
                 : 'oauthBindSuccess'.tr())
-            : 'oauthBindFailed'.tr();
+            : (reason == 'quota'
+                ? 'oauthBindQuota'.tr()
+                : 'oauthBindFailed'.tr());
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
         );

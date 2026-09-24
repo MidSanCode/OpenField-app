@@ -192,6 +192,15 @@ class AuthService extends ChangeNotifier {
   /// Logs in with username + password (local accounts created by admins).
   Future<User> login(String username, String password) async {
     final result = await _api.login(username, password);
+    return applyLoginResult(result);
+  }
+
+  /// Applies a login token payload (`access_token`, optional `refresh_token`,
+  /// `expires_in`, `refresh_expires_in` and `user`) — the shared tail of
+  /// password login, multi-account pick select/create and any other flow that
+  /// returns a fresh token pair. Persists the session and returns the signed-in
+  /// user.
+  Future<User> applyLoginResult(Map<String, dynamic> result) async {
     final token = result['access_token'];
     if (token is! String || token.isEmpty) {
       throw Exception('Invalid login response');

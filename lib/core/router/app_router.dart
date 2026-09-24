@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/pages/account/account_page.dart';
 import 'package:openfield/pages/account/app_announcement_page.dart';
+import 'package:openfield/pages/account/oauth_account_picker_page.dart';
 import 'package:openfield/pages/chat/chat_page.dart';
 import 'package:openfield/pages/posts/camps_page.dart';
 import 'package:openfield/pages/posts/posts_page.dart';
@@ -48,6 +49,16 @@ GoRouter createRouter(AuthService authService, GlobalKey<NavigatorState> navigat
         path: '/announcements',
         name: 'announcements',
         builder: (context, state) => const AppAnnouncementPage(),
+      ),
+      // Multi-account OIDC login: the server answered the callback with a
+      // `?pick=<ticket>` deep link when the identity maps to several accounts.
+      // The picker lists them and signs in on selection.
+      GoRoute(
+        path: '/oauth-pick',
+        name: 'oauth-pick',
+        builder: (context, state) => OAuthAccountPickerPage(
+          ticket: state.uri.queryParameters['ticket'] ?? '',
+        ),
       ),
     ],
   );

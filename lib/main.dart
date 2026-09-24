@@ -204,13 +204,14 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     }
 
     // Web fallback: an OIDC redirect to the app's own URL may carry the
-    // tokens in the query string. app_links does not always deliver the
-    // initial link on web, so inspect Uri.base directly and then strip the
-    // credentials from the browser URL.
+    // tokens (or a multi-account pick ticket) in the query string. app_links
+    // does not always deliver the initial link on web, so inspect Uri.base
+    // directly and then strip the credentials from the browser URL.
     if (kIsWeb) {
       final base = Uri.base;
       if (base.queryParameters.containsKey('access_token') ||
-          base.queryParameters.containsKey('bind')) {
+          base.queryParameters.containsKey('bind') ||
+          base.queryParameters.containsKey('pick')) {
         _handleDeepLink(base);
         clearUrlQueryParams();
       }
@@ -227,12 +228,27 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
   void _handleDeepLink(Uri uri) {
     // Accept the OAuth scheme (openfield://oauth/...), an explicit /oauth path
     // (app hosted under a /oauth path), or any URL carrying the access_token /
-    // bind query params (browser OIDC redirect back to the app).
+    // bind / pick query params (browser OIDC redirect back to the app).
     final isOAuthUri = uri.host == 'oauth' || uri.path.startsWith('/oauth');
     final hasOAuthParams = uri.queryParameters.containsKey('access_token') ||
-        uri.queryParameters.containsKey('bind');
+        uri.queryParameters.containsKey('bind') ||
+        uri.queryParameters.containsKey('pick');
     if (!isOAuthUri && !hasOAuthParams) return;
     if (_deepLinkHandled) return;
+
+    // Multi-account selection: the OIDC callback answered with a short-lived
+    // pick ticket instead of tokens because the identity maps to several
+    // accounts. Route to the picker, which lists them and signs in on choice.
+    final pick = uri.queryParameters['pick'];
+    if (pick != null && pick.isNotEmpty) {
+      final ticket = Uri.encodeQueryComponent(pick);
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _router.go('/oauth-pick?ticket=$ticket');
+        });
+      }
+      return;
+    }
 
     final accessToken = uri.queryParameters['access_token'];
     if (accessToken == null) return;

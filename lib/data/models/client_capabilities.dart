@@ -10,6 +10,7 @@ class ClientCapabilities {
   static const Set<String> supported = {
     'auth.password_login',
     'auth.oidc_login',
+    'auth.oidc_multi_account',
     'user.password_register',
     'user.e2ee_key',
     'user.exp_levels',
