@@ -13,6 +13,7 @@ import 'package:openfield/widgets/verified_badge.dart';
 import 'package:openfield/pages/chat/group_extras_pages.dart';
 import 'package:openfield/widgets/qr_share_dialog.dart';
 import 'package:openfield/core/widgets/avatar.dart';
+import 'package:openfield/core/widgets/image_crop_page.dart';
 
 /// Group chat settings (owner-managed): avatar/icon, name, public visibility,
 /// direct join, end-to-end encryption, group-wide mute and the member list with
@@ -167,6 +168,8 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     }
   }
 
+  /// Picks a group icon, crops it to a square, uploads the cropped result and
+  /// binds it to the conversation. Cancelling either step changes nothing.
   Future<void> _changeAvatar() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.accessToken;
@@ -174,9 +177,23 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     final picker = ImagePicker();
     final result = await picker.pickImage(source: ImageSource.gallery);
     if (result == null) return;
+    final source = await result.readAsBytes();
+    if (!mounted) return;
+    final cropped = await openImageCropper(
+      context: context,
+      bytes: source,
+      aspectRatio: 1,
+      title: 'cropGroupIcon'.tr(),
+      maxOutputWidth: 512,
+    );
+    if (cropped == null) return;
     try {
-      final attachment =
-          await _apiService.uploadAttachmentSmart(result.path, token, visibility: 'public');
+      final attachment = await _apiService.uploadAttachmentBytes(
+        cropped,
+        'group_icon.png',
+        token,
+        visibility: 'public',
+      );
       await _apiService.updateGroupAvatar(token, widget.conversation.id, attachment.url);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('saved'.tr())));

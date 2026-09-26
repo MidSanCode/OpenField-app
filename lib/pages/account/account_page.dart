@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:openfield/core/widgets/error_dialog.dart';
+import 'package:openfield/core/widgets/image_crop_page.dart';
 import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 import 'package:openfield/data/models/user.dart';
@@ -1085,13 +1086,27 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     }
   }
 
+  /// Picks an avatar image, lets the user crop it to a square, then uploads the
+  /// cropped result. Cancelling either step leaves the current avatar alone.
   Future<void> _pickAvatar() async {
     final auth = Provider.of<AuthService>(context, listen: false);
+    final token = auth.accessToken;
+    if (token == null) return;
     final picker = ImagePicker();
     final result = await picker.pickImage(source: ImageSource.gallery);
     if (result == null) return;
+    final source = await result.readAsBytes();
+    if (!mounted) return;
+    final cropped = await openImageCropper(
+      context: context,
+      bytes: source,
+      aspectRatio: 1,
+      title: 'cropAvatar'.tr(),
+      maxOutputWidth: 512,
+    );
+    if (cropped == null) return;
     try {
-      await _apiService.uploadAvatar(result.path, auth.accessToken!);
+      await _apiService.uploadAvatarBytes(cropped, 'avatar.png', token);
       await auth.fetchCurrentUser();
       if (mounted) setState(() {});
       if (mounted) {
@@ -1104,13 +1119,27 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     }
   }
 
+  /// Picks a banner image, lets the user crop it to the profile header's wide
+  /// aspect ratio, then uploads the cropped result.
   Future<void> _pickBanner() async {
     final auth = Provider.of<AuthService>(context, listen: false);
+    final token = auth.accessToken;
+    if (token == null) return;
     final picker = ImagePicker();
     final result = await picker.pickImage(source: ImageSource.gallery);
     if (result == null) return;
+    final source = await result.readAsBytes();
+    if (!mounted) return;
+    final cropped = await openImageCropper(
+      context: context,
+      bytes: source,
+      aspectRatio: 3,
+      title: 'cropBanner'.tr(),
+      maxOutputWidth: 1800,
+    );
+    if (cropped == null) return;
     try {
-      await _apiService.uploadBanner(result.path, auth.accessToken!);
+      await _apiService.uploadBannerBytes(cropped, 'banner.jpg', token);
       await auth.fetchCurrentUser();
       if (mounted) setState(() {});
       if (mounted) {

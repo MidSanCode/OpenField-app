@@ -616,17 +616,23 @@ class ApiService {
         response.statusCode, _decodeError(response, 'Failed to update name style'));
   }
 
-  /// Uploads a local image file as the user's avatar; returns the updated
-  /// user.
-  Future<User> uploadAvatar(String filePath, String accessToken) async {
-    final data = await _uploadMultipart('$baseUrl/users/me/avatar', filePath, accessToken);
+  /// Uploads image [bytes] as the user's avatar; returns the updated user.
+  ///
+  /// Takes bytes rather than a path because the avatar always goes through the
+  /// cropper, which re-encodes it in memory — and because a path does not exist
+  /// on web.
+  Future<User> uploadAvatarBytes(
+      Uint8List bytes, String filename, String accessToken) async {
+    final data =
+        await _uploadMultipartBytes('$baseUrl/users/me/avatar', bytes, filename, accessToken);
     return User.fromJson(data);
   }
 
-  /// Uploads a local image file as the profile banner; returns the updated
-  /// user.
-  Future<User> uploadBanner(String filePath, String accessToken) async {
-    final data = await _uploadMultipart('$baseUrl/users/me/banner', filePath, accessToken);
+  /// Uploads image [bytes] as the profile banner (see [uploadAvatarBytes]).
+  Future<User> uploadBannerBytes(
+      Uint8List bytes, String filename, String accessToken) async {
+    final data =
+        await _uploadMultipartBytes('$baseUrl/users/me/banner', bytes, filename, accessToken);
     return User.fromJson(data);
   }
 
@@ -1254,10 +1260,19 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> _uploadMultipart(String url, String filePath, String accessToken) async {
+  /// Multipart upload from an in-memory buffer, used for cropped avatars and
+  /// banners whose bytes never touch a filesystem (the only path that works on
+  /// web).
+  Future<Map<String, dynamic>> _uploadMultipartBytes(
+      String url, Uint8List bytes, String filename, String accessToken) async {
     final request = http.MultipartRequest('POST', Uri.parse(url));
     request.headers['Authorization'] = 'Bearer $accessToken';
-    request.files.add(await http.MultipartFile.fromPath('file', filePath));
+    request.files.add(http.MultipartFile.fromBytes(
+      'file',
+      bytes,
+      filename: filename,
+      contentType: _mediaTypeFor(filename),
+    ));
     final response = await _send(request);
     final data = _decodeMap(response);
     if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
