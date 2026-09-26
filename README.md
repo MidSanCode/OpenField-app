@@ -110,6 +110,12 @@ lib/
   history timeline.
 - **Profile**: verification badge/note, follow/friends, banner and avatar
   uploads, storage usage.
+- **Image cropping**: avatar, group-icon and profile-header uploads open
+  `ImageCropPage` first, where the user pans/pinches a fixed crop frame
+  (1:1 for avatars and group icons, 3:1 for the header). Cropping runs through
+  the pure-Dart `image` package — no native cropper plugin — so the same code
+  path works on every target including Web, and picks are read as bytes so the
+  flow works where `ImagePicker` returns no filesystem path.
 
 ## Localization
 
