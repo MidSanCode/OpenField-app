@@ -27,6 +27,15 @@ on:
         description: 'Web'
         type: boolean
         default: false
+      publish_release:
+        description: 'Publish a Release with the built archives'
+        type: boolean
+        default: false
+
+# Build jobs only check out and upload artifacts, so read is enough; the
+# release job widens to contents:write itself.
+permissions:
+  contents: read
 
 jobs:
   windows:
@@ -220,6 +229,15 @@ jobs:
         run: flutter pub get
       - name: Build APK
         run: flutter build apk --release --build-name=$BUILD_NAME --build-number=$BUILD_NUMBER --dart-define-from-file=config.json
+      # Renamed from flutter's generic app-release.apk: release assets are
+      # keyed by filename, and a generic name would collide across versions
+      # (the release job skips an asset whose name is already attached).
+      - name: Rename APK
+        run: |
+          for apk in build/app/outputs/flutter-apk/*.apk; do
+            mv "$apk" "$(dirname "$apk")/openfield-android-${BUILD_NAME}.apk"
+          done
+          ls build/app/outputs/flutter-apk/
       - uses: actions/upload-artifact@v4
         with:
           name: openfield-Android
@@ -301,13 +319,21 @@ jobs:
           find build/ios/iphoneos/Runner.app -type f -exec sh -c 'file -b "$1" | grep -q "^Mach-O" && strip -S "$1"' _ {} \; 2>/dev/null || true
           mkdir -p build/ios/ipa/Payload
           cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
-          cd build/ios/ipa && zip -r Runner.ipa Payload/ && cd -
+          # Named for the version, not "Runner.ipa": release assets are keyed
+          # by filename, and a generic name would collide across versions.
+          cd build/ios/ipa && zip -qr "openfield-ios-${BUILD_NAME}-unsigned.ipa" Payload/ && cd -
       - name: Build IPA (signed)
         if: env.HAS_SIGNING == '1'
         env:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
           IOS_SIGNING_CERTIFICATE: "Apple Distribution"
-        run: flutter build ipa --release --build-name=$BUILD_NAME --build-number=$BUILD_NUMBER --dart-define-from-file=config.json
+        run: |
+          flutter build ipa --release --build-name=$BUILD_NAME --build-number=$BUILD_NUMBER --dart-define-from-file=config.json
+          # flutter names the archive after the Xcode scheme (Runner.ipa);
+          # rename for the same version-keying reason as the unsigned path.
+          for ipa in build/ios/ipa/*.ipa; do
+            mv "$ipa" "build/ios/ipa/openfield-ios-${BUILD_NAME}.ipa"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: openfield-iOS
@@ -351,3 +377,62 @@ jobs:
         with:
           name: openfield-Web
           path: openfield-web-${{ env.BUILD_NAME }}.zip
+
+  # Collects the archives the build jobs uploaded and publishes them to a
+  # GitHub Release. One job owns the release so six builds never race on the
+  # same tag.
+  release:
+    # !cancelled() lets this run while some build jobs were skipped (platforms
+    # left unchecked); the per-need result guards are what stop it when a
+    # build actually failed. Without !cancelled() a skipped job would make
+    # GitHub skip this one too.
+    if: ${{ !cancelled() && inputs.publish_release && needs.windows.result != 'failure' && needs.linux.result != 'failure' && needs.macos.result != 'failure' && needs.android.result != 'failure' && needs.ios.result != 'failure' && needs.web.result != 'failure' }}
+    needs: [windows, linux, macos, android, ios, web]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute release version
+        run: |
+          VER=$(grep '^version:' pubspec.yaml | cut -d' ' -f2)
+          BUILD_NAME=$(echo "$VER" | cut -d'+' -f1)
+          BUILD_NUMBER=$(echo "$VER" | cut -d'+' -f2)
+          # A pubspec without a "+N" suffix makes cut return the whole string;
+          # fall back to 0 so the tag stays a valid, stable identifier.
+          if [ -z "$BUILD_NUMBER" ] || [ "$BUILD_NUMBER" = "$BUILD_NAME" ]; then BUILD_NUMBER=0; fi
+          echo "RELEASE_TAG=${BUILD_NAME}+${BUILD_NUMBER}" >> $GITHUB_ENV
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: staging
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A release that exists but has no assets (a previous run died
+          # halfway) must be reusable, otherwise the build is stranded.
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "release $RELEASE_TAG already exists, attaching assets"
+          else
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --notes "Automated build for version $RELEASE_TAG" \
+              --target "$GITHUB_SHA"
+          fi
+
+          # Skip a file when an asset of the same name is already attached, so
+          # re-running a partially-failed build neither duplicates nor clobbers
+          # an archive that is already published.
+          shopt -s nullglob
+          for f in staging/*; do
+            base=$(basename "$f")
+            if gh release view "$RELEASE_TAG" --json assets -q '.assets[].name' | grep -Fxq "$base"; then
+              echo "::notice::skipping $base — already attached to $RELEASE_TAG"
+              continue
+            fi
+            echo "uploading $base"
+            gh release upload "$RELEASE_TAG" "$f" --clobber
+          done
