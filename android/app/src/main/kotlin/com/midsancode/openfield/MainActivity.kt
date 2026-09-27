@@ -1,4 +1,4 @@
-package cc.eu.mscstudio.openfield
+package com.midsancode.openfield
 
 import io.flutter.embedding.android.FlutterActivity
 

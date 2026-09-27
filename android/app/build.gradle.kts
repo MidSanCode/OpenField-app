@@ -18,7 +18,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "cc.eu.mscstudio.openfield"
+    namespace = "com.midsancode.openfield"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -28,7 +28,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "cc.eu.mscstudio.openfield"
+        applicationId = "com.midsancode.openfield"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

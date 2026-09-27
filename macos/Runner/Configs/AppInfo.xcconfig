@@ -8,7 +8,7 @@
 PRODUCT_NAME = openfield
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = cc.eu.mscstudio.openfield
+PRODUCT_BUNDLE_IDENTIFIER = com.midsancode.openfield
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright 漏 2026 MSC Studio. All rights reserved.
