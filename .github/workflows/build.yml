@@ -130,10 +130,143 @@ jobs:
       - name: Build
         run: flutter build linux --release --build-name=$BUILD_NAME --build-number=$BUILD_NUMBER --dart-define-from-file=config.json
       - run: tar -czf openfield-linux-${{ env.BUILD_NAME }}.tar.gz -C build/linux/x64/release/bundle .
+
+      # ---- AppImage -------------------------------------------------------
+      - name: Build AppDir
+        run: |
+          set -euo pipefail
+          BUNDLE=build/linux/x64/release/bundle
+          APPDIR="$PWD/AppDir"
+          mkdir -p "$APPDIR/usr/bin"
+
+          # appimagetool requires exactly one desktop file at the AppDir root
+          # and an icon whose name matches the desktop file's Icon= key.
+          mkdir -p packaging
+          cat > packaging/openfield.desktop <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=旷野 OpenField
+          Comment=OpenField 社区客户端
+          Exec=openfield
+          Icon=openfield
+          Terminal=false
+          Categories=Network;Chat;InstantMessaging;
+          StartupWMClass=com.midsancode.openfield
+          EOF
+
+          # The 1024x1024 store icon is the only square asset big enough for
+          # the AppImage icon slot.
+          cp ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png \
+             packaging/openfield.png
+
+          # linuxdeploy resolves the executable's dependencies with ldd, and
+          # the Flutter engine library lives in the bundle rather than on the
+          # system linker path, so expose it for that lookup.
+          export LD_LIBRARY_PATH="$PWD/$BUNDLE/lib:${LD_LIBRARY_PATH:-}"
+
+          # linuxdeploy and appimagetool both ship as AppImages, and running
+          # one needs FUSE - which on ubuntu-24.04 means libfuse2t64, a package
+          # the runner does not ship. The documented FUSE-less fallback is to
+          # extract and run them, so the build never depends on FUSE state.
+          export APPIMAGE_EXTRACT_AND_RUN=1
+
+          # linuxdeploy walks ldd recursively, so --library pulls in libmpv
+          # *and* its whole closure (ffmpeg, libass, ...). media_kit leaves
+          # media_kit_libs_linux_bundled_libraries empty on Linux, i.e. it
+          # expects mpv from the host, which is why the build installs it and
+          # why the AppImage has to carry a copy.
+          curl -fsSL -o linuxdeploy.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy.AppImage
+
+          # Versioned tag, not a rolling one, so this can be a hard check.
+          ACTUAL=$(sha256sum linuxdeploy.AppImage | cut -d' ' -f1)
+          EXPECTED=620095110d693282b8ebeb244a95b5e911cf8f65f76c88b4b47d16ae6346fcff
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::linuxdeploy digest mismatch: got $ACTUAL, expected $EXPECTED"
+            exit 1
+          fi
+
+          MPV=$(ls /usr/lib/x86_64-linux-gnu/libmpv.so.* 2>/dev/null | head -1 || true)
+          LIBS=()
+          if [ -n "$MPV" ]; then
+            echo "bundling $MPV and its dependencies"
+            LIBS=(--library "$MPV")
+          else
+            echo "::warning::libmpv not found on the runner; the AppImage will need mpv installed on the host"
+          fi
+
+          ./linuxdeploy.AppImage \
+            --appdir "$APPDIR" \
+            --executable "$BUNDLE/openfield" \
+            "${LIBS[@]}" \
+            --desktop-file packaging/openfield.desktop \
+            --icon-file packaging/openfield.png
+
+          # A Flutter Linux bundle is not self-contained: the engine resolves
+          # `lib/` and `data/` relative to the executable, so they are carried
+          # over as one intact tree. This runs after linuxdeploy so its
+          # dependency handling cannot disturb the layout.
+          mkdir -p "$APPDIR/usr/bin/lib" "$APPDIR/usr/bin/data"
+          cp -r "$BUNDLE/lib/." "$APPDIR/usr/bin/lib/"
+          cp -r "$BUNDLE/data/." "$APPDIR/usr/bin/data/"
+
+          # linuxdeploy writes an AppRun, but it does not know about the
+          # bundle's private libraries, so extend rather than replace it.
+          if [ -f "$APPDIR/AppRun" ]; then
+            mv "$APPDIR/AppRun" "$APPDIR/AppRun.linuxdeploy"
+          fi
+          cat > "$APPDIR/AppRun" <<'EOF'
+          #!/bin/sh
+          # The bundle's own lib/ must win over host copies: it carries
+          # libflutter_linux_gtk.so and the plugin libraries.
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export LD_LIBRARY_PATH="$HERE/usr/bin/lib:$HERE/usr/lib:${LD_LIBRARY_PATH:-}"
+          exec "$HERE/usr/bin/openfield" "$@"
+          EOF
+          chmod +x "$APPDIR/AppRun"
+
+          # Guard against SIGPIPE: `find | head` would otherwise fail the step
+          # under `set -o pipefail` once head closes the pipe. The listing is
+          # purely diagnostic.
+          find "$APPDIR" -maxdepth 2 | head -40 || true
+
+      - name: Build AppImage
+        run: |
+          set -euo pipefail
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export ARCH=x86_64
+          # VERSION is written into the desktop entry and, with no explicit
+          # destination, into the output filename.
+          export VERSION="$BUILD_NAME"
+
+          curl -fsSL -o appimagetool.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool.AppImage
+
+          # The 'continuous' tag is a rolling release, so the digest changes
+          # whenever upstream rebuilds. Verify it to catch a mangled or
+          # substituted download, but warn rather than fail on drift: a hard
+          # pin would rot into a permanently red build.
+          EXPECTED=a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0
+          ACTUAL=$(sha256sum appimagetool.AppImage | cut -d' ' -f1)
+          if [ "$ACTUAL" = "$EXPECTED" ]; then
+            echo "appimagetool digest verified"
+          else
+            echo "::warning::appimagetool digest is $ACTUAL, expected $EXPECTED (upstream rebuilt the rolling 'continuous' tag); continuing"
+          fi
+
+          ./appimagetool.AppImage --no-appstream AppDir \
+            "openfield-linux-${BUILD_NAME}.AppImage"
+
+          ls -lh ./*.AppImage
+
       - uses: actions/upload-artifact@v4
         with:
           name: openfield-Linux
-          path: openfield-linux-${{ env.BUILD_NAME }}.tar.gz
+          path: |
+            openfield-linux-${{ env.BUILD_NAME }}.tar.gz
+            openfield-linux-${{ env.BUILD_NAME }}.AppImage
 
   macos:
     if: inputs.build_macos
