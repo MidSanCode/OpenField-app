@@ -541,7 +541,10 @@ jobs:
           # A pubspec without a "+N" suffix makes cut return the whole string;
           # fall back to 0 so the tag stays a valid, stable identifier.
           if [ -z "$BUILD_NUMBER" ] || [ "$BUILD_NUMBER" = "$BUILD_NAME" ]; then BUILD_NUMBER=0; fi
-          echo "RELEASE_TAG=${BUILD_NAME}+${BUILD_NUMBER}" >> $GITHUB_ENV
+          # The "v" matches the tags this project's releases already use
+          # (v1.0.0+3, v1.0+2), so an automated release lands in the same
+          # series instead of looking like a stray one.
+          echo "RELEASE_TAG=v${BUILD_NAME}+${BUILD_NUMBER}" >> $GITHUB_ENV
       - name: Note which platforms are missing
         # A release that silently lacks one archive looks like an oversight, so
         # name the targets that did not build in the release notes. A job that
