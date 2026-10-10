@@ -12,7 +12,20 @@ import 'package:openfield/data/services/auth_service.dart';
 class CampMembersPage extends StatefulWidget {
   final int campId;
 
-  const CampMembersPage({super.key, required this.campId});
+  /// When set, this camp is a subgroup: the server only accepts members that
+  /// already belong to the parent camp, so the add action picks from that
+  /// roster instead of asking for a raw user id.
+  final int? parentCampId;
+
+  /// Parent camp's display name, for the picker's title.
+  final String? parentCampName;
+
+  const CampMembersPage({
+    super.key,
+    required this.campId,
+    this.parentCampId,
+    this.parentCampName,
+  });
 
   @override
   State<CampMembersPage> createState() => _CampMembersPageState();
@@ -126,6 +139,14 @@ class _CampMembersPageState extends State<CampMembersPage> {
   }
 
   Future<void> _addMember() async {
+    // A subgroup only accepts people already in the parent camp, so offer that
+    // roster rather than a free-form id: the id dialog would just collect a
+    // 403 for anybody the parent does not know.
+    final parentCampId = widget.parentCampId;
+    if (parentCampId != null && parentCampId > 0) {
+      await _addMemberFromParent(parentCampId);
+      return;
+    }
     final controller = TextEditingController();
     final added = await showDialog<bool>(
       context: context,
@@ -158,6 +179,99 @@ class _CampMembersPageState extends State<CampMembersPage> {
     if (token == null) return;
     try {
       await _api.addCampMember(widget.campId, userId, token);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('campMemberAdded'.tr())),
+        );
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
+  /// Adds a member to a subgroup by picking from the parent camp's roster.
+  ///
+  /// The server enforces the same rule, so this mirrors it instead of
+  /// repeating the failure: members already in the subgroup are filtered out,
+  /// and an empty result says so rather than showing a blank sheet.
+  Future<void> _addMemberFromParent(int parentCampId) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final token = auth.accessToken;
+    if (token == null || token.isEmpty) return;
+
+    final List<CampMember> candidates;
+    try {
+      final (members, _) = await _api.listCampMembers(parentCampId, token);
+      final existing = _members.map((m) => m.userId).toSet();
+      candidates = members.where((m) => !existing.contains(m.userId)).toList();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    final parentName = widget.parentCampName ?? '';
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'campSubgroupPickMember'.tr(namedArgs: {'name': parentName}),
+                style: Theme.of(ctx).textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const Divider(height: 1),
+            if (candidates.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'campSubgroupPickEmpty'.tr(namedArgs: {'name': parentName}),
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: candidates.length,
+                  itemBuilder: (_, index) {
+                    final candidate = candidates[index];
+                    return ListTile(
+                      leading: Avatar(
+                        radius: 18,
+                        imageUrl: candidate.avatarUrl,
+                        initials: candidate.displayName.isNotEmpty
+                            ? candidate.displayName.characters.first
+                            : '?',
+                      ),
+                      title: Text(candidate.displayName, overflow: TextOverflow.ellipsis),
+                      onTap: () => Navigator.of(ctx).pop(candidate.userId),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || picked <= 0) return;
+
+    try {
+      await _api.addCampMember(widget.campId, picked, token);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('campMemberAdded'.tr())),

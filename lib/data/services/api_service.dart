@@ -15,6 +15,7 @@ import '../models/consent_request.dart';
 import '../models/conversation.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
+import '../models/report.dart';
 import '../models/user.dart';
 import '../models/wallet.dart';
 import '../models/task.dart';
@@ -1670,6 +1671,89 @@ class ApiService {
     if (response.statusCode != 204) {
       throw ApiException(response.statusCode, _decodeError(response, 'Failed to leave camp'));
     }
+  }
+
+  /// Lists a camp's subgroups (子群). Members of the parent camp only — the
+  /// server answers 404 to anybody else, exactly like an invisible camp.
+  /// [token] is optional so the camps tab can call it before signing in.
+  Future<List<Camp>> listSubgroups(int campId, {String? token}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/camps/$campId/subgroups'),
+      headers: _headers(token: token, json: false),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['subgroups'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((c) => Camp.fromJson(c)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load subgroups'));
+  }
+
+  /// Creates a subgroup under [campId]. Owner/admins of the parent camp only.
+  /// The child is private by construction (the server forces invisible +
+  /// non-joinable), so no visibility switches are sent.
+  Future<Camp> createSubgroup(int campId, String name, String accessToken,
+      {String description = '', bool memberPost = true, bool memberPin = false}) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/camps/$campId/subgroups'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        'name': name,
+        'description': description,
+        'member_post': memberPost,
+        'member_pin': memberPin,
+      }),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 201 && data != null) {
+      return Camp.fromJson(data);
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to create subgroup'));
+  }
+
+  // ---- moderation reports ----
+
+  /// Files a moderation report against a post, a chat message or a user.
+  ///
+  /// [targetType] is one of the [ReportTarget] values. The server rejects a
+  /// second open report on the same target (409), a target that no longer
+  /// exists (404) and a flood of reports (429); all three arrive as
+  /// [ApiException] with the server's message.
+  Future<Report> createReport(String targetType, int targetId, String reason, String accessToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/reports'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({
+        'target_type': targetType,
+        'target_id': targetId,
+        'reason': reason,
+      }),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 201 && data != null) {
+      return Report.fromJson(data);
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to submit report'));
+  }
+
+  /// Lists the caller's own reports, newest first.
+  Future<List<Report>> listMyReports(String accessToken, {int limit = 50}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/reports/mine?limit=$limit'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode == 200) {
+      final data = _decodeMap(response);
+      final list = data?['reports'];
+      if (list is List) {
+        return list.whereType<Map<String, dynamic>>().map((r) => Report.fromJson(r)).toList();
+      }
+      return const [];
+    }
+    throw ApiException(response.statusCode, _decodeError(response, 'Failed to load reports'));
   }
 
   /// Lists a camp's posts, at most [limit] of them.

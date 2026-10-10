@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 import 'package:openfield/data/models/post.dart';
+import 'package:openfield/data/models/report.dart';
 import 'package:openfield/data/models/user.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
@@ -13,6 +14,7 @@ import 'package:openfield/widgets/qr_share_dialog.dart';
 import 'package:openfield/widgets/experience_bar.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/post_card.dart';
+import 'package:openfield/widgets/report_dialog.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 
 /// Public profile of any user: banner, avatar, nickname, @username, bio,
@@ -204,6 +206,21 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
+          // Reporting your own account is rejected server-side, and reporting
+          // needs a reporter, so the action only appears for a signed-in
+          // viewer looking at somebody else.
+          if (_user != null && !_isMyProfile && _canReport)
+            IconButton(
+              icon: const Icon(Icons.flag_outlined),
+              tooltip: 'reportUser'.tr(),
+              onPressed: () => showReportDialog(
+                context,
+                title: 'reportUser'.tr(),
+                targetType: ReportTarget.user,
+                targetId: _user!.id,
+                preview: _user!.displayName,
+              ),
+            ),
         ],
       ),
       body: body,
@@ -215,6 +232,13 @@ class _ProfilePageState extends State<ProfilePage> {
   bool get _isMyProfile {
     final me = Provider.of<AuthService>(context, listen: false).user;
     return me != null && me.id == widget.userId;
+  }
+
+  /// Whether the viewer is signed in, i.e. able to file a report. The report
+  /// itself is sent by [showReportDialog] using the current session token.
+  bool get _canReport {
+    final token = Provider.of<AuthService>(context, listen: false).accessToken;
+    return token != null && token.isNotEmpty;
   }
 
   Widget _buildHeader(

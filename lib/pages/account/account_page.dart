@@ -29,6 +29,7 @@ import 'package:openfield/pages/account/membership_page.dart';
 import 'package:openfield/pages/bots/bots_page.dart';
 import 'package:openfield/pages/plugins/plugins_page.dart';
 import 'package:openfield/pages/account/my_posts_page.dart';
+import 'package:openfield/pages/account/my_reports_page.dart';
 import 'package:openfield/pages/account/storage_bucket_page.dart';
 import 'package:openfield/pages/account/tasks_page.dart';
 import 'package:openfield/pages/account/wallet_page.dart';
@@ -669,6 +670,18 @@ class _AccountPageState extends State<AccountPage> {
                 );
               },
             ),
+                if (user != null) const Divider(height: 1),
+                if (user != null)
+                  _NavTile(
+                    icon: Icons.flag_outlined,
+                    title: 'myReports'.tr(),
+                    subtitle: 'myReportsHint'.tr(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const MyReportsPage()),
+                      );
+                    },
+                  ),
           ],
         ),
         _SettingsSection(

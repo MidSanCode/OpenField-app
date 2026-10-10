@@ -249,6 +249,13 @@ class _CampsPageState extends State<CampsPage> {
                                             _RoleChip(role: camp.myRole),
                                             const SizedBox(width: 6),
                                           ],
+                                          // A subgroup is always hidden, so the
+                                          // eye icon alone would not explain
+                                          // why it is not in the public list.
+                                          if (camp.isSubgroup) ...[
+                                            _SubgroupChip(),
+                                            const SizedBox(width: 6),
+                                          ],
                                           Icon(
                                             camp.isVisible ? Icons.visibility : Icons.visibility_off,
                                             size: 14,
@@ -617,6 +624,31 @@ class _RoleChip extends StatelessWidget {
         isOwner ? 'campRoleOwner'.tr() : 'campRoleAdmin'.tr(),
         style: theme.textTheme.labelSmall?.copyWith(
           color: fg,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// Badge marking a camp as a subgroup (子群). Subgroups are private by
+/// construction, so this distinguishes them from a merely hidden camp.
+class _SubgroupChip extends StatelessWidget {
+  const _SubgroupChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        'campSubgroupTag'.tr(),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onTertiaryContainer,
           fontWeight: FontWeight.w600,
         ),
       ),

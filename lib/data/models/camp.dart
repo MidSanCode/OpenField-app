@@ -23,6 +23,11 @@ class Camp {
   /// Whether plain members may pin their own posts within the camp
   /// (admins/owner always may). Defaults to false.
   final bool memberPin;
+  /// Id of the parent camp when this camp is a **subgroup** (子群), 0 for a
+  /// normal camp. Subgroups are always private (`isVisible` and `directJoin`
+  /// are false server-side) and their members must already belong to the
+  /// parent camp, so the client never offers a join action for one.
+  final int parentCampId;
   /// Short notice shown inside the camp; only owner/admins may change it.
   /// Empty string = no announcement.
   final String announcement;
@@ -51,6 +56,7 @@ class Camp {
     this.directJoin = true,
     this.memberPost = true,
     this.memberPin = false,
+    this.parentCampId = 0,
     this.announcement = '',
     this.memberCount = 0,
     this.postCount = 0,
@@ -73,6 +79,7 @@ class Camp {
       directJoin: json['direct_join'] as bool? ?? true,
       memberPost: json['member_post'] as bool? ?? true,
       memberPin: json['member_pin'] as bool? ?? false,
+      parentCampId: _asInt(json['parent_camp_id']),
       announcement: json['announcement'] as String? ?? '',
       memberCount: _asInt(json['member_count']),
       postCount: _asInt(json['post_count']),
@@ -94,6 +101,11 @@ class Camp {
   /// The viewer can read the camp's posts. Camp content is members-only, so
   /// this mirrors [isJoined].
   bool get canViewPosts => isJoined;
+  /// This camp is a subgroup nested under [parentCampId].
+  bool get isSubgroup => parentCampId > 0;
+  /// The viewer may create subgroups and pull parent-camp members in; the same
+  /// owner/admin rule the camp announcement uses.
+  bool get canManageSubgroups => canManage;
 
   static int _asInt(Object? value) {
     if (value is int) return value;

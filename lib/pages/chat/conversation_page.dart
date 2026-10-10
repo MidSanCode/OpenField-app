@@ -17,6 +17,7 @@ import 'package:openfield/data/models/attachment.dart';
 import 'package:openfield/data/models/chat_member.dart';
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
+import 'package:openfield/data/models/report.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:openfield/data/services/chat_cache_store.dart';
@@ -33,6 +34,7 @@ import 'package:openfield/core/widgets/media_image.dart';
 import 'package:openfield/widgets/attachment_view.dart';
 import 'package:openfield/widgets/check_card.dart';
 import 'package:openfield/widgets/markdown_content.dart';
+import 'package:openfield/widgets/report_dialog.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 import 'package:openfield/widgets/voice_message.dart';
 import 'package:openfield/core/widgets/avatar.dart';
@@ -1924,6 +1926,16 @@ class _ConversationPageState extends State<ConversationPage> {
                 onTap: () => Navigator.of(ctx).pop('delete'),
               ),
             ],
+            // Reporting your own message is meaningless and the server rejects
+            // it; a deleted message has nothing left to report.
+            if (!isMine && !message.isDeleted && token != null) ...[
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.flag_outlined, color: Theme.of(ctx).colorScheme.error),
+                title: Text('reportMessage'.tr(), style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                onTap: () => Navigator.of(ctx).pop('report'),
+              ),
+            ],
           ],
         ),
       ),
@@ -1956,6 +1968,16 @@ class _ConversationPageState extends State<ConversationPage> {
         break;
       case 'delete':
         await _deleteMessage(message);
+        break;
+      case 'report':
+        if (!mounted) break;
+        await showReportDialog(
+          context,
+          title: 'reportMessage'.tr(),
+          targetType: ReportTarget.message,
+          targetId: message.id,
+          preview: message.displayContent,
+        );
         break;
     }
   }

@@ -15,6 +15,7 @@ import 'package:openfield/data/services/realtime_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:openfield/pages/account/profile_page.dart';
 import 'package:openfield/pages/posts/camp_members_page.dart';
+import 'package:openfield/pages/posts/camp_subgroups_page.dart';
 import 'package:openfield/pages/posts/camps_page.dart';
 import 'package:openfield/data/models/camp.dart';
 import 'package:openfield/pages/posts/post_detail_page.dart';
@@ -575,11 +576,38 @@ class _PostsPageState extends State<PostsPage> {
       return;
     }
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => CampMembersPage(campId: campId)),
+      MaterialPageRoute(
+        builder: (_) => CampMembersPage(
+          campId: campId,
+          // A subgroup's roster may only grow from the parent's members, so it
+          // needs to know which camp that is.
+          parentCampId: _camp?.parentCampId,
+          parentCampName: _camp?.isSubgroup == true ? widget.campName : null,
+        ),
+      ),
     );
     if (changed == true) {
       await _loadPosts();
     }
+  }
+
+  /// Opens this camp's subgroup list. Only reachable once the viewer is known
+  /// to be a member, because the server hides subgroups from everybody else.
+  Future<void> _openSubgroups() async {
+    final camp = _camp;
+    final campId = widget.campId;
+    if (camp == null || campId == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CampSubgroupsPage(
+          parentCampId: campId,
+          parentCampName: camp.name,
+          canManage: camp.canManageSubgroups,
+        ),
+      ),
+    );
+    // The viewer may have created or joined a subgroup.
+    if (mounted) await _loadPosts();
   }
 
   /// Opens the camp settings sheet (basics for admins; permission switches
@@ -803,6 +831,15 @@ class _PostsPageState extends State<PostsPage> {
                 icon: const Icon(Icons.group_outlined),
                 tooltip: 'campMembersTitle'.tr(),
                 onPressed: _openCampMembers,
+              ),
+            // Subgroups are private: the server answers 404 to non-members, so
+            // the entry only appears once the viewer is known to be a member.
+            // A subgroup cannot hold subgroups of its own, hence the guard.
+            if (_camp != null && _camp!.isJoined && !_camp!.isSubgroup)
+              IconButton(
+                icon: const Icon(Icons.forum_outlined),
+                tooltip: 'campSubgroups'.tr(),
+                onPressed: _openSubgroups,
               ),
             if (_camp != null && _camp!.canManage)
               IconButton(

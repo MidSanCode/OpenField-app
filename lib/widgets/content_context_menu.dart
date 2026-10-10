@@ -38,6 +38,8 @@ class ContentAction {
   static const String pin = 'pin';
   /// Unpins the author's own post.
   static const String unpin = 'unpin';
+  /// Reports somebody else's content to the moderators.
+  static const String report = 'report';
 }
 
 /// Builds the shared menu items for a post or a reply. Only an authenticated,
@@ -48,6 +50,8 @@ class ContentAction {
 /// pin/unpin toggle — the author's own posts, or any camp post when the
 /// caller manages the camp. [campScope] relabels the pin entry for the
 /// camp-scoped pin and [pinned] carries that scope's current state.
+/// [showReport] reveals the moderation report entry, which callers enable for
+/// a signed-in viewer looking at somebody else's content.
 List<PopupMenuEntry<String>> buildContentMenuItems({
   required bool isMine,
   required bool isFavorite,
@@ -57,6 +61,7 @@ List<PopupMenuEntry<String>> buildContentMenuItems({
   bool showPin = false,
   bool campScope = false,
   bool pinned = false,
+  bool showReport = false,
 }) {
   final items = <PopupMenuEntry<String>>[
     PopupMenuItem(
@@ -121,6 +126,18 @@ List<PopupMenuEntry<String>> buildContentMenuItems({
         child: _MenuLabel(
           icon: Icons.delete_outline,
           text: 'delete'.tr(),
+          destructive: true,
+        ),
+      ),
+    // Reporting your own content is meaningless, so the entry only appears on
+    // somebody else's — and only for a signed-in viewer, since the server
+    // needs a reporter.
+    if (showReport && !isMine)
+      PopupMenuItem(
+        value: ContentAction.report,
+        child: _MenuLabel(
+          icon: Icons.flag_outlined,
+          text: 'report'.tr(),
           destructive: true,
         ),
       ),
@@ -203,6 +220,8 @@ IconData _iconFor(String value) {
       return Icons.delete_outline;
     case ContentAction.visibility:
       return Icons.visibility_outlined;
+    case ContentAction.report:
+      return Icons.flag_outlined;
     default:
       return Icons.more_horiz;
   }
@@ -232,6 +251,8 @@ String _labelFor(String value) {
       return 'delete'.tr();
     case ContentAction.visibility:
       return 'visibility'.tr();
+    case ContentAction.report:
+      return 'report'.tr();
     default:
       return value;
   }

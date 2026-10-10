@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:openfield/core/widgets/error_dialog.dart';
 import 'package:openfield/core/widgets/pin_dialog.dart';
 import 'package:openfield/data/models/post.dart';
+import 'package:openfield/data/models/report.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -12,6 +13,7 @@ import 'package:openfield/widgets/check_card.dart';
 import 'package:openfield/widgets/content_context_menu.dart';
 import 'package:openfield/widgets/markdown_content.dart';
 import 'package:openfield/widgets/post_reaction_bar.dart';
+import 'package:openfield/widgets/report_dialog.dart';
 import 'package:openfield/widgets/verified_badge.dart';
 import 'package:openfield/core/widgets/avatar.dart';
 
@@ -125,6 +127,7 @@ class _PostCardState extends State<PostCard> {
       showPin: widget.onPin != null && (widget.isMine || widget.canPinOthers),
       campScope: widget.campPinScope,
       pinned: widget.campPinScope ? post.campPinned : post.pinned,
+      showReport: widget.token != null && widget.token!.isNotEmpty,
     );
     final action = position != null
         ? await showContentMenuAt(context, position, items: items)
@@ -159,6 +162,15 @@ class _PostCardState extends State<PostCard> {
         await widget.onPin?.call(true);
       case ContentAction.unpin:
         await widget.onPin?.call(false);
+      case ContentAction.report:
+        if (!mounted) return;
+        await showReportDialog(
+          context,
+          title: 'reportPost'.tr(),
+          targetType: ReportTarget.post,
+          targetId: post.id,
+          preview: _displayContent,
+        );
     }
   }
 
