@@ -125,6 +125,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libasound2-dev libmpv-dev mpv
+      - name: Install AppImage icon tooling
+        # Rescales the 1024x1024 store icon down to the 512x512 that linuxdeploy
+        # accepts. apt is a no-op when the runner already ships ImageMagick.
+        run: sudo apt-get install -y imagemagick
       - name: Get dependencies
         run: flutter pub get
       - name: Build
@@ -154,10 +158,24 @@ jobs:
           StartupWMClass=com.midsancode.openfield
           EOF
 
-          # The 1024x1024 store icon is the only square asset big enough for
-          # the AppImage icon slot.
+          # The 1024x1024 store icon is the only square asset large enough, but
+          # linuxdeploy only accepts the standard icon resolutions (8x8 up to
+          # 512x512) and reads the size off the file itself, so the 1024 master
+          # has to be scaled down to 512 before it is offered as --icon-file.
+          # The size is asserted because linuxdeploy's own complaint about an
+          # unexpected resolution does not say where the icon came from.
           cp ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png \
-             packaging/openfield.png
+             packaging/openfield-master.png
+          if command -v magick >/dev/null 2>&1; then
+            magick packaging/openfield-master.png -resize 512x512 packaging/openfield.png
+          else
+            convert packaging/openfield-master.png -resize 512x512 packaging/openfield.png
+          fi
+          ICON_SIZE=$(identify -format '%wx%h' packaging/openfield.png)
+          if [ "$ICON_SIZE" != "512x512" ]; then
+            echo "::error::the AppImage icon must be 512x512 for linuxdeploy, got $ICON_SIZE"
+            exit 1
+          fi
 
           # linuxdeploy resolves the executable's dependencies with ldd, and
           # the Flutter engine library lives in the bundle rather than on the
@@ -260,6 +278,12 @@ jobs:
           else
             echo "::warning::appimagetool digest is $ACTUAL, expected $EXPECTED (upstream rebuilt the rolling 'continuous' tag); continuing"
           fi
+
+          # appimagetool resolves the desktop entry's Icon= key against the
+          # AppDir root, while linuxdeploy deploys it into the hicolor theme
+          # under usr/share/icons. Keep a copy at the root so the icon is found
+          # whichever of the two locations appimagetool consults.
+          cp packaging/openfield.png AppDir/openfield.png
 
           ./appimagetool.AppImage --no-appstream AppDir \
             "openfield-linux-${BUILD_NAME}.AppImage"
