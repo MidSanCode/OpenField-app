@@ -180,10 +180,15 @@ jobs:
           chmod +x linuxdeploy.AppImage
 
           # Versioned tag, not a rolling one, so this can be a hard check.
+          # The pin must be the *x86_64* asset's digest: the release publishes
+          # one AppImage per architecture and their digests differ, so pinning
+          # the aarch64 hash (or any other row of that release) fails every
+          # build with a mismatch no re-run can clear.
           ACTUAL=$(sha256sum linuxdeploy.AppImage | cut -d' ' -f1)
-          EXPECTED=620095110d693282b8ebeb244a95b5e911cf8f65f76c88b4b47d16ae6346fcff
+          EXPECTED=c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d
           if [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::error::linuxdeploy digest mismatch: got $ACTUAL, expected $EXPECTED"
+            echo "::error::the pin is linuxdeploy-x86_64.AppImage from tag 1-alpha-20251107-1; refresh it if upstream reassigned that tag"
             exit 1
           fi
 
@@ -248,7 +253,7 @@ jobs:
           # whenever upstream rebuilds. Verify it to catch a mangled or
           # substituted download, but warn rather than fail on drift: a hard
           # pin would rot into a permanently red build.
-          EXPECTED=a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0
+          EXPECTED=95cbe7cce9717fce90c484e34052ee7c7f1d7635b33c12525b4776826a7d29b6
           ACTUAL=$(sha256sum appimagetool.AppImage | cut -d' ' -f1)
           if [ "$ACTUAL" = "$EXPECTED" ]; then
             echo "appimagetool digest verified"
@@ -516,10 +521,12 @@ jobs:
   # same tag.
   release:
     # !cancelled() lets this run while some build jobs were skipped (platforms
-    # left unchecked); the per-need result guards are what stop it when a
-    # build actually failed. Without !cancelled() a skipped job would make
-    # GitHub skip this one too.
-    if: ${{ !cancelled() && inputs.publish_release && needs.windows.result != 'failure' && needs.linux.result != 'failure' && needs.macos.result != 'failure' && needs.android.result != 'failure' && needs.ios.result != 'failure' && needs.web.result != 'failure' }}
+    # left unchecked); without it a skipped job would make GitHub skip this one
+    # too. The gate is "at least one platform produced archives" rather than
+    # "no platform failed", so a single broken target (e.g. an AppImage tool
+    # that upstream replaced) no longer withholds the binaries that did build —
+    # the archives that exist are exactly the ones the build jobs uploaded.
+    if: ${{ !cancelled() && inputs.publish_release && (needs.windows.result == 'success' || needs.linux.result == 'success' || needs.macos.result == 'success' || needs.android.result == 'success' || needs.ios.result == 'success' || needs.web.result == 'success') }}
     needs: [windows, linux, macos, android, ios, web]
     runs-on: ubuntu-latest
     permissions:
@@ -535,6 +542,28 @@ jobs:
           # fall back to 0 so the tag stays a valid, stable identifier.
           if [ -z "$BUILD_NUMBER" ] || [ "$BUILD_NUMBER" = "$BUILD_NAME" ]; then BUILD_NUMBER=0; fi
           echo "RELEASE_TAG=${BUILD_NAME}+${BUILD_NUMBER}" >> $GITHUB_ENV
+      - name: Note which platforms are missing
+        # A release that silently lacks one archive looks like an oversight, so
+        # name the targets that did not build in the release notes. A job that
+        # was never requested reports "skipped" and is not listed as failed.
+        run: |
+          set -euo pipefail
+          FAILED=""
+          note() {
+            if [ "$2" = "failure" ]; then FAILED="$FAILED $1"; fi
+          }
+          note Windows "${{ needs.windows.result }}"
+          note Linux "${{ needs.linux.result }}"
+          note macOS "${{ needs.macos.result }}"
+          note Android "${{ needs.android.result }}"
+          note iOS "${{ needs.ios.result }}"
+          note Web "${{ needs.web.result }}"
+          if [ -n "$FAILED" ]; then
+            echo "RELEASE_NOTE=Automated build for version $RELEASE_TAG. These targets failed to build, so this release carries only the archives that succeeded:$FAILED" >> $GITHUB_ENV
+            echo "::warning::publishing partial release; failed targets:$FAILED"
+          else
+            echo "RELEASE_NOTE=Automated build for version $RELEASE_TAG" >> $GITHUB_ENV
+          fi
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -546,13 +575,16 @@ jobs:
         run: |
           set -euo pipefail
           # A release that exists but has no assets (a previous run died
-          # halfway) must be reusable, otherwise the build is stranded.
+          # halfway) must be reusable, otherwise the build is stranded. Its
+          # notes are rewritten too: they state which targets are missing, and
+          # a re-run that fixes a target must not keep claiming it failed.
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "release $RELEASE_TAG already exists, attaching assets"
+            gh release edit "$RELEASE_TAG" --notes "$RELEASE_NOTE"
           else
             gh release create "$RELEASE_TAG" \
               --title "$RELEASE_TAG" \
-              --notes "Automated build for version $RELEASE_TAG" \
+              --notes "$RELEASE_NOTE" \
               --target "$GITHUB_SHA"
           fi
 
