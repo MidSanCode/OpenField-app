@@ -38,6 +38,12 @@ add_definitions(-DUNICODE -D_UNICODE)
 # MSVC-sanctioned suppression so the transitive plugin subdirectories compile.
 if(MSVC)
   add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+  # flutter_webrtc vendors C++ sources that contain non-ASCII characters in
+  # comments. On a machine whose ANSI code page is not UTF-8 (e.g. 936/GBK) MSVC
+  # reports C4819 for each of them, and that plugin's CMake builds with
+  # warnings-as-errors, so the whole Windows build dies with C2220. Tell the
+  # compiler the sources are UTF-8 instead of leaving it to the host code page.
+  add_compile_options(/utf-8)
 endif()
 
 # Compilation settings that should be applied to most targets.
