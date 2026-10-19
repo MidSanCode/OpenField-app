@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'package:openfield/data/models/call_session.dart';
 import 'package:openfield/data/services/api_service.dart';
+import 'package:openfield/data/services/call_native_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
 
 /// Lifecycle of the call shown in the UI.
@@ -32,12 +33,12 @@ class CallService extends ChangeNotifier {
 
   CallService._();
 
-  /// STUN servers used to discover the peers' public addresses.
+  /// Fallback ICE servers, used when the server reports none.
   ///
-  /// STUN alone connects only when neither side sits behind a symmetric NAT.
-  /// Production deployments must add a TURN server through [setTurnServers] or
-  /// a share of calls will fail to connect on mobile networks and corporate
-  /// networks (see the server's docs/calls.md).
+  /// The deployment's real configuration comes from `GET /calls/ice` (see
+  /// [CallIceConfig]) so an operator sets TURN once in the server config. STUN
+  /// only discovers a peer's address — it cannot relay media — so without a TURN
+  /// entry calls fail between two peers that both sit behind a symmetric NAT.
   static List<Map<String, dynamic>> iceServers = <Map<String, dynamic>>[
     {'urls': 'stun:stun.l.google.com:19302'},
     {'urls': 'stun:stun1.l.google.com:19302'},
@@ -75,10 +76,15 @@ class CallService extends ChangeNotifier {
   final List<RTCIceCandidate> _pendingCandidates = <RTCIceCandidate>[];
 
   String? _accessToken;
+  /// ICE servers reported by the server for this deployment; empty until the
+  /// first fetch lands (or when it fails, in which case [iceServers] is used).
+  List<Map<String, dynamic>> _deploymentIceServers = const [];
+  bool _iceRequested = false;
   StreamSubscription<PushEvent>? _eventSub;
   Timer? _elapsedTimer;
   Timer? _resetTimer;
   bool _teardownDone = false;
+  bool _nativeAttached = false;
 
   /// Current phase of the overlay.
   CallPhase get phase => _phase;
@@ -137,6 +143,8 @@ class CallService extends ChangeNotifier {
     }
     _accessToken = token;
     if (token == null) {
+      _iceRequested = false;
+      _deploymentIceServers = const [];
       if (_phase != CallPhase.idle) {
         _teardown();
         _resetToIdle();
@@ -146,6 +154,48 @@ class CallService extends ChangeNotifier {
       return;
     }
     _attachEvents();
+    _attachNative();
+    unawaited(_loadIceServers(token));
+  }
+
+  /// Connects the platform integrations once: the iOS system call UI and the
+  /// Android foreground service. Both are optional (see [CallNativeService]).
+  void _attachNative() {
+    if (_nativeAttached) return;
+    _nativeAttached = true;
+    final native = CallNativeService.instance;
+    native.attach();
+    // Answering or hanging up from the iOS call UI has to drive the same state
+    // machine the in-app overlay drives.
+    native.onSystemAnswered = (callId) {
+      if (_session?.id == callId && _phase == CallPhase.ringing) {
+        unawaited(accept());
+      }
+    };
+    native.onSystemEnded = (callId) {
+      if (_session?.id == callId) {
+        unawaited(hangup());
+      }
+    };
+  }
+
+  /// Loads the deployment's ICE servers once per signed-in session.
+  ///
+  /// A failure is not fatal: the built-in STUN list still connects peers on
+  /// friendly networks, and a call should not be blocked by a config fetch.
+  Future<void> _loadIceServers(String token) async {
+    if (_iceRequested) return;
+    _iceRequested = true;
+    try {
+      final config = await _api.getIceServers(token);
+      if (config.servers.isNotEmpty) {
+        _deploymentIceServers = config.servers;
+      }
+      debugPrint('[call] ICE servers: ${_deploymentIceServers.length} '
+          'entries, TURN configured: ${config.turnConfigured}');
+    } catch (e) {
+      debugPrint('[call] could not load the ICE configuration: $e');
+    }
   }
 
   void _attachEvents() {
@@ -191,6 +241,13 @@ class CallService extends ChangeNotifier {
           mode: video ? 'video' : 'audio');
       _session = call;
       notifyListeners();
+      // Puts the outgoing call into the system call UI / recent calls list. iOS
+      // only; a no-op elsewhere.
+      await CallNativeService.instance.reportOutgoing(
+        callId: call.id,
+        handle: peerName,
+        video: video,
+      );
 
       await _ensurePeerConnection();
       final offer = await _pc!.createOffer();
@@ -380,6 +437,14 @@ class CallService extends ChangeNotifier {
     _endReason = '';
     _phase = CallPhase.ringing;
     notifyListeners();
+    // Raise the native call UI immediately rather than waiting for the profile
+    // lookup: a ringing call is time-critical, and the lookup only improves the
+    // name shown inside the app.
+    CallNativeService.instance.reportIncoming(
+      callId: callId,
+      handle: _peerName.isEmpty ? 'OpenField' : _peerName,
+      video: _video,
+    );
     // The invite carries no display data, so fetch the caller's profile for the
     // ringing UI (best effort: a failure just leaves the name empty).
     _resolvePeerProfile(initiator);
@@ -484,7 +549,8 @@ class CallService extends ChangeNotifier {
     _pendingCandidates.clear();
 
     final pc = await createPeerConnection({
-      'iceServers': iceServers,
+      'iceServers':
+          _deploymentIceServers.isNotEmpty ? _deploymentIceServers : iceServers,
       'sdpSemantics': 'unified-plan',
     });
 
@@ -507,6 +573,15 @@ class CallService extends ChangeNotifier {
           _phase = CallPhase.active;
           _startElapsedTimer();
           notifyListeners();
+          // Keep media alive if the user switches apps, and drop the system
+          // ringing banner now that the app is connected.
+          CallNativeService.instance.startOngoingCall(
+            _peerName.isEmpty ? 'OpenField' : _peerName,
+          );
+          final id = _session?.id;
+          if (id != null) {
+            CallNativeService.instance.reportConnected(id);
+          }
         }
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
         _endReason = 'connection_failed';
@@ -650,6 +725,8 @@ class CallService extends ChangeNotifier {
   }
 
   void _resetToIdle() {
+    final finishedId = _session?.id;
+    final declined = _endReason == 'declined';
     _resetTimer?.cancel();
     _resetTimer = null;
     _teardown();
@@ -667,6 +744,14 @@ class CallService extends ChangeNotifier {
     _endReason = '';
     _elapsed = Duration.zero;
     notifyListeners();
+
+    // Release the platform surfaces: the ongoing-call notification and, when the
+    // app itself ended the call, the system call UI.
+    final native = CallNativeService.instance;
+    unawaited(native.stopOngoingCall());
+    if (finishedId != null) {
+      unawaited(native.endSystemCall(callId: finishedId, declined: declined));
+    }
   }
 
   static int _asInt(Object? value) {

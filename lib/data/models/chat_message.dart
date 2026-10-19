@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'attachment.dart';
+import 'call_record.dart';
 
 /// How a message relates to the server. [sent] is confirmed; [sending] and
 /// [failed] are local-only states for optimistic UI.
@@ -20,7 +21,7 @@ class ChatMessage {
   /// until decrypted (see [decryptedContent] and [displayContent]).
   final String content;
 
-  /// Server-side message kind: 'text' or system kinds such as
+  /// Server-side message kind: 'text', 'call', 'check', or system kinds such as
   /// 'system.join' / 'system.leave' / 'system.mute' / 'system.unmute' /
   /// 'system.mute.all' / 'system.unmute.all'.
   final String kind;
@@ -42,6 +43,9 @@ class ChatMessage {
   /// For kind == 'check' messages: the id of the attached check. Fetch the
   /// full check (amount, claims, status) from /checks/:id before rendering.
   final int checkId;
+  /// For kind == 'call' messages: the structured outcome (answered, declined,
+  /// missed, cancelled) and duration, so the entry can be phrased locally.
+  final CallRecord? call;
   /// Sender's display name, when the payload includes it.
   final String? senderName;
   /// Sender's avatar URL, when the payload includes it.
@@ -111,6 +115,7 @@ class ChatMessage {
     this.kind = 'text',
     required this.createdAt,
     this.checkId = 0,
+    this.call,
     this.replyToId,
     this.replyToName,
     this.replyToContent,
@@ -167,7 +172,12 @@ class ChatMessage {
 
   /// True when this is a text message from an encrypted conversation that has
   /// not been decrypted yet.
-  bool get needsDecryption => decryptedContent == null && !isSystem;
+  bool get needsDecryption =>
+      decryptedContent == null && !isSystem && !isCall;
+
+  /// True for a call history entry (kind 'call'). It carries no user text: the
+  /// outcome and duration in [call] are what the UI renders.
+  bool get isCall => kind == 'call';
 
   /// True when this message was soft-deleted ([deletedAt] set).
   bool get isDeleted => deletedAt != null;
@@ -285,6 +295,7 @@ class ChatMessage {
     MessageStatus? status,
     int? burnSeconds,
     Object? burnAt = _unset,
+    CallRecord? call,
     Object? decryptedContent = _unset,
     Object? uploadProgress = _unset,
   }) {
@@ -318,6 +329,7 @@ class ChatMessage {
       clientId: clientId ?? this.clientId,
       status: status ?? this.status,
       burnSeconds: burnSeconds ?? this.burnSeconds,
+      call: call ?? this.call,
       burnAt: identical(burnAt, _unset) ? this.burnAt : burnAt as DateTime?,
       decryptedContent: identical(decryptedContent, _unset)
           ? this.decryptedContent
@@ -347,6 +359,7 @@ class ChatMessage {
       content: json['content'] as String? ?? '',
       kind: json['kind'] as String? ?? 'text',
       checkId: _asInt(json['check_id']),
+      call: CallRecord.fromJson(json['call']),
       replyToId: json['reply_to_id'] is num ? (json['reply_to_id'] as num).toInt() : null,
       replyToName: json['reply_to_name'] as String?,
       replyToContent: json['reply_to_content'] as String?,

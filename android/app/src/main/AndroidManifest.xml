@@ -12,6 +12,10 @@
          Bluetooth headset. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- An in-progress call runs in a foreground service so Android keeps the
+         microphone (and the process) alive while the user is in another app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Photo library access for older Android (< 13); Android 13+ uses the
          system photo picker and grants access implicitly. -->
@@ -51,6 +55,12 @@
                 <data android:scheme="openfield" android:host="oauth"/>
             </intent-filter>
         </activity>
+        <!-- Foreground service that keeps a live call running in the background;
+             see CallForegroundService.kt for why the microphone type is needed. -->
+        <service
+            android:name=".CallForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

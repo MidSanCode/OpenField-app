@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 import '../../core/config/app_config.dart';
 import '../models/attachment.dart';
+import '../models/call_ice_config.dart';
 import '../models/call_session.dart';
 import '../models/camp.dart';
 import '../models/chat_message.dart';
@@ -3589,6 +3590,24 @@ class ApiService {
   /// The server rejects with 409 when the conversation already has a live call,
   /// 400 for group conversations and bot accounts, and 403 when the caller is
   /// not a member of the conversation.
+  /// Fetches the ICE servers this deployment accepts for WebRTC calls.
+  ///
+  /// The server owns the relay configuration (see the call section of the server
+  /// config), so an operator sets TURN once and every client picks it up. The
+  /// caller keeps its own fallback for when this request fails.
+  Future<CallIceConfig> getIceServers(String accessToken) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/calls/ice'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      return CallIceConfig.fromJson(data);
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to load the ICE configuration'));
+  }
+
   Future<CallSession> startCall(String accessToken, int conversationId,
       {String mode = 'audio'}) async {
     final response = await _post(

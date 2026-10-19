@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:openfield/data/models/attachment.dart';
+import 'package:openfield/data/models/call_record.dart';
 import 'package:openfield/data/models/chat_member.dart';
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
@@ -2483,7 +2484,7 @@ class _ConversationPageState extends State<ConversationPage> {
               final message = _messages[msgIndex];
               final selected = _selectedMessageIds.contains(message.id);
               Widget child;
-              if (message.isSystem) {
+              if (message.isSystem || message.isCall) {
                 child = _SystemMessage(message: message);
               } else {
                 final replyTo = message.replyToId != null
@@ -3200,13 +3201,32 @@ class _SystemMessage extends StatelessWidget {
             color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Text(
-            _label(),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontSize: 12,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // A call entry gets its handset/camera glyph so it reads as a
+              // call at a glance, unlike the plain system notices around it.
+              if (message.isCall) ...[
+                Icon(
+                  message.call?.isVideo == true
+                      ? Icons.videocam
+                      : Icons.call,
+                  size: 14,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(
+                  _label(),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -3228,8 +3248,34 @@ class _SystemMessage extends StatelessWidget {
         return 'chatGroupMutedAll'.tr();
       case 'system.unmute.all':
         return 'chatGroupUnmutedAll'.tr();
+      case 'call':
+        return _callLabel();
       default:
         return message.displayContent;
+    }
+  }
+
+  /// Phrase for a call history entry.
+  ///
+  /// Both parties see the same row, so a call that never connected is phrased by
+  /// its outcome rather than by who is looking: "Missed call" is the wording that
+  /// is true for the callee as well as for the caller who abandoned it.
+  String _callLabel() {
+    final record = message.call;
+    if (record == null) return 'callRecordMissed'.tr();
+    if (record.wasAnswered) {
+      final duration = CallRecord.formatDuration(record.durationSeconds);
+      return record.isVideo
+          ? 'callRecordVideo'.tr(args: [duration])
+          : 'callRecordAudio'.tr(args: [duration]);
+    }
+    switch (record.outcome) {
+      case CallRecord.outcomeDeclined:
+        return 'callRecordDeclined'.tr();
+      case CallRecord.outcomeCancelled:
+        return 'callRecordCancelled'.tr();
+      default:
+        return 'callRecordMissed'.tr();
     }
   }
 }

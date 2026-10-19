@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:openfield/data/models/call_record.dart';
 import 'package:openfield/data/models/chat_message.dart';
 import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/services/api_service.dart';
@@ -711,6 +712,21 @@ class _ConversationTile extends StatelessWidget {
         last.displayContent.isEmpty &&
         last.attachments.any((a) => a.isAudio)) {
       text = '[${'voiceMessage'.tr()}]';
+    } else if (last.isCall) {
+      // Call history entries carry no text: phrase them from the payload.
+      final record = last.call;
+      if (record != null && record.wasAnswered) {
+        final duration = CallRecord.formatDuration(record.durationSeconds);
+        text = record.isVideo
+            ? 'callRecordVideo'.tr(args: [duration])
+            : 'callRecordAudio'.tr(args: [duration]);
+      } else if (record?.outcome == CallRecord.outcomeDeclined) {
+        text = 'callRecordDeclined'.tr();
+      } else if (record?.outcome == CallRecord.outcomeCancelled) {
+        text = 'callRecordCancelled'.tr();
+      } else {
+        text = 'callRecordMissed'.tr();
+      }
     } else if (last.isSystem) {
       final name = last.displayName.isEmpty
           ? 'chatGroupSomeone'.tr()
