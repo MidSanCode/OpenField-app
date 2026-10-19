@@ -6,6 +6,12 @@
     <!-- Microphone access for voice messages (runtime permission, requested
          when the user first taps the mic button). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Voice/video calls (WebRTC). MODIFY_AUDIO_SETTINGS lets the audio manager
+         switch the output between earpiece and speakerphone, and Android 12+
+         needs the BLUETOOTH_CONNECT runtime permission to route call audio to a
+         Bluetooth headset. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Photo library access for older Android (< 13); Android 13+ uses the
          system photo picker and grants access implicitly. -->

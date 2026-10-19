@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 import '../../core/config/app_config.dart';
 import '../models/attachment.dart';
+import '../models/call_session.dart';
 import '../models/camp.dart';
 import '../models/chat_message.dart';
 import '../models/check.dart';
@@ -116,6 +117,10 @@ Map<String, dynamic>? _decodeMap(http.Response response) {
   } catch (_) {}
   return null;
 }
+
+/// Narrows a decoded JSON object (`Map<dynamic, dynamic>`) to the string-keyed
+/// map the model factories expect.
+Map<String, dynamic> _asMap(Object value) => Map<String, dynamic>.from(value as Map);
 
 /// Infers the MIME type for an uploaded file from its extension so attachments
 /// are correctly classified (e.g. images previewed instead of shown as files).
@@ -3574,6 +3579,121 @@ class ApiService {
     if (response.statusCode != 200) {
       throw ApiException(response.statusCode,
           _decodeError(response, 'Failed to approve qr login'));
+    }
+  }
+
+  // ---- calls (peer-to-peer voice/video) ----
+
+  /// Opens a call in a one-to-one conversation and rings the peer.
+  ///
+  /// The server rejects with 409 when the conversation already has a live call,
+  /// 400 for group conversations and bot accounts, and 403 when the caller is
+  /// not a member of the conversation.
+  Future<CallSession> startCall(String accessToken, int conversationId,
+      {String mode = 'audio'}) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/calls'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'conversation_id': conversationId, 'mode': mode}),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 201 && data?['call'] is Map) {
+      return CallSession.fromJson(_asMap(data!['call']));
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to start the call'));
+  }
+
+  /// Returns the live call of a conversation, or null when the conversation is
+  /// idle. Used when opening a chat and after reconnecting, because pushes are
+  /// best-effort and the server has no event replay.
+  Future<CallSession?> getActiveCall(
+      String accessToken, int conversationId) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/conversations/$conversationId/call'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data != null) {
+      final call = data['call'];
+      return call is Map ? CallSession.fromJson(_asMap(call)) : null;
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to load the call'));
+  }
+
+  /// Returns one call by id.
+  Future<CallSession> getCall(String accessToken, int callId) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/calls/$callId'),
+      headers: _headers(token: accessToken, json: false),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data?['call'] is Map) {
+      return CallSession.fromJson(_asMap(data!['call']));
+    }
+    throw ApiException(
+        response.statusCode, _decodeError(response, 'Failed to load the call'));
+  }
+
+  /// Accepts a ringing call. Throws [ApiException] with 409 when the call is no
+  /// longer ringing, i.e. another device answered first.
+  Future<CallSession> answerCall(String accessToken, int callId) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/calls/$callId/answer'),
+      headers: _headers(token: accessToken),
+    );
+    final data = _decodeMap(response);
+    if (response.statusCode == 200 && data?['call'] is Map) {
+      return CallSession.fromJson(_asMap(data!['call']));
+    }
+    throw ApiException(response.statusCode,
+        _decodeError(response, 'Failed to answer the call'));
+  }
+
+  /// Rejects a ringing call. In a one-to-one conversation this ends the call.
+  Future<void> declineCall(String accessToken, int callId) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/calls/$callId/decline'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode,
+          _decodeError(response, 'Failed to decline the call'));
+    }
+  }
+
+  /// Hangs up an active call (or cancels an outgoing one). Idempotent.
+  Future<void> hangupCall(String accessToken, int callId) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/calls/$callId/hangup'),
+      headers: _headers(token: accessToken),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode,
+          _decodeError(response, 'Failed to hang up the call'));
+    }
+  }
+
+  /// Relays one opaque negotiation payload to the other participant.
+  ///
+  /// [type] is `offer`, `answer` or `candidate`; [payload] is passed through by
+  /// the server untouched. The server rejects payloads above 6000 bytes, which
+  /// a normal audio SDP or ICE candidate is far below.
+  Future<void> sendCallSignal(
+    String accessToken,
+    int callId, {
+    required String type,
+    required Object payload,
+  }) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/calls/$callId/signal'),
+      headers: _headers(token: accessToken),
+      body: jsonEncode({'type': type, 'payload': payload}),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode,
+          _decodeError(response, 'Failed to relay call signalling'));
     }
   }
 }

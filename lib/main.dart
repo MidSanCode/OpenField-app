@@ -19,6 +19,7 @@ import 'package:openfield/core/web/history_stub.dart'
 import 'package:openfield/core/windows/protocol_registration.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/call_service.dart';
 import 'package:openfield/data/services/chat_unread_service.dart';
 import 'package:openfield/data/services/permission_service.dart';
 import 'package:openfield/data/services/realtime_service.dart';
@@ -26,6 +27,7 @@ import 'package:openfield/data/services/settings_service.dart';
 import 'package:openfield/core/theme/app_theme.dart';
 import 'package:openfield/plugins/plugin_gate.dart';
 import 'package:openfield/plugins/plugin_manager.dart';
+import 'package:openfield/widgets/call_overlay.dart';
 
 /// Application entry point: initializes Flutter bindings, the media playback
 /// engine and localization, loads persisted [AppConfig], registers the
@@ -145,8 +147,12 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
     final token = _authService.accessToken;
     if (token != null) {
       RealtimeService.instance.connect(token);
+      // Calls need the same token for their REST signalling; a logout also
+      // tears down any call still on screen.
+      CallService.instance.updateSession(token);
     } else {
       RealtimeService.instance.disconnect();
+      CallService.instance.updateSession(null);
     }
   }
 
@@ -302,6 +308,7 @@ class _OpenFieldAppState extends State<OpenFieldApp> {
               ChangeNotifierProvider.value(value: _chatUnreadService),
               ChangeNotifierProvider.value(value: PluginGate.instance),
               ChangeNotifierProvider.value(value: PluginManager.instance),
+              ChangeNotifierProvider.value(value: CallService.instance),
             ],
             child: Consumer<SettingsService>(
               builder: (context, settings, _) {
@@ -438,5 +445,14 @@ class _TermsGateShellState extends State<_TermsGateShell> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) => Stack(
+        children: [
+          Positioned.fill(child: widget.child),
+          // A call has to stay visible above every routed page, so the overlay is
+          // stacked here — inside MaterialApp (Theme, Directionality and
+          // localizations are available) but above the Navigator's output. A
+          // pushed route would instead be buried by the next navigation.
+          const CallOverlay(),
+        ],
+      );
 }

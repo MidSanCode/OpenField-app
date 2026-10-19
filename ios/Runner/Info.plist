@@ -40,13 +40,20 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>OpenField needs camera access so you can scan QR codes for cross-device login.</string>
+	<string>OpenField needs camera access so you can scan QR codes for cross-device login and make video calls.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>OpenField needs microphone access so you can record voice messages in chats.</string>
+	<string>OpenField needs microphone access so you can record voice messages and make voice calls.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>OpenField needs access to your photo library so you can pick images for your profile, posts and group chats.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>OpenField may save images you create to your photo library.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<!-- Keeps an active call's audio session alive when the app is switched
+		     away from. Lock-screen incoming calls (CallKit/PushKit) are a
+		     separate, larger piece and are not implemented yet. -->
+		<string>audio</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

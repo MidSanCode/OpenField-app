@@ -37,6 +37,13 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
+	<!-- Required before the TCC microphone prompt: without the string macOS
+	     terminates the app the moment WebRTC asks for the microphone. The camera
+	     entry covers video calls, which share the same call pipeline. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>OpenField needs the microphone for voice calls and voice messages.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>OpenField needs the camera for video calls.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

@@ -41,6 +41,7 @@ dependencies:
   qr_flutter: ^4.1.0
   mobile_scanner: ^5.2.3
   image: ^4.3.0
+  flutter_webrtc: ^1.6.2+hotfix.4
 
 # Force the federated record_* packages to a version that matches
 # record_platform_interface 1.6.x shipped by record 5.2.x. The pub cache may

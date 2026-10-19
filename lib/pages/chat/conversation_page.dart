@@ -20,6 +20,7 @@ import 'package:openfield/data/models/conversation.dart';
 import 'package:openfield/data/models/report.dart';
 import 'package:openfield/data/services/api_service.dart';
 import 'package:openfield/data/services/auth_service.dart';
+import 'package:openfield/data/services/call_service.dart';
 import 'package:openfield/data/services/chat_cache_store.dart';
 import 'package:openfield/data/services/chat_local_db.dart';
 import 'package:openfield/data/services/e2ee_service.dart';
@@ -175,6 +176,11 @@ class _ConversationPageState extends State<ConversationPage> {
       _loadMyUserId();
     }
     _load();
+    // A call whose push event was missed (app restarted, socket dropped) still
+    // has to ring when its chat is opened: pushes have no replay, so the client
+    // reconciles against the server here.
+    CallService.instance
+        .syncConversation(widget.conversationId, myUserId: _myUserId);
     _realtimeSub = RealtimeService.instance.events.listen(_onRealtimeEvent);
     _scrollController.addListener(_onScroll);
     // 1 Hz tick keeps burn countdowns live and drops bubbles whose deadline
@@ -191,6 +197,41 @@ class _ConversationPageState extends State<ConversationPage> {
     if (mounted && user != null) {
       setState(() => _myUserId = user.id);
     }
+  }
+
+  /// Places a voice call with the other participant of a one-to-one chat.
+  ///
+  /// The overlay needs the peer's id and display name up front, so an unloaded
+  /// member list is reported instead of dialling blind.
+  Future<void> _startCall() async {
+    final conv = _conversation;
+    if (conv == null || conv.isGroup) return;
+    ChatMember? peer;
+    for (final member in _members) {
+      if (member.userId != _myUserId) {
+        peer = member;
+        break;
+      }
+    }
+    if (peer == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('callFailed'.tr())),
+        );
+      }
+      return;
+    }
+    final nickname = peer.nickname;
+    final username = peer.username;
+    final displayName = (nickname != null && nickname.isNotEmpty)
+        ? nickname
+        : (username != null && username.isNotEmpty ? username : conv.title);
+    await CallService.instance.startCall(
+      conversationId: conv.id,
+      peerUserId: peer.userId,
+      peerName: displayName,
+      peerAvatar: peer.avatarUrl,
+    );
   }
 
   /// Triggers loading of older messages when the user scrolls near the top.
@@ -2325,6 +2366,14 @@ class _ConversationPageState extends State<ConversationPage> {
             : null,
         title: Text(conv?.title ?? ''),
         actions: [
+          // Calls are one-to-one only: the server refuses group conversations,
+          // so the button is not offered there.
+          if (!isGroup)
+            IconButton(
+              icon: const Icon(Icons.call),
+              tooltip: 'callAudioCall'.tr(),
+              onPressed: _startCall,
+            ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: 'search'.tr(),
